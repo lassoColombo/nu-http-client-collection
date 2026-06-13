@@ -45,6 +45,17 @@ def render [title: string, rows: list]: nothing -> string {
     if ($rows | is-empty) {
         $"## ($title)\n\n_none_"
     } else {
-        $"## ($title)\n\n" + ($rows | to md)
+        let count = ($rows | length)
+        let table = ($rows | to md)
+        [
+            $"## ($title)"
+            ""
+            "<details>"
+            $"<summary>($count) clients</summary>"
+            ""
+            $table
+            ""
+            "</details>"
+        ] | str join "\n"
     }
 }
