@@ -1,0 +1,476 @@
+# Auto-generated client for FrontDoorManagementClient v2019-05-01
+# Source: https://api.apis.guru/v2/specs/azure.com/frontdoor/2019-05-01/swagger.json
+# Auth: --token flag or $env.FRONTDOORMANAGEMENTCLIENT_TOKEN
+
+const BASE_URL = "https://management.azure.com"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o FRONTDOORMANAGEMENTCLIENT_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["https://management.azure.com"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+# Completers for enum parameters
+def type-completer [] { ["Microsoft.Network/frontDoors" "Microsoft.Network/frontDoors/frontendEndpoints"] }
+def certificateSource-completer [] { ["AzureKeyVault" "FrontDoor"] }
+def minimumTlsVersion-completer [] { ["1.0" "1.2"] }
+def protocolType-completer [] { ["ServerNameIndication"] }
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-network-check-front-door-name-availability CheckFrontDoorNameAvailability" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Check the availability of a Front Door resource name.
+#
+# POST /providers/Microsoft.Network/checkFrontDoorNameAvailability
+# operationId: CheckFrontDoorNameAvailability
+export def "providers-microsoft-network-check-front-door-name-availability CheckFrontDoorNameAvailability" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version.
+  name: string # The resource name to validate.
+  type: string@type-completer # Type of Front Door resource used in CheckNameAvailability.
+]: any -> record<message: string, nameAvailability: string, reason: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/providers/Microsoft.Network/checkFrontDoorNameAvailability" $qp)
+  let body = {name: $name, type: $type} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Check the availability of a Front Door subdomain.
+#
+# POST /subscriptions/{subscriptionId}/providers/Microsoft.Network/checkFrontDoorNameAvailability
+# operationId: CheckFrontDoorNameAvailabilityWithSubscription
+export def "subscriptions-providers-microsoft-network-check-front-door-name-availability CheckFrontDoorNameAvailabilityWithSubscription" [
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version.
+  name: string # The resource name to validate.
+  type: string@type-completer # Type of Front Door resource used in CheckNameAvailability.
+]: any -> record<message: string, nameAvailability: string, reason: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/checkFrontDoorNameAvailability" $qp)
+  let body = {name: $name, type: $type} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Lists all of the Front Doors within an Azure subscription.
+#
+# GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/frontDoors
+# operationId: FrontDoors_List
+export def "subscriptions-providers-microsoft-network-front-doors List" [
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version.
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/frontDoors" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Lists all of the Front Doors within a resource group under a subscription.
+#
+# GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/frontDoors
+# operationId: FrontDoors_ListByResourceGroup
+export def "subscriptions-resource-groups-providers-microsoft-network-front-doors ListByResourceGroup" [
+  subscriptionId: string
+  resourceGroupName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version.
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/frontDoors" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Deletes an existing Front Door with the specified parameters.
+#
+# DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/frontDoors/{frontDoorName}
+# operationId: FrontDoors_Delete
+export def "subscriptions-resource-groups-providers-microsoft-network-front-doors Delete" [
+  subscriptionId: string
+  resourceGroupName: string
+  frontDoorName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version.
+]: nothing -> record<code: string, message: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/frontDoors/($frontDoorName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets a Front Door with the specified Front Door name under the specified subscription and resource group.
+#
+# GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/frontDoors/{frontDoorName}
+# operationId: FrontDoors_Get
+export def "subscriptions-resource-groups-providers-microsoft-network-front-doors Get" [
+  subscriptionId: string
+  resourceGroupName: string
+  frontDoorName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version.
+]: nothing -> record<properties: record<cname: string, provisioningState: string, resourceState: string, backendPools: list<record>, backendPoolsSettings: record<enforceCertificateNameCheck: string, sendRecvTimeoutSeconds: int>, enabledState: string, friendlyName: string, frontendEndpoints: list<record>, healthProbeSettings: list<record>, loadBalancingSettings: list<record>, routingRules: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/frontDoors/($frontDoorName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a new Front Door with a Front Door name under the specified subscription and resource group.
+#
+# PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/frontDoors/{frontDoorName}
+# operationId: FrontDoors_CreateOrUpdate
+# --properties shape: {backendPools?: list, backendPoolsSettings?: record, enabledState?: "Enabled"|"Disabled", friendlyName?: string, frontendEndpoints?: list, healthProbeSettings?: list, loadBalancingSettings?: list, routingRules?: list}
+export def "subscriptions-resource-groups-providers-microsoft-network-front-doors CreateOrUpdate" [
+  subscriptionId: string
+  resourceGroupName: string
+  frontDoorName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version.
+  --properties: any # The JSON object that contains the properties required to create an endpoint. — shape: {backendPools?: list, backendPoolsSettings?: record, enabledState?: "Enabled"|"Disabled", friendlyName?: string, frontendEndpoints?: list, healthProbeSettings?: list, loadBalancingSettings?: list, routingRules?: list}
+  --location: string # Resource location.
+  --tags: record # Resource tags.
+]: any -> record<properties: record<cname: string, provisioningState: string, resourceState: string, backendPools: list<record>, backendPoolsSettings: record<enforceCertificateNameCheck: string, sendRecvTimeoutSeconds: int>, enabledState: string, friendlyName: string, frontendEndpoints: list<record>, healthProbeSettings: list<record>, loadBalancingSettings: list<record>, routingRules: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/frontDoors/($frontDoorName)" $qp)
+  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Lists all of the frontend endpoints within a Front Door.
+#
+# GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/frontDoors/{frontDoorName}/frontendEndpoints
+# operationId: FrontendEndpoints_ListByFrontDoor
+export def "subscriptions-resource-groups-providers-microsoft-network-front-doors-frontend-endpoints ListByFrontDoor" [
+  subscriptionId: string
+  resourceGroupName: string
+  frontDoorName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version.
+]: nothing -> record<nextLink: string, value: table<name: string, properties: record, type: string, id: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/frontDoors/($frontDoorName)/frontendEndpoints" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets a Frontend endpoint with the specified name within the specified Front Door.
+#
+# GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/frontDoors/{frontDoorName}/frontendEndpoints/{frontendEndpointName}
+# operationId: FrontendEndpoints_Get
+export def "subscriptions-resource-groups-providers-microsoft-network-front-doors-frontend-endpoints Get" [
+  subscriptionId: string
+  resourceGroupName: string
+  frontDoorName: string
+  frontendEndpointName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version.
+]: nothing -> record<name: string, properties: record<customHttpsConfiguration: record<certificateSource: string, frontDoorCertificateSourceParameters: record, keyVaultCertificateSourceParameters: record, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, resourceState: string, hostName: string, sessionAffinityEnabledState: string, sessionAffinityTtlSeconds: int, webApplicationFirewallPolicyLink: record<id: string>>, type: string, id: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/frontDoors/($frontDoorName)/frontendEndpoints/($frontendEndpointName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Disables a frontendEndpoint for HTTPS traffic
+#
+# POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/frontDoors/{frontDoorName}/frontendEndpoints/{frontendEndpointName}/disableHttps
+# operationId: FrontendEndpoints_DisableHttps
+export def "subscriptions-resource-groups-providers-microsoft-network-front-doors-frontend-endpoints-disable-https DisableHttps" [
+  subscriptionId: string
+  resourceGroupName: string
+  frontDoorName: string
+  frontendEndpointName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version.
+]: nothing -> record<code: string, message: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/frontDoors/($frontDoorName)/frontendEndpoints/($frontendEndpointName)/disableHttps" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Enables a frontendEndpoint for HTTPS traffic
+#
+# POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/frontDoors/{frontDoorName}/frontendEndpoints/{frontendEndpointName}/enableHttps
+# operationId: FrontendEndpoints_EnableHttps
+# --frontDoorCertificateSourceParameters shape: {certificateType?: "Dedicated"}
+# --keyVaultCertificateSourceParameters shape: {secretName?: string, secretVersion?: string, vault?: record}
+export def "subscriptions-resource-groups-providers-microsoft-network-front-doors-frontend-endpoints-enable-https EnableHttps" [
+  subscriptionId: string
+  resourceGroupName: string
+  frontDoorName: string
+  frontendEndpointName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version.
+  certificateSource: string@certificateSource-completer # Defines the source of the SSL certificate
+  --frontDoorCertificateSourceParameters: record # Parameters required for enabling SSL with Front Door-managed certificates — shape: {certificateType?: "Dedicated"}
+  --keyVaultCertificateSourceParameters: record # Parameters required for bring-your-own-certification via Key Vault — shape: {secretName?: string, secretVersion?: string, vault?: record}
+  minimumTlsVersion: string@minimumTlsVersion-completer # The minimum TLS version required from the clients to establish an SSL handshake with Front Door.
+  protocolType: string@protocolType-completer # Defines the TLS extension protocol that is used for secure delivery
+]: any -> record<code: string, message: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/frontDoors/($frontDoorName)/frontendEndpoints/($frontendEndpointName)/enableHttps" $qp)
+  let body = {certificateSource: $certificateSource, frontDoorCertificateSourceParameters: $frontDoorCertificateSourceParameters, keyVaultCertificateSourceParameters: $keyVaultCertificateSourceParameters, minimumTlsVersion: $minimumTlsVersion, protocolType: $protocolType} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Removes a content from Front Door.
+#
+# POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/frontDoors/{frontDoorName}/purge
+# operationId: Endpoints_PurgeContent
+export def "subscriptions-resource-groups-providers-microsoft-network-front-doors-purge PurgeContent" [
+  subscriptionId: string
+  resourceGroupName: string
+  frontDoorName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version.
+  contentPaths: list # The path to the content to be purged. Can describe a file path or a wild card directory.
+]: any -> record<code: string, message: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/frontDoors/($frontDoorName)/purge" $qp)
+  let body = {contentPaths: $contentPaths} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Validates the custom domain mapping to ensure it maps to the correct Front Door endpoint in DNS.
+#
+# POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/frontDoors/{frontDoorName}/validateCustomDomain
+# operationId: FrontDoors_ValidateCustomDomain
+export def "subscriptions-resource-groups-providers-microsoft-network-front-doors-validate-custom-domain ValidateCustomDomain" [
+  subscriptionId: string
+  resourceGroupName: string
+  frontDoorName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version.
+  hostName: string # The host name of the custom domain. Must be a domain name.
+]: any -> record<customDomainValidated: bool, message: string, reason: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/frontDoors/($frontDoorName)/validateCustomDomain" $qp)
+  let body = {hostName: $hostName} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}

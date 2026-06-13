@@ -1,0 +1,1217 @@
+# Auto-generated client for Data Labeling API vv1beta1
+# Source: https://api.apis.guru/v2/specs/googleapis.com/datalabeling/v1beta1/openapi.json
+# Auth: --token flag or $env.DATA_LABELING_API_TOKEN
+
+const BASE_URL = "https://datalabeling.googleapis.com"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o DATA_LABELING_API_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["https://datalabeling.googleapis.com"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+# Completers for enum parameters
+def xgafv-completer [] { ["1" "2"] }
+def alt-completer [] { ["json" "media" "proto"] }
+def state-completer [] { ["PAUSED" "RUNNING" "SCHEDULED" "STATE_UNSPECIFIED" "STOPPED"] }
+def feature-completer [] { ["BOUNDING_BOX" "BOUNDING_POLY" "CLASSIFICATION" "FEATURE_UNSPECIFIED" "ORIENTED_BOUNDING_BOX" "POLYLINE" "SEGMENTATION"] }
+def feature-completer-1 [] { ["FEATURE_UNSPECIFIED" "TEXT_CLASSIFICATION" "TEXT_ENTITY_EXTRACTION"] }
+def feature-completer-2 [] { ["CLASSIFICATION" "EVENT" "FEATURE_UNSPECIFIED" "OBJECT_DETECTION" "OBJECT_TRACKING"] }
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 datalabelingprojectsoperationsdelete" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Deletes a long-running operation. This method indicates that the client is no longer interested in the operation result. It does not cancel the operation. If the server doesn't support this method, it returns `google.rpc.Code.UNIMPLEMENTED`.
+#
+# DELETE /v1beta1/{name}
+# operationId: datalabeling.projects.operations.delete
+export def "v1beta1 datalabelingprojectsoperationsdelete" [
+  name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+]: nothing -> record {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($name)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets the latest state of a long-running operation. Clients can use this method to poll the operation result at intervals as recommended by the API service.
+#
+# GET /v1beta1/{name}
+# operationId: datalabeling.projects.operations.get
+export def "v1beta1 datalabelingprojectsoperationsget" [
+  name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --filter: string # Optional. An expression for filtering Examples. Filter by annotation_spec.display_name is supported. Format "annotation_spec.display_name = {display_name}"
+]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($name)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates an evaluation job. You can only update certain fields of the job's EvaluationJobConfig: `humanAnnotationConfig.instruction`, `exampleCount`, and `exampleSamplePercentage`. If you want to change any other aspect of the evaluation job, you must delete the job and create a new one.
+#
+# PATCH /v1beta1/{name}
+# operationId: datalabeling.projects.evaluationJobs.patch
+# --attempts item shape: {attemptTime?: string, partialFailures?: list}
+# --evaluationJobConfig shape: {bigqueryImportKeys?: record, boundingPolyConfig?: record, evaluationConfig?: record, evaluationJobAlertConfig?: record, exampleCount?: int, exampleSamplePercentage?: float, humanAnnotationConfig?: record, imageClassificationConfig?: record, inputConfig?: record, textClassificationConfig?: record}
+export def "v1beta1 datalabelingprojectsevaluationJobspatch" [
+  name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --updateMask: string # Optional. Mask for which fields to update. You can only provide the following fields: * `evaluationJobConfig.humanAnnotationConfig.instruction` * `evaluationJobConfig.exampleCount` * `evaluationJobConfig.exampleSamplePercentage` You can provide more than one of these fields by separating them with commas.
+  --annotationSpecSet: string # Required. Name of the AnnotationSpecSet describing all the labels that your machine learning model outputs. You must create this resource before you create an evaluation job and provide its name in the following format: "projects/{project_id}/annotationSpecSets/{annotation_spec_set_id}"
+  --attempts: list # Output only. Every time the evaluation job runs and an error occurs, the failed attempt is appended to this array. — item shape: {attemptTime?: string, partialFailures?: list}
+  --createTime: string # Output only. Timestamp of when this evaluation job was created. (format: google-datetime)
+  --description: string # Required. Description of the job. The description can be up to 25,000 characters long.
+  --evaluationJobConfig: record # Configures specific details of how a continuous evaluation job works. Provide this configuration when you create an EvaluationJob. — shape: {bigqueryImportKeys?: record, boundingPolyConfig?: record, evaluationConfig?: record, evaluationJobAlertConfig?: record, exampleCount?: int, exampleSamplePercentage?: float, humanAnnotationConfig?: record, imageClassificationConfig?: record, inputConfig?: record, textClassificationConfig?: record}
+  --labelMissingGroundTruth: oneof<nothing, bool> # Required. Whether you want Data Labeling Service to provide ground truth labels for prediction input. If you want the service to assign human labelers to annotate your data, set this to `true`. If you want to provide your own ground truth labels in the evaluation job's BigQuery table, set this to `false`.
+  --modelVersion: string # Required. The [AI Platform Prediction model version](/ml-engine/docs/prediction-overview) to be evaluated. Prediction input and output is sampled from this model version. When creating an evaluation job, specify the model version in the following format: "projects/{project_id}/models/{model_name}/versions/{version_name}" There can only be one evaluation job per model version.
+  --body-name: string # Output only. After you create a job, Data Labeling Service assigns a name to the job with the following format: "projects/{project_id}/evaluationJobs/ {evaluation_job_id}"
+  --schedule: string # Required. Describes the interval at which the job runs. This interval must be at least 1 day, and it is rounded to the nearest day. For example, if you specify a 50-hour interval, the job runs every 2 days. You can provide the schedule in [crontab format](/scheduler/docs/configuring/cron-job-schedules) or in an [English-like format](/appengine/docs/standard/python/config/cronref#schedule_format). Regardless of what you specify, the job will run at 10:00 AM UTC. Only the interval from this schedule is used, not the specific time of day.
+  --state: string@state-completer # Output only. Describes the current state of the job.
+]: any -> record<annotationSpecSet: string, attempts: table<attemptTime: string, partialFailures: list>, createTime: string, description: string, evaluationJobConfig: record<bigqueryImportKeys: record, boundingPolyConfig: record<annotationSpecSet: string, instructionMessage: string>, evaluationConfig: record<boundingBoxEvaluationOptions: record>, evaluationJobAlertConfig: record<email: string, minAcceptableMeanAveragePrecision: float>, exampleCount: int, exampleSamplePercentage: float, humanAnnotationConfig: record<annotatedDatasetDescription: string, annotatedDatasetDisplayName: string, contributorEmails: list, instruction: string, labelGroup: string, languageCode: string, questionDuration: string, replicaCount: int, userEmailAddress: string>, imageClassificationConfig: record<allowMultiLabel: bool, annotationSpecSet: string, answerAggregationType: string>, inputConfig: record<annotationType: string, bigquerySource: record, classificationMetadata: record, dataType: string, gcsSource: record, textMetadata: record>, textClassificationConfig: record<allowMultiLabel: bool, annotationSpecSet: string, sentimentConfig: record>>, labelMissingGroundTruth: bool, modelVersion: string, name: string, schedule: string, state: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($name)" $qp)
+  let body = {annotationSpecSet: $annotationSpecSet, attempts: $attempts, createTime: $createTime, description: $description, evaluationJobConfig: $evaluationJobConfig, labelMissingGroundTruth: $labelMissingGroundTruth, modelVersion: $modelVersion, name: $body_name, schedule: $schedule, state: $state} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Lists operations that match the specified filter in the request. If the server doesn't support this method, it returns `UNIMPLEMENTED`. NOTE: the `name` binding allows API services to override the binding to use different resource name schemes, such as `users/*/operations`. To override the binding, API services can add a binding such as `"/v1/{name=users/*}/operations"` to their service configuration. For backwards compatibility, the default name includes the operations collection id, however overriding users must ensure the name binding is the parent resource, without the operations collection id.
+#
+# GET /v1beta1/{name}/operations
+# operationId: datalabeling.projects.operations.list
+export def "v1beta1-operations datalabelingprojectsoperationslist" [
+  name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --filter: string # The standard list filter.
+  --pageSize: int # The standard list page size.
+  --pageToken: string # The standard list page token.
+]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($name)/operations" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Starts asynchronous cancellation on a long-running operation. The server makes a best effort to cancel the operation, but success is not guaranteed. If the server doesn't support this method, it returns `google.rpc.Code.UNIMPLEMENTED`. Clients can use Operations.GetOperation or other methods to check whether the cancellation succeeded or whether the operation completed despite cancellation. On successful cancellation, the operation is not deleted; instead, it becomes an operation with an Operation.error value with a google.rpc.Status.code of 1, corresponding to `Code.CANCELLED`.
+#
+# GET /v1beta1/{name}:cancel
+# operationId: datalabeling.projects.operations.cancel
+export def "v1beta1 datalabelingprojectsoperationscancel" [
+  name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+]: nothing -> record {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($name):cancel" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Exports data and annotations from dataset.
+#
+# POST /v1beta1/{name}:exportData
+# operationId: datalabeling.projects.datasets.exportData
+# --outputConfig shape: {gcsDestination?: record, gcsFolderDestination?: record}
+export def "v1beta1 datalabelingprojectsdatasetsexportData" [
+  name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --annotatedDataset: string # Required. Annotated dataset resource name. DataItem in Dataset and their annotations in specified annotated dataset will be exported. It's in format of projects/{project_id}/datasets/{dataset_id}/annotatedDatasets/ {annotated_dataset_id}
+  --filter: string # Optional. Filter is not supported at this moment.
+  --outputConfig: record # The configuration of output data. — shape: {gcsDestination?: record, gcsFolderDestination?: record}
+  --userEmailAddress: string # Email of the user who started the export task and should be notified by email. If empty no notification will be sent.
+]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($name):exportData" $qp)
+  let body = {annotatedDataset: $annotatedDataset, filter: $filter, outputConfig: $outputConfig, userEmailAddress: $userEmailAddress} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Imports data into dataset based on source locations defined in request. It can be called multiple times for the same dataset. Each dataset can only have one long running operation running on it. For example, no labeling task (also long running operation) can be started while importing is still ongoing. Vice versa.
+#
+# POST /v1beta1/{name}:importData
+# operationId: datalabeling.projects.datasets.importData
+# --inputConfig shape: {annotationType?: "ANNOTATION_TYPE_UNSPECIFIED"|"IMAGE_CLASSIFICATION_ANNOTATION"|"IMAGE_BOUNDING_BOX_ANNOTATION"|"IMAGE_ORIENTED_BOUNDING_BOX_ANNOTATION"|"IMAGE_BOUNDING_POLY_ANNOTATION"|"IMAGE_POLYLINE_ANNOTATION"|"IMAGE_SEGMENTATION_ANNOTATION"|"VIDEO_SHOTS_CLASSIFICATION_ANNOTATION"|"VIDEO_OBJECT_TRACKING_ANNOTATION"|"VIDEO_OBJECT_DETECTION_ANNOTATION"|"VIDEO_EVENT_ANNOTATION"|"TEXT_CLASSIFICATION_ANNOTATION"|"TEXT_ENTITY_EXTRACTION_ANNOTATION"|"GENERAL_CLASSIFICATION_ANNOTATION", bigquerySource?: record, classificationMetadata?: record, dataType?: "DATA_TYPE_UNSPECIFIED"|"IMAGE"|"VIDEO"|"TEXT"|"GENERAL_DATA", gcsSource?: record, textMetadata?: record}
+export def "v1beta1 datalabelingprojectsdatasetsimportData" [
+  name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --inputConfig: record # The configuration of input data, including data type, location, etc. — shape: {annotationType?: "ANNOTATION_TYPE_UNSPECIFIED"|"IMAGE_CLASSIFICATION_ANNOTATION"|"IMAGE_BOUNDING_BOX_ANNOTATION"|"IMAGE_ORIENTED_BOUNDING_BOX_ANNOTATION"|"IMAGE_BOUNDING_POLY_ANNOTATION"|"IMAGE_POLYLINE_ANNOTATION"|"IMAGE_SEGMENTATION_ANNOTATION"|"VIDEO_SHOTS_CLASSIFICATION_ANNOTATION"|"VIDEO_OBJECT_TRACKING_ANNOTATION"|"VIDEO_OBJECT_DETECTION_ANNOTATION"|"VIDEO_EVENT_ANNOTATION"|"TEXT_CLASSIFICATION_ANNOTATION"|"TEXT_ENTITY_EXTRACTION_ANNOTATION"|"GENERAL_CLASSIFICATION_ANNOTATION", bigquerySource?: record, classificationMetadata?: record, dataType?: "DATA_TYPE_UNSPECIFIED"|"IMAGE"|"VIDEO"|"TEXT"|"GENERAL_DATA", gcsSource?: record, textMetadata?: record}
+  --userEmailAddress: string # Email of the user who started the import task and should be notified by email. If empty no notification will be sent.
+]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($name):importData" $qp)
+  let body = {inputConfig: $inputConfig, userEmailAddress: $userEmailAddress} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Pauses an evaluation job. Pausing an evaluation job that is already in a `PAUSED` state is a no-op.
+#
+# POST /v1beta1/{name}:pause
+# operationId: datalabeling.projects.evaluationJobs.pause
+export def "v1beta1 datalabelingprojectsevaluationJobspause" [
+  name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --body: record
+]: any -> record {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($name):pause" $qp)
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Resumes a paused evaluation job. A deleted evaluation job can't be resumed. Resuming a running or scheduled evaluation job is a no-op.
+#
+# POST /v1beta1/{name}:resume
+# operationId: datalabeling.projects.evaluationJobs.resume
+export def "v1beta1 datalabelingprojectsevaluationJobsresume" [
+  name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --body: record
+]: any -> record {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($name):resume" $qp)
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Lists annotated datasets for a dataset. Pagination is supported.
+#
+# GET /v1beta1/{parent}/annotatedDatasets
+# operationId: datalabeling.projects.datasets.annotatedDatasets.list
+export def "v1beta1-annotated-datasets datalabelingprojectsdatasetsannotatedDatasetslist" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --filter: string # Optional. Filter is not supported at this moment.
+  --pageSize: int # Optional. Requested page size. Server may return fewer results than requested. Default value is 100.
+  --pageToken: string # Optional. A token identifying a page of results for the server to return. Typically obtained by ListAnnotatedDatasetsResponse.next_page_token of the previous [DataLabelingService.ListAnnotatedDatasets] call. Return first page if empty.
+]: nothing -> record<annotatedDatasets: table<annotationSource: string, annotationType: string, blockingResources: list, completedExampleCount: string, createTime: string, description: string, displayName: string, exampleCount: string, labelStats: record, metadata: record, name: string>, nextPageToken: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($parent)/annotatedDatasets" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Lists annotation spec sets for a project. Pagination is supported.
+#
+# GET /v1beta1/{parent}/annotationSpecSets
+# operationId: datalabeling.projects.annotationSpecSets.list
+export def "v1beta1-annotation-spec-sets datalabelingprojectsannotationSpecSetslist" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --filter: string # Optional. Filter is not supported at this moment.
+  --pageSize: int # Optional. Requested page size. Server may return fewer results than requested. Default value is 100.
+  --pageToken: string # Optional. A token identifying a page of results for the server to return. Typically obtained by ListAnnotationSpecSetsResponse.next_page_token of the previous [DataLabelingService.ListAnnotationSpecSets] call. Return first page if empty.
+]: nothing -> record<annotationSpecSets: table<annotationSpecs: list, blockingResources: list, description: string, displayName: string, name: string>, nextPageToken: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($parent)/annotationSpecSets" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates an annotation spec set by providing a set of labels.
+#
+# POST /v1beta1/{parent}/annotationSpecSets
+# operationId: datalabeling.projects.annotationSpecSets.create
+# --annotationSpecSet shape: {annotationSpecs?: list, blockingResources?: list, description?: string, displayName?: string, name?: string}
+export def "v1beta1-annotation-spec-sets datalabelingprojectsannotationSpecSetscreate" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --annotationSpecSet: record # An AnnotationSpecSet is a collection of label definitions. For example, in image classification tasks, you define a set of possible labels for images as an AnnotationSpecSet. An AnnotationSpecSet is immutable upon creation. — shape: {annotationSpecs?: list, blockingResources?: list, description?: string, displayName?: string, name?: string}
+]: any -> record<annotationSpecs: table<description: string, displayName: string, index: int>, blockingResources: list<string>, description: string, displayName: string, name: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($parent)/annotationSpecSets" $qp)
+  let body = {annotationSpecSet: $annotationSpecSet} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Lists data items in a dataset. This API can be called after data are imported into dataset. Pagination is supported.
+#
+# GET /v1beta1/{parent}/dataItems
+# operationId: datalabeling.projects.datasets.dataItems.list
+export def "v1beta1-data-items datalabelingprojectsdatasetsdataItemslist" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --filter: string # Optional. Filter is not supported at this moment.
+  --pageSize: int # Optional. Requested page size. Server may return fewer results than requested. Default value is 100.
+  --pageToken: string # Optional. A token identifying a page of results for the server to return. Typically obtained by ListDataItemsResponse.next_page_token of the previous [DataLabelingService.ListDataItems] call. Return first page if empty.
+]: nothing -> record<dataItems: table<imagePayload: record, name: string, textPayload: record, videoPayload: record>, nextPageToken: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($parent)/dataItems" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Lists datasets under a project. Pagination is supported.
+#
+# GET /v1beta1/{parent}/datasets
+# operationId: datalabeling.projects.datasets.list
+export def "v1beta1-datasets datalabelingprojectsdatasetslist" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --filter: string # Optional. Filter on dataset is not supported at this moment.
+  --pageSize: int # Optional. Requested page size. Server may return fewer results than requested. Default value is 100.
+  --pageToken: string # Optional. A token identifying a page of results for the server to return. Typically obtained by ListDatasetsResponse.next_page_token of the previous [DataLabelingService.ListDatasets] call. Returns the first page if empty.
+]: nothing -> record<datasets: table<blockingResources: list, createTime: string, dataItemCount: string, description: string, displayName: string, inputConfigs: list, lastMigrateTime: string, name: string>, nextPageToken: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($parent)/datasets" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates dataset. If success return a Dataset resource.
+#
+# POST /v1beta1/{parent}/datasets
+# operationId: datalabeling.projects.datasets.create
+# --dataset shape: {blockingResources?: list, createTime?: string, dataItemCount?: string, description?: string, displayName?: string, inputConfigs?: list, lastMigrateTime?: string, name?: string}
+export def "v1beta1-datasets datalabelingprojectsdatasetscreate" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --dataset: record # Dataset is the resource to hold your data. You can request multiple labeling tasks for a dataset while each one will generate an AnnotatedDataset. — shape: {blockingResources?: list, createTime?: string, dataItemCount?: string, description?: string, displayName?: string, inputConfigs?: list, lastMigrateTime?: string, name?: string}
+]: any -> record<blockingResources: list<string>, createTime: string, dataItemCount: string, description: string, displayName: string, inputConfigs: table<annotationType: string, bigquerySource: record, classificationMetadata: record, dataType: string, gcsSource: record, textMetadata: record>, lastMigrateTime: string, name: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($parent)/datasets" $qp)
+  let body = {dataset: $dataset} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Lists all evaluation jobs within a project with possible filters. Pagination is supported.
+#
+# GET /v1beta1/{parent}/evaluationJobs
+# operationId: datalabeling.projects.evaluationJobs.list
+export def "v1beta1-evaluation-jobs datalabelingprojectsevaluationJobslist" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --filter: string # Optional. You can filter the jobs to list by model_id (also known as model_name, as described in EvaluationJob.modelVersion) or by evaluation job state (as described in EvaluationJob.state). To filter by both criteria, use the `AND` operator or the `OR` operator. For example, you can use the following string for your filter: "evaluation_job.model_id = {model_name} AND evaluation_job.state = {evaluation_job_state}"
+  --pageSize: int # Optional. Requested page size. Server may return fewer results than requested. Default value is 100.
+  --pageToken: string # Optional. A token identifying a page of results for the server to return. Typically obtained by the nextPageToken in the response to the previous request. The request returns the first page if this is empty.
+]: nothing -> record<evaluationJobs: table<annotationSpecSet: string, attempts: list, createTime: string, description: string, evaluationJobConfig: record, labelMissingGroundTruth: bool, modelVersion: string, name: string, schedule: string, state: string>, nextPageToken: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($parent)/evaluationJobs" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates an evaluation job.
+#
+# POST /v1beta1/{parent}/evaluationJobs
+# operationId: datalabeling.projects.evaluationJobs.create
+# --job shape: {annotationSpecSet?: string, attempts?: list, createTime?: string, description?: string, evaluationJobConfig?: record, labelMissingGroundTruth?: bool, modelVersion?: string, name?: string, schedule?: string, state?: "STATE_UNSPECIFIED"|"SCHEDULED"|"RUNNING"|"PAUSED"|"STOPPED"}
+export def "v1beta1-evaluation-jobs datalabelingprojectsevaluationJobscreate" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --job: record # Defines an evaluation job that runs periodically to generate Evaluations. [Creating an evaluation job](/ml-engine/docs/continuous-evaluation/create-job) is the starting point for using continuous evaluation. — shape: {annotationSpecSet?: string, attempts?: list, createTime?: string, description?: string, evaluationJobConfig?: record, labelMissingGroundTruth?: bool, modelVersion?: string, name?: string, schedule?: string, state?: "STATE_UNSPECIFIED"|"SCHEDULED"|"RUNNING"|"PAUSED"|"STOPPED"}
+]: any -> record<annotationSpecSet: string, attempts: table<attemptTime: string, partialFailures: list>, createTime: string, description: string, evaluationJobConfig: record<bigqueryImportKeys: record, boundingPolyConfig: record<annotationSpecSet: string, instructionMessage: string>, evaluationConfig: record<boundingBoxEvaluationOptions: record>, evaluationJobAlertConfig: record<email: string, minAcceptableMeanAveragePrecision: float>, exampleCount: int, exampleSamplePercentage: float, humanAnnotationConfig: record<annotatedDatasetDescription: string, annotatedDatasetDisplayName: string, contributorEmails: list, instruction: string, labelGroup: string, languageCode: string, questionDuration: string, replicaCount: int, userEmailAddress: string>, imageClassificationConfig: record<allowMultiLabel: bool, annotationSpecSet: string, answerAggregationType: string>, inputConfig: record<annotationType: string, bigquerySource: record, classificationMetadata: record, dataType: string, gcsSource: record, textMetadata: record>, textClassificationConfig: record<allowMultiLabel: bool, annotationSpecSet: string, sentimentConfig: record>>, labelMissingGroundTruth: bool, modelVersion: string, name: string, schedule: string, state: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($parent)/evaluationJobs" $qp)
+  let body = {job: $job} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Searches evaluations within a project.
+#
+# GET /v1beta1/{parent}/evaluations:search
+# operationId: datalabeling.projects.evaluations.search
+export def "v1beta1-evaluations-search datalabelingprojectsevaluationssearch" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --filter: string # Optional. To search evaluations, you can filter by the following: * evaluation_job.evaluation_job_id (the last part of EvaluationJob.name) * evaluation_job.model_id (the {model_name} portion of EvaluationJob.modelVersion) * evaluation_job.evaluation_job_run_time_start (Minimum threshold for the evaluationJobRunTime that created the evaluation) * evaluation_job.evaluation_job_run_time_end (Maximum threshold for the evaluationJobRunTime that created the evaluation) * evaluation_job.job_state (EvaluationJob.state) * annotation_spec.display_name (the Evaluation contains a metric for the annotation spec with this displayName) To filter by multiple critiera, use the `AND` operator or the `OR` operator. The following examples shows a string that filters by several critiera: "evaluation_job.evaluation_job_id = {evaluation_job_id} AND evaluation_job.model_id = {model_name} AND evaluation_job.evaluation_job_run_time_start = {timestamp_1} AND evaluation_job.evaluation_job_run_time_end = {timestamp_2} AND annotation_spec.display_name = {display_name}"
+  --pageSize: int # Optional. Requested page size. Server may return fewer results than requested. Default value is 100.
+  --pageToken: string # Optional. A token identifying a page of results for the server to return. Typically obtained by the nextPageToken of the response to a previous search request. If you don't specify this field, the API call requests the first page of the search.
+]: nothing -> record<evaluations: table<annotationType: string, config: record, createTime: string, evaluatedItemCount: string, evaluationJobRunTime: string, evaluationMetrics: record, name: string>, nextPageToken: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($parent)/evaluations:search" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Searches example comparisons from an evaluation. The return format is a list of example comparisons that show ground truth and prediction(s) for a single input. Search by providing an evaluation ID.
+#
+# POST /v1beta1/{parent}/exampleComparisons:search
+# operationId: datalabeling.projects.datasets.evaluations.exampleComparisons.search
+export def "v1beta1-example-comparisons-search datalabelingprojectsdatasetsevaluationsexampleComparisonssearch" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --pageSize: int # Optional. Requested page size. Server may return fewer results than requested. Default value is 100. (format: int32)
+  --pageToken: string # Optional. A token identifying a page of results for the server to return. Typically obtained by the nextPageToken of the response to a previous search rquest. If you don't specify this field, the API call requests the first page of the search.
+]: any -> record<exampleComparisons: table<groundTruthExample: record, modelCreatedExamples: list>, nextPageToken: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($parent)/exampleComparisons:search" $qp)
+  let body = {pageSize: $pageSize, pageToken: $pageToken} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Lists examples in an annotated dataset. Pagination is supported.
+#
+# GET /v1beta1/{parent}/examples
+# operationId: datalabeling.projects.datasets.annotatedDatasets.examples.list
+export def "v1beta1-examples datalabelingprojectsdatasetsannotatedDatasetsexampleslist" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --filter: string # Optional. An expression for filtering Examples. For annotated datasets that have annotation spec set, filter by annotation_spec.display_name is supported. Format "annotation_spec.display_name = {display_name}"
+  --pageSize: int # Optional. Requested page size. Server may return fewer results than requested. Default value is 100.
+  --pageToken: string # Optional. A token identifying a page of results for the server to return. Typically obtained by ListExamplesResponse.next_page_token of the previous [DataLabelingService.ListExamples] call. Return first page if empty.
+]: nothing -> record<examples: table<annotations: list, imagePayload: record, name: string, textPayload: record, videoPayload: record>, nextPageToken: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($parent)/examples" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List FeedbackMessages with pagination.
+#
+# GET /v1beta1/{parent}/feedbackMessages
+# operationId: datalabeling.projects.datasets.annotatedDatasets.feedbackThreads.feedbackMessages.list
+export def "v1beta1-feedback-messages datalabelingprojectsdatasetsannotatedDatasetsfeedbackThreadsfeedbackMessageslist" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --pageSize: int # Optional. Requested page size. Server may return fewer results than requested. Default value is 100.
+  --pageToken: string # Optional. A token identifying a page of results for the server to return. Typically obtained by ListFeedbackMessages.next_page_token of the previous [DataLabelingService.ListFeedbackMessages] call. Return first page if empty.
+]: nothing -> record<feedbackMessages: table<body: string, createTime: string, image: string, name: string, operatorFeedbackMetadata: record, requesterFeedbackMetadata: record>, nextPageToken: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($parent)/feedbackMessages" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Create a FeedbackMessage object.
+#
+# POST /v1beta1/{parent}/feedbackMessages
+# operationId: datalabeling.projects.datasets.annotatedDatasets.feedbackThreads.feedbackMessages.create
+export def "v1beta1-feedback-messages datalabelingprojectsdatasetsannotatedDatasetsfeedbackThreadsfeedbackMessagescreate" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --body-body: string # String content of the feedback. Maximum of 10000 characters.
+  --createTime: string # Create time. (format: google-datetime)
+  --image: string # The image storing this feedback if the feedback is an image representing operator's comments. (format: byte)
+  --name: string # Name of the feedback message in a feedback thread. Format: 'project/{project_id}/datasets/{dataset_id}/annotatedDatasets/{annotated_dataset_id}/feedbackThreads/{feedback_thread_id}/feedbackMessage/{feedback_message_id}'
+  --operatorFeedbackMetadata: record # Metadata describing the feedback from the operator.
+  --requesterFeedbackMetadata: record # Metadata describing the feedback from the labeling task requester.
+]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($parent)/feedbackMessages" $qp)
+  let body = {body: $body_body, createTime: $createTime, image: $image, name: $name, operatorFeedbackMetadata: $operatorFeedbackMetadata, requesterFeedbackMetadata: $requesterFeedbackMetadata} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# List FeedbackThreads with pagination.
+#
+# GET /v1beta1/{parent}/feedbackThreads
+# operationId: datalabeling.projects.datasets.annotatedDatasets.feedbackThreads.list
+export def "v1beta1-feedback-threads datalabelingprojectsdatasetsannotatedDatasetsfeedbackThreadslist" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --pageSize: int # Optional. Requested page size. Server may return fewer results than requested. Default value is 100.
+  --pageToken: string # Optional. A token identifying a page of results for the server to return. Typically obtained by ListFeedbackThreads.next_page_token of the previous [DataLabelingService.ListFeedbackThreads] call. Return first page if empty.
+]: nothing -> record<feedbackThreads: table<feedbackThreadMetadata: record, name: string>, nextPageToken: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($parent)/feedbackThreads" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Starts a labeling task for image. The type of image labeling task is configured by feature in the request.
+#
+# POST /v1beta1/{parent}/image:label
+# operationId: datalabeling.projects.datasets.image.label
+# --basicConfig shape: {annotatedDatasetDescription?: string, annotatedDatasetDisplayName?: string, contributorEmails?: list, instruction?: string, labelGroup?: string, languageCode?: string, questionDuration?: string, replicaCount?: int, userEmailAddress?: string}
+# --boundingPolyConfig shape: {annotationSpecSet?: string, instructionMessage?: string}
+# --imageClassificationConfig shape: {allowMultiLabel?: bool, annotationSpecSet?: string, answerAggregationType?: "STRING_AGGREGATION_TYPE_UNSPECIFIED"|"MAJORITY_VOTE"|"UNANIMOUS_VOTE"|"NO_AGGREGATION"}
+# --polylineConfig shape: {annotationSpecSet?: string, instructionMessage?: string}
+# --segmentationConfig shape: {annotationSpecSet?: string, instructionMessage?: string}
+export def "v1beta1-image-label datalabelingprojectsdatasetsimagelabel" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --basicConfig: record # Configuration for how human labeling task should be done. — shape: {annotatedDatasetDescription?: string, annotatedDatasetDisplayName?: string, contributorEmails?: list, instruction?: string, labelGroup?: string, languageCode?: string, questionDuration?: string, replicaCount?: int, userEmailAddress?: string}
+  --boundingPolyConfig: record # Config for image bounding poly (and bounding box) human labeling task. — shape: {annotationSpecSet?: string, instructionMessage?: string}
+  --feature: string@feature-completer # Required. The type of image labeling task.
+  --imageClassificationConfig: record # Config for image classification human labeling task. — shape: {allowMultiLabel?: bool, annotationSpecSet?: string, answerAggregationType?: "STRING_AGGREGATION_TYPE_UNSPECIFIED"|"MAJORITY_VOTE"|"UNANIMOUS_VOTE"|"NO_AGGREGATION"}
+  --polylineConfig: record # Config for image polyline human labeling task. — shape: {annotationSpecSet?: string, instructionMessage?: string}
+  --segmentationConfig: record # Config for image segmentation — shape: {annotationSpecSet?: string, instructionMessage?: string}
+]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($parent)/image:label" $qp)
+  let body = {basicConfig: $basicConfig, boundingPolyConfig: $boundingPolyConfig, feature: $feature, imageClassificationConfig: $imageClassificationConfig, polylineConfig: $polylineConfig, segmentationConfig: $segmentationConfig} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Lists instructions for a project. Pagination is supported.
+#
+# GET /v1beta1/{parent}/instructions
+# operationId: datalabeling.projects.instructions.list
+export def "v1beta1-instructions datalabelingprojectsinstructionslist" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --filter: string # Optional. Filter is not supported at this moment.
+  --pageSize: int # Optional. Requested page size. Server may return fewer results than requested. Default value is 100.
+  --pageToken: string # Optional. A token identifying a page of results for the server to return. Typically obtained by ListInstructionsResponse.next_page_token of the previous [DataLabelingService.ListInstructions] call. Return first page if empty.
+]: nothing -> record<instructions: table<blockingResources: list, createTime: string, csvInstruction: record, dataType: string, description: string, displayName: string, name: string, pdfInstruction: record, updateTime: string>, nextPageToken: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($parent)/instructions" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates an instruction for how data should be labeled.
+#
+# POST /v1beta1/{parent}/instructions
+# operationId: datalabeling.projects.instructions.create
+# --instruction shape: {blockingResources?: list, createTime?: string, csvInstruction?: record, dataType?: "DATA_TYPE_UNSPECIFIED"|"IMAGE"|"VIDEO"|"TEXT"|"GENERAL_DATA", description?: string, displayName?: string, name?: string, pdfInstruction?: record, updateTime?: string}
+export def "v1beta1-instructions datalabelingprojectsinstructionscreate" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --instruction: record # Instruction of how to perform the labeling task for human operators. Currently only PDF instruction is supported. — shape: {blockingResources?: list, createTime?: string, csvInstruction?: record, dataType?: "DATA_TYPE_UNSPECIFIED"|"IMAGE"|"VIDEO"|"TEXT"|"GENERAL_DATA", description?: string, displayName?: string, name?: string, pdfInstruction?: record, updateTime?: string}
+]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($parent)/instructions" $qp)
+  let body = {instruction: $instruction} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Starts a labeling task for text. The type of text labeling task is configured by feature in the request.
+#
+# POST /v1beta1/{parent}/text:label
+# operationId: datalabeling.projects.datasets.text.label
+# --basicConfig shape: {annotatedDatasetDescription?: string, annotatedDatasetDisplayName?: string, contributorEmails?: list, instruction?: string, labelGroup?: string, languageCode?: string, questionDuration?: string, replicaCount?: int, userEmailAddress?: string}
+# --textClassificationConfig shape: {allowMultiLabel?: bool, annotationSpecSet?: string, sentimentConfig?: record}
+# --textEntityExtractionConfig shape: {annotationSpecSet?: string}
+export def "v1beta1-text-label datalabelingprojectsdatasetstextlabel" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --basicConfig: record # Configuration for how human labeling task should be done. — shape: {annotatedDatasetDescription?: string, annotatedDatasetDisplayName?: string, contributorEmails?: list, instruction?: string, labelGroup?: string, languageCode?: string, questionDuration?: string, replicaCount?: int, userEmailAddress?: string}
+  --feature: string@feature-completer-1 # Required. The type of text labeling task.
+  --textClassificationConfig: record # Config for text classification human labeling task. — shape: {allowMultiLabel?: bool, annotationSpecSet?: string, sentimentConfig?: record}
+  --textEntityExtractionConfig: record # Config for text entity extraction human labeling task. — shape: {annotationSpecSet?: string}
+]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($parent)/text:label" $qp)
+  let body = {basicConfig: $basicConfig, feature: $feature, textClassificationConfig: $textClassificationConfig, textEntityExtractionConfig: $textEntityExtractionConfig} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Starts a labeling task for video. The type of video labeling task is configured by feature in the request.
+#
+# POST /v1beta1/{parent}/video:label
+# operationId: datalabeling.projects.datasets.video.label
+# --basicConfig shape: {annotatedDatasetDescription?: string, annotatedDatasetDisplayName?: string, contributorEmails?: list, instruction?: string, labelGroup?: string, languageCode?: string, questionDuration?: string, replicaCount?: int, userEmailAddress?: string}
+# --eventConfig shape: {annotationSpecSets?: list, clipLength?: int, overlapLength?: int}
+# --objectDetectionConfig shape: {annotationSpecSet?: string, extractionFrameRate?: float}
+# --objectTrackingConfig shape: {annotationSpecSet?: string, clipLength?: int, overlapLength?: int}
+# --videoClassificationConfig shape: {annotationSpecSetConfigs?: list, applyShotDetection?: bool}
+export def "v1beta1-video-label datalabelingprojectsdatasetsvideolabel" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --basicConfig: record # Configuration for how human labeling task should be done. — shape: {annotatedDatasetDescription?: string, annotatedDatasetDisplayName?: string, contributorEmails?: list, instruction?: string, labelGroup?: string, languageCode?: string, questionDuration?: string, replicaCount?: int, userEmailAddress?: string}
+  --eventConfig: record # Config for video event human labeling task. — shape: {annotationSpecSets?: list, clipLength?: int, overlapLength?: int}
+  --feature: string@feature-completer-2 # Required. The type of video labeling task.
+  --objectDetectionConfig: record # Config for video object detection human labeling task. Object detection will be conducted on the images extracted from the video, and those objects will be labeled with bounding boxes. User need to specify the number of images to be extracted per second as the extraction frame rate. — shape: {annotationSpecSet?: string, extractionFrameRate?: float}
+  --objectTrackingConfig: record # Config for video object tracking human labeling task. — shape: {annotationSpecSet?: string, clipLength?: int, overlapLength?: int}
+  --videoClassificationConfig: record # Config for video classification human labeling task. Currently two types of video classification are supported: 1. Assign labels on the entire video. 2. Split the video into multiple video clips based on camera shot, and assign labels on each video clip. — shape: {annotationSpecSetConfigs?: list, applyShotDetection?: bool}
+]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta1/($parent)/video:label" $qp)
+  let body = {basicConfig: $basicConfig, eventConfig: $eventConfig, feature: $feature, objectDetectionConfig: $objectDetectionConfig, objectTrackingConfig: $objectTrackingConfig, videoClassificationConfig: $videoClassificationConfig} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}

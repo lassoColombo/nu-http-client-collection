@@ -1,0 +1,698 @@
+# Auto-generated client for Cloud Pub/Sub API vv1beta2
+# Source: https://api.apis.guru/v2/specs/googleapis.com/pubsub/v1beta2/openapi.json
+# Auth: --token flag or $env.CLOUD_PUB_SUB_API_TOKEN
+
+const BASE_URL = "https://pubsub.googleapis.com"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o CLOUD_PUB_SUB_API_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["https://pubsub.googleapis.com"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+# Completers for enum parameters
+def xgafv-completer [] { ["1" "2"] }
+def alt-completer [] { ["json" "media" "proto"] }
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta2 pubsubprojectstopicscreate" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Creates the given topic with the given name.
+#
+# PUT /v1beta2/{name}
+# operationId: pubsub.projects.topics.create
+export def "v1beta2 pubsubprojectstopicscreate" [
+  name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --body-name: string # The name of the topic. It must have the format `"projects/{project}/topics/{topic}"`. `{topic}` must start with a letter, and contain only letters (`[A-Za-z]`), numbers (`[0-9]`), dashes (`-`), underscores (`_`), periods (`.`), tildes (`~`), plus (`+`) or percent signs (`%`). It must be between 3 and 255 characters in length, and it must not start with `"goog"`.
+]: any -> record<name: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta2/($name)" $qp)
+  let body = {name: $body_name} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Lists matching subscriptions.
+#
+# GET /v1beta2/{project}/subscriptions
+# operationId: pubsub.projects.subscriptions.list
+export def "v1beta2-subscriptions pubsubprojectssubscriptionslist" [
+  project: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --pageSize: int # Maximum number of subscriptions to return.
+  --pageToken: string # The value returned by the last `ListSubscriptionsResponse`; indicates that this is a continuation of a prior `ListSubscriptions` call, and that the system should return the next page of data.
+]: nothing -> record<nextPageToken: string, subscriptions: table<ackDeadlineSeconds: int, name: string, pushConfig: record, topic: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta2/($project)/subscriptions" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Lists matching topics.
+#
+# GET /v1beta2/{project}/topics
+# operationId: pubsub.projects.topics.list
+export def "v1beta2-topics pubsubprojectstopicslist" [
+  project: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --pageSize: int # Maximum number of topics to return.
+  --pageToken: string # The value returned by the last `ListTopicsResponse`; indicates that this is a continuation of a prior `ListTopics` call, and that the system should return the next page of data.
+]: nothing -> record<nextPageToken: string, topics: table<name: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta2/($project)/topics" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets the access control policy for a resource. Returns an empty policy if the resource exists and does not have a policy set.
+#
+# GET /v1beta2/{resource}:getIamPolicy
+# operationId: pubsub.projects.topics.getIamPolicy
+export def "v1beta2 pubsubprojectstopicsgetIamPolicy" [
+  resource: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --optionsrequestedPolicyVersion: int # Optional. The maximum policy version that will be used to format the policy. Valid values are 0, 1, and 3. Requests specifying an invalid value will be rejected. Requests for policies with any conditional role bindings must specify version 3. Policies with no conditional role bindings may specify any valid value or leave the field unset. The policy in the response might use the policy version that you specified, or it might use a lower policy version. For example, if you specify version 3, but the policy has no conditional role bindings, the response uses version 1. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies).
+]: nothing -> record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "options.requestedPolicyVersion" $optionsrequestedPolicyVersion "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta2/($resource):getIamPolicy" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Sets the access control policy on the specified resource. Replaces any existing policy. Can return `NOT_FOUND`, `INVALID_ARGUMENT`, and `PERMISSION_DENIED` errors.
+#
+# POST /v1beta2/{resource}:setIamPolicy
+# operationId: pubsub.projects.topics.setIamPolicy
+# --policy shape: {bindings?: list, etag?: string, version?: int}
+export def "v1beta2 pubsubprojectstopicssetIamPolicy" [
+  resource: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources. A `Policy` is a collection of `bindings`. A `binding` binds one or more `members`, or principals, to a single `role`. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A `role` is a named list of permissions; each `role` can be an IAM predefined role or a user-created custom role. For some types of Google Cloud resources, a `binding` can also specify a `condition`, which is a logical expression that allows access to a resource only if the expression evaluates to `true`. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies). **JSON example:** { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } **YAML example:** bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the [IAM documentation](https://cloud.google.com/iam/docs/). — shape: {bindings?: list, etag?: string, version?: int}
+]: any -> record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta2/($resource):setIamPolicy" $qp)
+  let body = {policy: $policy} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Returns permissions that a caller has on the specified resource. If the resource does not exist, this will return an empty set of permissions, not a `NOT_FOUND` error. Note: This operation is designed to be used for building permission-aware UIs and command-line tools, not for authorization checking. This operation may "fail open" without warning.
+#
+# POST /v1beta2/{resource}:testIamPermissions
+# operationId: pubsub.projects.topics.testIamPermissions
+export def "v1beta2 pubsubprojectstopicstestIamPermissions" [
+  resource: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --permissions: list # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
+]: any -> record<permissions: list<string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta2/($resource):testIamPermissions" $qp)
+  let body = {permissions: $permissions} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Deletes an existing subscription. All pending messages in the subscription are immediately dropped. Calls to `Pull` after deletion will return `NOT_FOUND`. After a subscription is deleted, a new one may be created with the same name, but the new one has no association with the old subscription, or its topic unless the same topic is specified.
+#
+# DELETE /v1beta2/{subscription}
+# operationId: pubsub.projects.subscriptions.delete
+export def "v1beta2 pubsubprojectssubscriptionsdelete" [
+  subscription: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+]: nothing -> record {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta2/($subscription)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets the configuration details of a subscription.
+#
+# GET /v1beta2/{subscription}
+# operationId: pubsub.projects.subscriptions.get
+export def "v1beta2 pubsubprojectssubscriptionsget" [
+  subscription: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+]: nothing -> record<ackDeadlineSeconds: int, name: string, pushConfig: record<attributes: record, oidcToken: record<audience: string, serviceAccountEmail: string>, pushEndpoint: string>, topic: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta2/($subscription)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Acknowledges the messages associated with the `ack_ids` in the `AcknowledgeRequest`. The Pub/Sub system can remove the relevant messages from the subscription. Acknowledging a message whose ack deadline has expired may succeed, but such a message may be redelivered later. Acknowledging a message more than once will not result in an error.
+#
+# POST /v1beta2/{subscription}:acknowledge
+# operationId: pubsub.projects.subscriptions.acknowledge
+export def "v1beta2 pubsubprojectssubscriptionsacknowledge" [
+  subscription: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --ackIds: list # The acknowledgment ID for the messages being acknowledged that was returned by the Pub/Sub system in the `Pull` response. Must not be empty.
+]: any -> record {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta2/($subscription):acknowledge" $qp)
+  let body = {ackIds: $ackIds} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Modifies the ack deadline for a specific message. This method is useful to indicate that more time is needed to process a message by the subscriber, or to make the message available for redelivery if the processing was interrupted. Note that this does not modify the subscription-level `ackDeadlineSeconds` used for subsequent messages.
+#
+# POST /v1beta2/{subscription}:modifyAckDeadline
+# operationId: pubsub.projects.subscriptions.modifyAckDeadline
+export def "v1beta2 pubsubprojectssubscriptionsmodifyAckDeadline" [
+  subscription: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --ackDeadlineSeconds: int # The new ack deadline with respect to the time this request was sent to the Pub/Sub system. Must be >= 0. For example, if the value is 10, the new ack deadline will expire 10 seconds after the `ModifyAckDeadline` call was made. Specifying zero may immediately make the message available for another pull request. (format: int32)
+  --ackId: string # The acknowledgment ID. Either this or ack_ids must be populated, but not both.
+  --ackIds: list # List of acknowledgment IDs.
+]: any -> record {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta2/($subscription):modifyAckDeadline" $qp)
+  let body = {ackDeadlineSeconds: $ackDeadlineSeconds, ackId: $ackId, ackIds: $ackIds} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Modifies the `PushConfig` for a specified subscription. This may be used to change a push subscription to a pull one (signified by an empty `PushConfig`) or vice versa, or change the endpoint URL and other attributes of a push subscription. Messages will accumulate for delivery continuously through the call regardless of changes to the `PushConfig`.
+#
+# POST /v1beta2/{subscription}:modifyPushConfig
+# operationId: pubsub.projects.subscriptions.modifyPushConfig
+# --pushConfig shape: {attributes?: record, oidcToken?: record, pushEndpoint?: string}
+export def "v1beta2 pubsubprojectssubscriptionsmodifyPushConfig" [
+  subscription: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --pushConfig: record # Configuration for a push delivery endpoint. — shape: {attributes?: record, oidcToken?: record, pushEndpoint?: string}
+]: any -> record {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta2/($subscription):modifyPushConfig" $qp)
+  let body = {pushConfig: $pushConfig} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Pulls messages from the server. Returns an empty list if there are no messages available in the backlog. The server may return `UNAVAILABLE` if there are too many concurrent pull requests pending for the given subscription.
+#
+# POST /v1beta2/{subscription}:pull
+# operationId: pubsub.projects.subscriptions.pull
+export def "v1beta2 pubsubprojectssubscriptionspull" [
+  subscription: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --maxMessages: int # The maximum number of messages returned for this request. The Pub/Sub system may return fewer than the number specified. (format: int32)
+  --returnImmediately: oneof<nothing, bool> # Optional. If this is specified as true the system will respond immediately even if it is not able to return a message in the `Pull` response. Otherwise the system is allowed to wait until at least one message is available rather than returning no messages. The client may cancel the request if it does not wish to wait any longer for the response. Warning: setting this field to `true` is discouraged because it adversely impacts the performance of `Pull` operations. We recommend that users do not set this field.
+]: any -> record<receivedMessages: table<ackId: string, message: record>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta2/($subscription):pull" $qp)
+  let body = {maxMessages: $maxMessages, returnImmediately: $returnImmediately} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Deletes the topic with the given name. Returns `NOT_FOUND` if the topic does not exist. After a topic is deleted, a new topic may be created with the same name; this is an entirely new topic with none of the old configuration or subscriptions. Existing subscriptions to this topic are not deleted, but their `topic` field is set to `_deleted-topic_`.
+#
+# DELETE /v1beta2/{topic}
+# operationId: pubsub.projects.topics.delete
+export def "v1beta2 pubsubprojectstopicsdelete" [
+  topic: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+]: nothing -> record {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta2/($topic)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets the configuration of a topic.
+#
+# GET /v1beta2/{topic}
+# operationId: pubsub.projects.topics.get
+export def "v1beta2 pubsubprojectstopicsget" [
+  topic: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+]: nothing -> record<name: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta2/($topic)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Lists the name of the subscriptions for this topic.
+#
+# GET /v1beta2/{topic}/subscriptions
+# operationId: pubsub.projects.topics.subscriptions.list
+export def "v1beta2-subscriptions pubsubprojectstopicssubscriptionslist" [
+  topic: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --pageSize: int # Maximum number of subscription names to return.
+  --pageToken: string # The value returned by the last `ListTopicSubscriptionsResponse`; indicates that this is a continuation of a prior `ListTopicSubscriptions` call, and that the system should return the next page of data.
+]: nothing -> record<nextPageToken: string, subscriptions: list<string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta2/($topic)/subscriptions" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Adds one or more messages to the topic. Returns `NOT_FOUND` if the topic does not exist. The message payload must not be empty; it must contain either a non-empty data field, or at least one attribute.
+#
+# POST /v1beta2/{topic}:publish
+# operationId: pubsub.projects.topics.publish
+# --messages item shape: {attributes?: record, data?: string, messageId?: string, publishTime?: string}
+export def "v1beta2 pubsubprojectstopicspublish" [
+  topic: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --messages: list # The messages to publish. — item shape: {attributes?: record, data?: string, messageId?: string, publishTime?: string}
+]: any -> record<messageIds: list<string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1beta2/($topic):publish" $qp)
+  let body = {messages: $messages} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}

@@ -1,0 +1,264 @@
+# Auto-generated client for Microsoft Insights v2018-04-16
+# Source: https://api.apis.guru/v2/specs/azure.com/monitor-scheduledQueryRule_API/2018-04-16/swagger.json
+# Auth: --token flag or $env.MICROSOFT_INSIGHTS_TOKEN
+
+const BASE_URL = "https://management.azure.com"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o MICROSOFT_INSIGHTS_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["https://management.azure.com"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoftinsights-scheduled-query-rules ListBySubscription" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# List the Log Search rules within a subscription group.
+#
+# GET /subscriptions/{subscriptionId}/providers/microsoft.insights/scheduledQueryRules
+# operationId: ScheduledQueryRules_ListBySubscription
+export def "subscriptions-providers-microsoftinsights-scheduled-query-rules ListBySubscription" [
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+  --filter: string # The filter to apply on the operation. For more information please see https://msdn.microsoft.com/en-us/library/azure/dn931934.aspx
+]: nothing -> record<value: table<properties: record>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/microsoft.insights/scheduledQueryRules" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List the Log Search rules within a resource group.
+#
+# GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.insights/scheduledQueryRules
+# operationId: ScheduledQueryRules_ListByResourceGroup
+export def "subscriptions-resourcegroups-providers-microsoftinsights-scheduled-query-rules ListByResourceGroup" [
+  resourceGroupName: string
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+  --filter: string # The filter to apply on the operation. For more information please see https://msdn.microsoft.com/en-us/library/azure/dn931934.aspx
+]: nothing -> record<value: table<properties: record>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/microsoft.insights/scheduledQueryRules" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Deletes a Log Search rule
+#
+# DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.insights/scheduledQueryRules/{ruleName}
+# operationId: ScheduledQueryRules_Delete
+export def "subscriptions-resourcegroups-providers-microsoftinsights-scheduled-query-rules Delete" [
+  resourceGroupName: string
+  ruleName: string
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+]: nothing -> record<code: string, message: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/microsoft.insights/scheduledQueryRules/($ruleName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets an Log Search rule
+#
+# GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.insights/scheduledQueryRules/{ruleName}
+# operationId: ScheduledQueryRules_Get
+export def "subscriptions-resourcegroups-providers-microsoftinsights-scheduled-query-rules Get" [
+  resourceGroupName: string
+  ruleName: string
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+]: nothing -> record<properties: record<action: record<odata_type: string>, description: string, enabled: string, lastUpdatedTime: string, provisioningState: string, schedule: record<frequencyInMinutes: int, timeWindowInMinutes: int>, source: record<authorizedResources: list, dataSourceId: string, query: string, queryType: string>>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/microsoft.insights/scheduledQueryRules/($ruleName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Update log search Rule.
+#
+# PATCH /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.insights/scheduledQueryRules/{ruleName}
+# operationId: ScheduledQueryRules_Update
+# --properties shape: {enabled?: "true"|"false"}
+export def "subscriptions-resourcegroups-providers-microsoftinsights-scheduled-query-rules Update" [
+  subscriptionId: string
+  resourceGroupName: string
+  ruleName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+  --properties: any # Log Search Rule Definition for Patching — shape: {enabled?: "true"|"false"}
+  --tags: any # Resource tags
+]: any -> record<properties: record<action: record<odata_type: string>, description: string, enabled: string, lastUpdatedTime: string, provisioningState: string, schedule: record<frequencyInMinutes: int, timeWindowInMinutes: int>, source: record<authorizedResources: list, dataSourceId: string, query: string, queryType: string>>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/microsoft.insights/scheduledQueryRules/($ruleName)" $qp)
+  let body = {properties: $properties, tags: $tags} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Creates or updates an log search rule.
+#
+# PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.insights/scheduledQueryRules/{ruleName}
+# operationId: ScheduledQueryRules_CreateOrUpdate
+# --properties shape: {action: record, description?: string, enabled?: "true"|"false", schedule?: record, source: record}
+export def "subscriptions-resourcegroups-providers-microsoftinsights-scheduled-query-rules CreateOrUpdate" [
+  subscriptionId: string
+  resourceGroupName: string
+  ruleName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+  properties: any # Log Search Rule Definition — shape: {action: record, description?: string, enabled?: "true"|"false", schedule?: record, source: record}
+  location: string # Resource location
+  --tags: any # Resource tags
+]: any -> record<properties: record<action: record<odata_type: string>, description: string, enabled: string, lastUpdatedTime: string, provisioningState: string, schedule: record<frequencyInMinutes: int, timeWindowInMinutes: int>, source: record<authorizedResources: list, dataSourceId: string, query: string, queryType: string>>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/microsoft.insights/scheduledQueryRules/($ruleName)" $qp)
+  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}

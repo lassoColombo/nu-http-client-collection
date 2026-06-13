@@ -375,6 +375,21 @@ clients:
       type: openapi
       source: https://api.apis.guru/v2/specs/azure.com/powerbiembedded/2016-01-29/swagger.json
 
+    - name: accelerated-mobile-pages-amp-url-api
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/acceleratedmobilepageurl/v1/openapi.json
+    - name: advisory-notifications-api
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/advisorynotifications/v1/openapi.json
+    - name: google-workspace-alert-center-api
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/alertcenter/v1beta1/openapi.json
+    - name: android-device-provisioning-partner-api
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/androiddeviceprovisioning/v1/openapi.json
+    - name: google-play-emm-api
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/androidenterprise/v1/openapi.json
   advertising:
     - name: google-ad-exchange-buyer
       type: openapi
@@ -743,6 +758,12 @@ clients:
       type: openapi
       source: https://api.apis.guru/v2/specs/vtex.local/Message-Center-API/1.0.0/openapi.json
 
+    - name: airflow-api-stable
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apache.org/2.5.1/openapi.json
+    - name: fastapi
+      type: openapi
+      source: https://api.apis.guru/v2/specs/botschaft.local/0.1.0/openapi.json
   ci-cd:
     - name: circleci
       type: openapi
@@ -958,6 +979,21 @@ clients:
       type: openapi
       source: https://api.apis.guru/v2/specs/clever-cloud.com/1.0.0/openapi.json
 
+    - name: aws-migration-hub
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/AWSMigrationHub/2017-05-31/openapi.json
+    - name: access-analyzer
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/accessanalyzer/2019-11-01/openapi.json
+    - name: aws-certificate-manager
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/acm/2015-12-08/openapi.json
+    - name: aws-certificate-manager-private-certificate-authority
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/acm-pca/2017-08-22/openapi.json
+    - name: alexa-for-business
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/alexaforbusiness/2017-11-09/openapi.json
   commerce:
     - name: square
       type: openapi
@@ -1158,6 +1194,18 @@ clients:
       type: openapi
       source: https://api.apis.guru/v2/specs/vtex.local/SKU-Bindings-API/1.0/openapi.json
 
+    - name: account-api
+      type: openapi
+      source: https://api.apis.guru/v2/specs/api.ebay.com/sell-account/v1.9.0/openapi.json
+    - name: seller-service-metrics-api
+      type: openapi
+      source: https://api.apis.guru/v2/specs/api.ebay.com/sell-analytics/1.2.0/openapi.json
+    - name: dropx
+      type: openapi
+      source: https://api.apis.guru/v2/specs/dropx.io/1.0.0/swagger.json
+    - name: compliance-api
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ebay.com/sell-compliance/1.4.1/openapi.json
   container-orchestration:
     - name: kubernetes
       type: openapi
@@ -2253,6 +2301,12 @@ clients:
       type: openapi
       source: https://api.apis.guru/v2/specs/whapi.com/sessions/2.0.0/swagger.json
 
+    - name: the-consumer-financial-protection-bureau
+      type: openapi
+      source: https://api.apis.guru/v2/specs/consumerfinance.gov/1.0/swagger.json
+    - name: stripe-api
+      type: openapi
+      source: https://api.apis.guru/v2/specs/stripe.com/2022-11-15/openapi.json
   forms:
     - name: google-forms
       type: openapi
@@ -2925,6 +2979,12 @@ clients:
       type: openapi
       source: https://api.apis.guru/v2/specs/googleapis.com/ondemandscanning/v1beta1/openapi.json
 
+    - name: conjur
+      type: openapi
+      source: https://api.apis.guru/v2/specs/conjur.local/5.3.0/openapi.json
+    - name: credas-api
+      type: openapi
+      source: https://api.apis.guru/v2/specs/credas.co.uk/pi/v1/openapi.json
   incident:
     - name: pagerduty
       type: openapi
@@ -5204,6 +5264,9 @@ clients:
       type: openapi
       source: https://api.apis.guru/v2/specs/discourse.local/latest/openapi.json
 
+    - name: contribly
+      type: openapi
+      source: https://api.apis.guru/v2/specs/contribly.com/1.0.0/openapi.json
   storage:
     - name: box
       type: openapi
@@ -5608,9 +5671,6 @@ clients:
     - name: twilio-chat-v2
       type: openapi
       source: https://api.apis.guru/v2/specs/twilio.com/twilio_chat_v2/1.42.0/openapi.json
-    - name: twilio-numbers-v1
-      type: openapi
-      source: https://api.apis.guru/v2/specs/twilio.com/twilio_numbers_v1/1.42.0/openapi.json
     - name: twilio-lookups-v2
       type: openapi
       source: https://api.apis.guru/v2/specs/twilio.com/twilio_lookups_v2/1.42.0/openapi.json

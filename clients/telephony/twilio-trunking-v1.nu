@@ -1,0 +1,709 @@
+# Auto-generated client for Twilio - Trunking v1.42.0
+# Source: https://api.apis.guru/v2/specs/twilio.com/twilio_trunking_v1/1.42.0/openapi.json
+# Auth: --token flag or $env.TWILIO_TRUNKING_TOKEN
+
+const BASE_URL = "https://trunking.twilio.com"
+const DEFAULT_AUTH = "basic"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o TWILIO_TRUNKING_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["https://trunking.twilio.com"] }
+def auth-scheme-completer [] { ["basic"] }
+
+# Completers for enum parameters
+def DisasterRecoveryMethod-completer [] { ["DELETE" "GET" "HEAD" "PATCH" "POST" "PUT"] }
+def TransferCallerId-completer [] { ["from-transferee" "from-transferor"] }
+def TransferMode-completer [] { ["disable-all" "enable-all" "sip-only"] }
+def Mode-completer [] { ["do-not-record" "record-from-answer" "record-from-answer-dual" "record-from-ringing" "record-from-ringing-dual"] }
+def Trim-completer [] { ["do-not-trim" "trim-silence"] }
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "trunks ListTrunk" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# GET /v1/Trunks
+#
+# operationId: ListTrunk
+export def "trunks ListTrunk" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --Page: int # The page index. This value is simply for client state.
+  --PageToken: string # The page token. This is provided by the API.
+]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, trunks: table<account_sid: string, auth_type: string, auth_type_set: list, cnam_lookup_enabled: bool, date_created: string, date_updated: string, disaster_recovery_method: string, disaster_recovery_url: string, domain_name: string, friendly_name: string, links: record, recording: any, secure: bool, sid: string, transfer_caller_id: string, transfer_mode: string, url: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/Trunks" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# POST /v1/Trunks
+#
+# operationId: CreateTrunk
+export def "trunks CreateTrunk" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --CnamLookupEnabled: oneof<nothing, bool> # Whether Caller ID Name (CNAM) lookup should be enabled for the trunk. If enabled, all inbound calls to the SIP Trunk from the United States and Canada automatically perform a CNAM Lookup and display Caller ID data on your phone. See [CNAM Lookups](https://www.twilio.com/docs/sip-trunking#CNAM) for more information.
+  --DisasterRecoveryMethod: string@DisasterRecoveryMethod-completer # The HTTP method we should use to call the `disaster_recovery_url`. Can be: `GET` or `POST`. (format: http-method)
+  --DisasterRecoveryUrl: string # The URL we should call using the `disaster_recovery_method` if an error occurs while sending SIP traffic towards the configured Origination URL. We retrieve TwiML from the URL and execute the instructions like any other normal TwiML call. See [Disaster Recovery](https://www.twilio.com/docs/sip-trunking#disaster-recovery) for more information. (format: uri)
+  --DomainName: string # The unique address you reserve on Twilio to which you route your SIP traffic. Domain names can contain letters, digits, and `-` and must end with `pstn.twilio.com`. See [Termination Settings](https://www.twilio.com/docs/sip-trunking#termination) for more information.
+  --FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
+  --Secure: oneof<nothing, bool> # Whether Secure Trunking is enabled for the trunk. If enabled, all calls going through the trunk will be secure using SRTP for media and TLS for signaling. If disabled, then RTP will be used for media. See [Secure Trunking](https://www.twilio.com/docs/sip-trunking#securetrunking) for more information.
+  --TransferCallerId: string@TransferCallerId-completer
+  --TransferMode: string@TransferMode-completer
+]: any -> record<account_sid: string, auth_type: string, auth_type_set: list<string>, cnam_lookup_enabled: bool, date_created: string, date_updated: string, disaster_recovery_method: string, disaster_recovery_url: string, domain_name: string, friendly_name: string, links: record, recording: any, secure: bool, sid: string, transfer_caller_id: string, transfer_mode: string, url: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let full_url = (build-url $base "/v1/Trunks")
+  let body = {CnamLookupEnabled: $CnamLookupEnabled, DisasterRecoveryMethod: $DisasterRecoveryMethod, DisasterRecoveryUrl: $DisasterRecoveryUrl, DomainName: $DomainName, FriendlyName: $FriendlyName, Secure: $Secure, TransferCallerId: $TransferCallerId, TransferMode: $TransferMode} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+}
+
+# DELETE /v1/Trunks/{Sid}
+#
+# operationId: DeleteTrunk
+export def "trunks DeleteTrunk" [
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let full_url = (build-url $base $"/v1/Trunks/($Sid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# GET /v1/Trunks/{Sid}
+#
+# operationId: FetchTrunk
+export def "trunks FetchTrunk" [
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<account_sid: string, auth_type: string, auth_type_set: list<string>, cnam_lookup_enabled: bool, date_created: string, date_updated: string, disaster_recovery_method: string, disaster_recovery_url: string, domain_name: string, friendly_name: string, links: record, recording: any, secure: bool, sid: string, transfer_caller_id: string, transfer_mode: string, url: string> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let full_url = (build-url $base $"/v1/Trunks/($Sid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# POST /v1/Trunks/{Sid}
+#
+# operationId: UpdateTrunk
+export def "trunks UpdateTrunk" [
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --CnamLookupEnabled: oneof<nothing, bool> # Whether Caller ID Name (CNAM) lookup should be enabled for the trunk. If enabled, all inbound calls to the SIP Trunk from the United States and Canada automatically perform a CNAM Lookup and display Caller ID data on your phone. See [CNAM Lookups](https://www.twilio.com/docs/sip-trunking#CNAM) for more information.
+  --DisasterRecoveryMethod: string@DisasterRecoveryMethod-completer # The HTTP method we should use to call the `disaster_recovery_url`. Can be: `GET` or `POST`. (format: http-method)
+  --DisasterRecoveryUrl: string # The URL we should call using the `disaster_recovery_method` if an error occurs while sending SIP traffic towards the configured Origination URL. We retrieve TwiML from the URL and execute the instructions like any other normal TwiML call. See [Disaster Recovery](https://www.twilio.com/docs/sip-trunking#disaster-recovery) for more information. (format: uri)
+  --DomainName: string # The unique address you reserve on Twilio to which you route your SIP traffic. Domain names can contain letters, digits, and `-` and must end with `pstn.twilio.com`. See [Termination Settings](https://www.twilio.com/docs/sip-trunking#termination) for more information.
+  --FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
+  --Secure: oneof<nothing, bool> # Whether Secure Trunking is enabled for the trunk. If enabled, all calls going through the trunk will be secure using SRTP for media and TLS for signaling. If disabled, then RTP will be used for media. See [Secure Trunking](https://www.twilio.com/docs/sip-trunking#securetrunking) for more information.
+  --TransferCallerId: string@TransferCallerId-completer
+  --TransferMode: string@TransferMode-completer
+]: any -> record<account_sid: string, auth_type: string, auth_type_set: list<string>, cnam_lookup_enabled: bool, date_created: string, date_updated: string, disaster_recovery_method: string, disaster_recovery_url: string, domain_name: string, friendly_name: string, links: record, recording: any, secure: bool, sid: string, transfer_caller_id: string, transfer_mode: string, url: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let full_url = (build-url $base $"/v1/Trunks/($Sid)")
+  let body = {CnamLookupEnabled: $CnamLookupEnabled, DisasterRecoveryMethod: $DisasterRecoveryMethod, DisasterRecoveryUrl: $DisasterRecoveryUrl, DomainName: $DomainName, FriendlyName: $FriendlyName, Secure: $Secure, TransferCallerId: $TransferCallerId, TransferMode: $TransferMode} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+}
+
+# GET /v1/Trunks/{TrunkSid}/CredentialLists
+#
+# operationId: ListCredentialList
+export def "trunks-credential-lists ListCredentialList" [
+  TrunkSid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --Page: int # The page index. This value is simply for client state.
+  --PageToken: string # The page token. This is provided by the API.
+]: nothing -> record<credential_lists: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, trunk_sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/Trunks/($TrunkSid)/CredentialLists" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# POST /v1/Trunks/{TrunkSid}/CredentialLists
+#
+# operationId: CreateCredentialList
+export def "trunks-credential-lists CreateCredentialList" [
+  TrunkSid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  CredentialListSid: string # The SID of the [Credential List](https://www.twilio.com/docs/voice/sip/api/sip-credentiallist-resource) that you want to associate with the trunk. Once associated, we will authenticate access to the trunk against this list.
+]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, trunk_sid: string, url: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let full_url = (build-url $base $"/v1/Trunks/($TrunkSid)/CredentialLists")
+  let body = {CredentialListSid: $CredentialListSid} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+}
+
+# DELETE /v1/Trunks/{TrunkSid}/CredentialLists/{Sid}
+#
+# operationId: DeleteCredentialList
+export def "trunks-credential-lists DeleteCredentialList" [
+  TrunkSid: string
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let full_url = (build-url $base $"/v1/Trunks/($TrunkSid)/CredentialLists/($Sid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# GET /v1/Trunks/{TrunkSid}/CredentialLists/{Sid}
+#
+# operationId: FetchCredentialList
+export def "trunks-credential-lists FetchCredentialList" [
+  TrunkSid: string
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, trunk_sid: string, url: string> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let full_url = (build-url $base $"/v1/Trunks/($TrunkSid)/CredentialLists/($Sid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List all IP Access Control Lists for a Trunk
+#
+# GET /v1/Trunks/{TrunkSid}/IpAccessControlLists
+# operationId: ListIpAccessControlList
+export def "trunks-ip-access-control-lists ListIpAccessControlList" [
+  TrunkSid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --Page: int # The page index. This value is simply for client state.
+  --PageToken: string # The page token. This is provided by the API.
+]: nothing -> record<ip_access_control_lists: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, trunk_sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/Trunks/($TrunkSid)/IpAccessControlLists" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Associate an IP Access Control List with a Trunk
+#
+# POST /v1/Trunks/{TrunkSid}/IpAccessControlLists
+# operationId: CreateIpAccessControlList
+export def "trunks-ip-access-control-lists CreateIpAccessControlList" [
+  TrunkSid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  IpAccessControlListSid: string # The SID of the [IP Access Control List](https://www.twilio.com/docs/voice/sip/api/sip-ipaccesscontrollist-resource) that you want to associate with the trunk.
+]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, trunk_sid: string, url: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let full_url = (build-url $base $"/v1/Trunks/($TrunkSid)/IpAccessControlLists")
+  let body = {IpAccessControlListSid: $IpAccessControlListSid} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+}
+
+# Remove an associated IP Access Control List from a Trunk
+#
+# DELETE /v1/Trunks/{TrunkSid}/IpAccessControlLists/{Sid}
+# operationId: DeleteIpAccessControlList
+export def "trunks-ip-access-control-lists DeleteIpAccessControlList" [
+  TrunkSid: string
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let full_url = (build-url $base $"/v1/Trunks/($TrunkSid)/IpAccessControlLists/($Sid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# GET /v1/Trunks/{TrunkSid}/IpAccessControlLists/{Sid}
+#
+# operationId: FetchIpAccessControlList
+export def "trunks-ip-access-control-lists FetchIpAccessControlList" [
+  TrunkSid: string
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, trunk_sid: string, url: string> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let full_url = (build-url $base $"/v1/Trunks/($TrunkSid)/IpAccessControlLists/($Sid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# GET /v1/Trunks/{TrunkSid}/OriginationUrls
+#
+# operationId: ListOriginationUrl
+export def "trunks-origination-urls ListOriginationUrl" [
+  TrunkSid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --Page: int # The page index. This value is simply for client state.
+  --PageToken: string # The page token. This is provided by the API.
+]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, origination_urls: table<account_sid: string, date_created: string, date_updated: string, enabled: bool, friendly_name: string, priority: int, sid: string, sip_url: string, trunk_sid: string, url: string, weight: int>> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/Trunks/($TrunkSid)/OriginationUrls" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# POST /v1/Trunks/{TrunkSid}/OriginationUrls
+#
+# operationId: CreateOriginationUrl
+export def "trunks-origination-urls CreateOriginationUrl" [
+  TrunkSid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Enabled: oneof<nothing, bool> # Whether the URL is enabled. The default is `true`.
+  FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
+  Priority: int # The relative importance of the URI. Can be an integer from 0 to 65535, inclusive, and the default is 10. The lowest number represents the most important URI.
+  SipUrl: string # The SIP address you want Twilio to route your Origination calls to. This must be a `sip:` schema. (format: uri)
+  Weight: int # The value that determines the relative share of the load the URI should receive compared to other URIs with the same priority. Can be an integer from 1 to 65535, inclusive, and the default is 10. URLs with higher values receive more load than those with lower ones with the same priority.
+]: any -> record<account_sid: string, date_created: string, date_updated: string, enabled: bool, friendly_name: string, priority: int, sid: string, sip_url: string, trunk_sid: string, url: string, weight: int> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let full_url = (build-url $base $"/v1/Trunks/($TrunkSid)/OriginationUrls")
+  let body = {Enabled: $Enabled, FriendlyName: $FriendlyName, Priority: $Priority, SipUrl: $SipUrl, Weight: $Weight} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+}
+
+# DELETE /v1/Trunks/{TrunkSid}/OriginationUrls/{Sid}
+#
+# operationId: DeleteOriginationUrl
+export def "trunks-origination-urls DeleteOriginationUrl" [
+  TrunkSid: string
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let full_url = (build-url $base $"/v1/Trunks/($TrunkSid)/OriginationUrls/($Sid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# GET /v1/Trunks/{TrunkSid}/OriginationUrls/{Sid}
+#
+# operationId: FetchOriginationUrl
+export def "trunks-origination-urls FetchOriginationUrl" [
+  TrunkSid: string
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<account_sid: string, date_created: string, date_updated: string, enabled: bool, friendly_name: string, priority: int, sid: string, sip_url: string, trunk_sid: string, url: string, weight: int> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let full_url = (build-url $base $"/v1/Trunks/($TrunkSid)/OriginationUrls/($Sid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# POST /v1/Trunks/{TrunkSid}/OriginationUrls/{Sid}
+#
+# operationId: UpdateOriginationUrl
+export def "trunks-origination-urls UpdateOriginationUrl" [
+  TrunkSid: string
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Enabled: oneof<nothing, bool> # Whether the URL is enabled. The default is `true`.
+  --FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
+  --Priority: int # The relative importance of the URI. Can be an integer from 0 to 65535, inclusive, and the default is 10. The lowest number represents the most important URI.
+  --SipUrl: string # The SIP address you want Twilio to route your Origination calls to. This must be a `sip:` schema. `sips` is NOT supported. (format: uri)
+  --Weight: int # The value that determines the relative share of the load the URI should receive compared to other URIs with the same priority. Can be an integer from 1 to 65535, inclusive, and the default is 10. URLs with higher values receive more load than those with lower ones with the same priority.
+]: any -> record<account_sid: string, date_created: string, date_updated: string, enabled: bool, friendly_name: string, priority: int, sid: string, sip_url: string, trunk_sid: string, url: string, weight: int> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let full_url = (build-url $base $"/v1/Trunks/($TrunkSid)/OriginationUrls/($Sid)")
+  let body = {Enabled: $Enabled, FriendlyName: $FriendlyName, Priority: $Priority, SipUrl: $SipUrl, Weight: $Weight} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+}
+
+# GET /v1/Trunks/{TrunkSid}/PhoneNumbers
+#
+# operationId: ListPhoneNumber
+export def "trunks-phone-numbers ListPhoneNumber" [
+  TrunkSid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --Page: int # The page index. This value is simply for client state.
+  --PageToken: string # The page token. This is provided by the API.
+]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, phone_numbers: table<account_sid: string, address_requirements: string, api_version: string, beta: bool, capabilities: record, date_created: string, date_updated: string, friendly_name: string, links: record, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status_callback: string, status_callback_method: string, trunk_sid: string, url: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/Trunks/($TrunkSid)/PhoneNumbers" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# POST /v1/Trunks/{TrunkSid}/PhoneNumbers
+#
+# operationId: CreatePhoneNumber
+export def "trunks-phone-numbers CreatePhoneNumber" [
+  TrunkSid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  PhoneNumberSid: string # The SID of the [Incoming Phone Number](https://www.twilio.com/docs/phone-numbers/api/incomingphonenumber-resource) that you want to associate with the trunk.
+]: any -> record<account_sid: string, address_requirements: string, api_version: string, beta: bool, capabilities: record, date_created: string, date_updated: string, friendly_name: string, links: record, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status_callback: string, status_callback_method: string, trunk_sid: string, url: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let full_url = (build-url $base $"/v1/Trunks/($TrunkSid)/PhoneNumbers")
+  let body = {PhoneNumberSid: $PhoneNumberSid} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+}
+
+# DELETE /v1/Trunks/{TrunkSid}/PhoneNumbers/{Sid}
+#
+# operationId: DeletePhoneNumber
+export def "trunks-phone-numbers DeletePhoneNumber" [
+  TrunkSid: string
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let full_url = (build-url $base $"/v1/Trunks/($TrunkSid)/PhoneNumbers/($Sid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# GET /v1/Trunks/{TrunkSid}/PhoneNumbers/{Sid}
+#
+# operationId: FetchPhoneNumber
+export def "trunks-phone-numbers FetchPhoneNumber" [
+  TrunkSid: string
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<account_sid: string, address_requirements: string, api_version: string, beta: bool, capabilities: record, date_created: string, date_updated: string, friendly_name: string, links: record, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status_callback: string, status_callback_method: string, trunk_sid: string, url: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let full_url = (build-url $base $"/v1/Trunks/($TrunkSid)/PhoneNumbers/($Sid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# GET /v1/Trunks/{TrunkSid}/Recording
+#
+# operationId: FetchRecording
+export def "trunks-recording FetchRecording" [
+  TrunkSid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<mode: string, trim: string> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let full_url = (build-url $base $"/v1/Trunks/($TrunkSid)/Recording")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# POST /v1/Trunks/{TrunkSid}/Recording
+#
+# operationId: UpdateRecording
+export def "trunks-recording UpdateRecording" [
+  TrunkSid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Mode: string@Mode-completer
+  --Trim: string@Trim-completer
+]: any -> record<mode: string, trim: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://trunking.twilio.com")
+  let full_url = (build-url $base $"/v1/Trunks/($TrunkSid)/Recording")
+  let body = {Mode: $Mode, Trim: $Trim} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+}
