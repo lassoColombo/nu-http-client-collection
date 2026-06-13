@@ -1,5 +1,5 @@
 # Auto-generated client for OpenFaaS API Gateway v0.8.12
-# Source: /Users/colombos/projects/personal/nu-http-clients/specs/openfaas.yaml
+# Source: /home/runner/work/nu-http-client-collection/nu-http-client-collection/specs/openfaas.yaml
 # Auth: --token flag or $env.OPENFAAS_API_GATEWAY_TOKEN
 
 const BASE_URL = "http://localhost:8080"

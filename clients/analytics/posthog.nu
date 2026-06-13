@@ -115,7 +115,7 @@ def status-completer-5 [] { ["completed" "failed" "skipped" "starting"] }
 def level-completer-1 [] { ["1" "15" "8"] }
 def order-completer [] { ["-joined_at" "joined_at"] }
 def base-currency-completer [] { ["AED" "AFN" "ALL" "AMD" "ANG" "AOA" "ARS" "AUD" "AWG" "AZN" "BAM" "BBD" "BDT" "BGN" "BHD" "BIF" "BMD" "BND" "BOB" "BRL" "BSD" "BTC" "BTN" "BWP" "BYN" "BZD" "CAD" "CDF" "CHF" "CLP" "CNY" "COP" "CRC" "CVE" "CZK" "DJF" "DKK" "DOP" "DZD" "EGP" "ERN" "ETB" "EUR" "FJD" "GBP" "GEL" "GHS" "GIP" "GMD" "GNF" "GTQ" "GYD" "HKD" "HNL" "HRK" "HTG" "HUF" "IDR" "ILS" "INR" "IQD" "IRR" "ISK" "JMD" "JOD" "JPY" "KES" "KGS" "KHR" "KMF" "KRW" "KWD" "KYD" "KZT" "LAK" "LBP" "LKR" "LRD" "LSL" "LTL" "LVL" "LYD" "MAD" "MDL" "MGA" "MKD" "MMK" "MNT" "MOP" "MRU" "MTL" "MUR" "MVR" "MWK" "MXN" "MYR" "MZN" "NAD" "NGN" "NIO" "NOK" "NPR" "NZD" "OMR" "PAB" "PEN" "PGK" "PHP" "PKR" "PLN" "PYG" "QAR" "RON" "RSD" "RUB" "RWF" "SAR" "SBD" "SCR" "SDG" "SEK" "SGD" "SRD" "SSP" "STN" "SYP" "SZL" "THB" "TJS" "TMT" "TND" "TOP" "TRY" "TTD" "TWD" "TZS" "UAH" "UGX" "USD" "UYU" "UZS" "VES" "VND" "VUV" "WST" "XAF" "XCD" "XOF" "XPF" "YER" "ZAR" "ZMW"] }
-def scope-completer-1 [] { ["Action" "AlertConfiguration" "AlertSubscription" "Annotation" "BatchExport" "BatchImport" "Cohort" "Comment" "CustomerProfileConfig" "Dashboard" "DashboardWidget" "DataManagement" "DataWarehouseSavedQuery" "EarlyAccessFeature" "Endpoint" "EndpointVersion" "ErrorTrackingIssue" "Evaluation" "EventDefinition" "Experiment" "ExperimentHoldout" "ExperimentSavedMetric" "ExternalDataSchema" "ExternalDataSource" "FeatureFlag" "Group" "HogFlow" "HogFunction" "Insight" "InstanceSetting" "Integration" "LLMTrace" "LegalDocument" "Log" "LogsAlertConfiguration" "LogsExclusionRule" "Notebook" "Organization" "OrganizationDomain" "OrganizationMembership" "Person" "PersonalAPIKey" "Plugin" "PluginConfig" "ProductTour" "Project" "ProjectSecretAPIKey" "PropertyDefinition" "Replay" "Role" "SessionRecordingPlaylist" "SignalScoutConfig" "Subscription" "Survey" "Tag" "TaggedItem" "Team" "Threshold" "Ticket" "User" "UserGroup" "WebAnalyticsFilterPreset"] }
+def scope-completer-1 [] { ["Action" "AlertConfiguration" "AlertSubscription" "Annotation" "BatchExport" "BatchImport" "Cohort" "Comment" "CustomerProfileConfig" "Dashboard" "DashboardWidget" "DataManagement" "DataWarehouseSavedQuery" "EarlyAccessFeature" "Endpoint" "EndpointVersion" "ErrorTrackingIssue" "Evaluation" "EventDefinition" "Experiment" "ExperimentHoldout" "ExperimentSavedMetric" "ExternalDataSchema" "ExternalDataSource" "FeatureFlag" "Group" "HogFlow" "HogFunction" "Insight" "InstanceSetting" "Integration" "LLMTrace" "LegalDocument" "Log" "LogsAlertConfiguration" "LogsExclusionRule" "Notebook" "OAuthApplication" "Organization" "OrganizationDomain" "OrganizationMembership" "Person" "PersonalAPIKey" "Plugin" "PluginConfig" "ProductTour" "Project" "ProjectSecretAPIKey" "PropertyDefinition" "Replay" "Role" "SessionRecordingPlaylist" "SignalScoutConfig" "Subscription" "Survey" "Tag" "TaggedItem" "Team" "Threshold" "Ticket" "User" "UserGroup" "WebAnalyticsFilterPreset"] }
 def completed-completer [] { ["any" "completed" "open"] }
 def kind-completer-1 [] { ["any" "comment" "task"] }
 def channel-detail-completer [] { ["github_issue" "slack_bot_mention" "slack_channel_message" "slack_emoji_reaction" "teams_bot_mention" "teams_channel_message" "widget_api" "widget_embedded"] }
@@ -27983,7 +27983,7 @@ export def "projects-activity-log list" [
   --item-id: string # Filter by the ID of the affected resource.
   --page: int # Page number for pagination. When provided, uses page-based pagination ordered by most recent first.
   --page-size: int # Number of results per page (default: 100, max: 1000). Only used with page-based pagination. (default: 100)
-  --scope: string@scope-completer-1 # Filter by a single activity scope, e.g. "FeatureFlag", "Insight", "Dashboard", "Experiment".  * `Cohort` - Cohort * `FeatureFlag` - FeatureFlag * `Person` - Person * `Group` - Group * `Insight` - Insight * `Plugin` - Plugin * `PluginConfig` - PluginConfig * `HogFunction` - HogFunction * `HogFlow` - HogFlow * `DataManagement` - DataManagement * `EventDefinition` - EventDefinition * `PropertyDefinition` - PropertyDefinition * `Notebook` - Notebook * `Endpoint` - Endpoint * `EndpointVersion` - EndpointVersion * `Dashboard` - Dashboard * `Replay` - Replay * `Experiment` - Experiment * `ExperimentHoldout` - ExperimentHoldout * `ExperimentSavedMetric` - ExperimentSavedMetric * `Survey` - Survey * `EarlyAccessFeature` - EarlyAccessFeature * `SessionRecordingPlaylist` - SessionRecordingPlaylist * `Comment` - Comment * `Team` - Team * `Project` - Project * `ErrorTrackingIssue` - ErrorTrackingIssue * `DataWarehouseSavedQuery` - DataWarehouseSavedQuery * `LegalDocument` - LegalDocument * `Organization` - Organization * `OrganizationDomain` - OrganizationDomain * `OrganizationMembership` - OrganizationMembership * `Role` - Role * `UserGroup` - UserGroup * `BatchExport` - BatchExport * `BatchImport` - BatchImport * `Integration` - Integration * `Annotation` - Annotation * `Tag` - Tag * `TaggedItem` - TaggedItem * `Subscription` - Subscription * `PersonalAPIKey` - PersonalAPIKey * `ProjectSecretAPIKey` - ProjectSecretAPIKey * `User` - User * `Action` - Action * `AlertConfiguration` - AlertConfiguration * `Threshold` - Threshold * `AlertSubscription` - AlertSubscription * `ExternalDataSource` - ExternalDataSource * `ExternalDataSchema` - ExternalDataSchema * `Evaluation` - Evaluation * `LLMTrace` - LLMTrace * `WebAnalyticsFilterPreset` - WebAnalyticsFilterPreset * `CustomerProfileConfig` - CustomerProfileConfig * `Log` - Log * `LogsAlertConfiguration` - LogsAlertConfiguration * `LogsExclusionRule` - LogsExclusionRule * `DashboardWidget` - DashboardWidget * `ProductTour` - ProductTour * `Ticket` - Ticket * `InstanceSetting` - InstanceSetting * `SignalScoutConfig` - SignalScoutConfig
+  --scope: string@scope-completer-1 # Filter by a single activity scope, e.g. "FeatureFlag", "Insight", "Dashboard", "Experiment".  * `Cohort` - Cohort * `FeatureFlag` - FeatureFlag * `Person` - Person * `Group` - Group * `Insight` - Insight * `Plugin` - Plugin * `PluginConfig` - PluginConfig * `HogFunction` - HogFunction * `HogFlow` - HogFlow * `DataManagement` - DataManagement * `EventDefinition` - EventDefinition * `PropertyDefinition` - PropertyDefinition * `Notebook` - Notebook * `Endpoint` - Endpoint * `EndpointVersion` - EndpointVersion * `Dashboard` - Dashboard * `Replay` - Replay * `Experiment` - Experiment * `ExperimentHoldout` - ExperimentHoldout * `ExperimentSavedMetric` - ExperimentSavedMetric * `Survey` - Survey * `EarlyAccessFeature` - EarlyAccessFeature * `SessionRecordingPlaylist` - SessionRecordingPlaylist * `Comment` - Comment * `Team` - Team * `Project` - Project * `ErrorTrackingIssue` - ErrorTrackingIssue * `DataWarehouseSavedQuery` - DataWarehouseSavedQuery * `LegalDocument` - LegalDocument * `Organization` - Organization * `OrganizationDomain` - OrganizationDomain * `OrganizationMembership` - OrganizationMembership * `Role` - Role * `UserGroup` - UserGroup * `BatchExport` - BatchExport * `BatchImport` - BatchImport * `Integration` - Integration * `Annotation` - Annotation * `Tag` - Tag * `TaggedItem` - TaggedItem * `Subscription` - Subscription * `PersonalAPIKey` - PersonalAPIKey * `ProjectSecretAPIKey` - ProjectSecretAPIKey * `OAuthApplication` - OAuthApplication * `User` - User * `Action` - Action * `AlertConfiguration` - AlertConfiguration * `Threshold` - Threshold * `AlertSubscription` - AlertSubscription * `ExternalDataSource` - ExternalDataSource * `ExternalDataSchema` - ExternalDataSchema * `Evaluation` - Evaluation * `LLMTrace` - LLMTrace * `WebAnalyticsFilterPreset` - WebAnalyticsFilterPreset * `CustomerProfileConfig` - CustomerProfileConfig * `Log` - Log * `LogsAlertConfiguration` - LogsAlertConfiguration * `LogsExclusionRule` - LogsExclusionRule * `DashboardWidget` - DashboardWidget * `ProductTour` - ProductTour * `Ticket` - Ticket * `InstanceSetting` - InstanceSetting * `SignalScoutConfig` - SignalScoutConfig
   --scopes: list # Filter by multiple activity scopes, comma-separated. Values must be valid ActivityScope enum values. E.g. "FeatureFlag,Insight".
   --user: string # Filter by user UUID who performed the action. (format: uuid)
 ]: nothing -> record<count: int, next: string, previous: string, results: table<id: string, user: record, unread: bool, team_id: int, organization_id: string, was_impersonated: bool, is_system: bool, client: string, ip_address: string, activity: string, item_id: string, scope: string, detail: any, created_at: string>> {
@@ -33294,6 +33294,58 @@ export def "projects-desktop-file-system delete" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Return the Task currently generating this folder's CONTEXT.md, or null if none.
+#
+# GET /api/projects/{project_id}/desktop_file_system/{id}/context_generation/
+# operationId: desktop_file_system_context_generation_retrieve
+export def "projects-desktop-file-system-context-generation get" [
+  id: string
+  project_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<task_id: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/projects/($project_id)/desktop_file_system/($id)/context_generation/")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Set or clear the Task associated with this folder's CONTEXT.md generation.
+#
+# PUT /api/projects/{project_id}/desktop_file_system/{id}/context_generation/
+# operationId: desktop_file_system_context_generation_update
+export def "projects-desktop-file-system-context-generation update" [
+  id: string
+  project_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --task-id: string # ID of the Task generating this folder's CONTEXT.md. Must reference a Task in the same team. Set to null to clear the association. (nullable, format: uuid)
+]: any -> record<task_id: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/projects/($project_id)/desktop_file_system/($id)/context_generation/")
+  let body = {task_id: $task_id} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get count of all files in a folder.

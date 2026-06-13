@@ -1,4 +1,4 @@
-# Auto-generated client for Tuleap API v17.5.99.1781179977-1
+# Auto-generated client for Tuleap API v17.5.99.1781272563-1
 # Source: https://tuleap.net/api/explorer/swagger.json
 # Auth: --token flag or $env.TULEAP_API_TOKEN
 

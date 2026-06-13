@@ -2298,7 +2298,7 @@ export def "organizations-databases-branches-traffic-budgets-rules rule-by-organ
   --kind: string@kind-completer-1 # Kind of rule
   --keyspace: string # The keyspace to apply a query pattern rule to
   --fingerprint: string # Query pattern fingerprint to apply rule to
-  --tags: list # Optional array of tags for this rule
+  --tags: list # Optional array of tags for this rule. Each rules take exactly one tag.
 ]: any -> record<id: string, kind: string, tags: table<key_id: string, key: string, value: string, source: string>, fingerprint: string, keyspace: string, actor: record<id: string, display_name: string, avatar_url: string>, syntax_highlighted_sql: string, created_at: string, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

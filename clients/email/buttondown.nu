@@ -998,10 +998,10 @@ export def "emails email" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --attachments: list # A list of attachment IDs present on the email. (See [Attachments](https://docs.buttondown.com/api-attachments-introduction) for more information.) (default: [])
+  --attachments: list # A list of attachment IDs present on the email. (See [Attachments](https://docs.buttondown.com/api-attachments-introduction) for more information.) (default: [], e.g. [att_01h8xg4j3k2m1n0p9q8r7s6t5v])
   --publish-date: any # The date and time at which the email should be published in the future (for scheduled emails), or the date and time at which the email was published (for sent emails).
   subject: string # The subject line for the email. (e.g. The subject line for the email)
-  --slug: any # A short, human-readable identifier for the email, used in the archive URL.
+  --slug: any # A short, human-readable identifier for the email, used in the archive URL. (e.g. hello-world)
   --description: string # A human-readable description of the email, used for archives and SEO. (default: )
   --canonical-url: string # The URL of the original source of the content. (default: )
   --image: string # A primary image URL used when previewing the email on the web or in other contexts. (default: )
@@ -1013,7 +1013,7 @@ export def "emails email" [
   --secondary-id: any # An informal 'number' for the email, used in some templates (e.g. 'This was issue #123').
   --filters: any # Tag-based filter rules determining which subscribers receive this email. (default: {filters: [], groups: [], predicate: and})
   --commenting-mode: any # Controls whether subscribers can comment on this email. (default: enabled)
-  --related-email-ids: list # IDs of emails related to this one. Shown at the bottom of the email and archive pages.
+  --related-email-ids: list # IDs of emails related to this one. Shown at the bottom of the email and archive pages. (e.g. [em_01h8xg4j3k2m1n0p9q8r7s6t5v])
   --featured: oneof<nothing, bool> # Designated whether or not this email should be highlighted within the archives. (default: false)
   --should-trigger-pay-per-email-billing: oneof<nothing, bool> # Whether this email should trigger pay-per-email billing for paid subscribers. Use this to differentiate between free updates and premium newsletters. (default: false)
 ]: any -> record<id: string, creation_date: string, absolute_url: string, analytics: any, callouts: list<string>, attachments: any, body: string, canonical_url: string, commenting_mode: string, description: string, archival_mode: string, email_type: record, featured: bool, filters: record<filters: list<record>, groups: list<any>, predicate: string>, image: string, metadata: record, modification_date: string, publish_date: any, related_email_ids: list<string>, secondary_id: any, should_trigger_pay_per_email_billing: bool, slug: any, source: string, status: string, subject: string, suppression_reason: any, template: any> {
@@ -1046,10 +1046,10 @@ export def "emails emails" [
   --status: list # If provided, only return [emails](https://docs.buttondown.com/api-emails-introduction) without the given status. (e.g. [draft])
   --ids: list # If provided, only return emails with the given IDs.
   --ordering: string # The ordering to apply to the results. (default: creation_date, e.g. -publish_date)
-  --creation-date-start: string # If provided, only return emails created after the given date.
-  --creation-date-end: string # If provided, only return emails created before the given date.
-  --publish-date-start: string # If provided, only return emails published after the given date.
-  --publish-date-end: string # If provided, only return emails published before the given date.
+  --creation-date-start: string # If provided, only return emails created after the given date. (format: date)
+  --creation-date-end: string # If provided, only return emails created before the given date. (format: date)
+  --publish-date-start: string # If provided, only return emails published after the given date. (format: date)
+  --publish-date-end: string # If provided, only return emails published before the given date. (format: date)
   --excluded-fields: list # If provided, exclude the given field(s) from the response. This can improve performance for large responses. (e.g. [body])
   --qp-source: list # If provided, only return emails from the given source(s). (e.g. [api])
   --archival-mode: list # If provided, only return emails with the given archival mode.
@@ -1089,7 +1089,7 @@ export def "emails email-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --attachments: any # A list of attachment IDs present on the email. (See [Attachments](https://docs.buttondown.com/api-attachments-introduction) for more information.)
+  --attachments: any # A list of attachment IDs present on the email. (See [Attachments](https://docs.buttondown.com/api-attachments-introduction) for more information.) (e.g. [att_01h8xg4j3k2m1n0p9q8r7s6t5v])
   --publish-date: any # The date and time at which the email should be published in the future (for scheduled emails), or the date and time at which the email was published (for sent emails). Pass `"none"` to clear a scheduled date.
   --subject: any # The subject line for the email. (e.g. The subject line for the email)
   --description: any # A human-readable description of the email, used for archives and SEO.
@@ -1106,7 +1106,7 @@ export def "emails email-by-id" [
   --filters: any # Tag-based filter rules determining which subscribers receive this email.
   --template: any # If present, this template overrides your newsletter's default email template. Pass `"none"` to clear an override.
   --commenting-mode: any # Controls whether subscribers can comment on this email.
-  --related-email-ids: any # IDs of emails related to this one. Shown at the bottom of the email and archive pages.
+  --related-email-ids: any # IDs of emails related to this one. Shown at the bottom of the email and archive pages. (e.g. [em_01h8xg4j3k2m1n0p9q8r7s6t5v])
   --featured: any # Designated whether or not this email should be highlighted within the archives.
   --should-trigger-pay-per-email-billing: any # Whether this email should trigger pay-per-email billing for paid subscribers. Use this to differentiate between free updates and premium newsletters.
 ]: any -> record<id: string, creation_date: string, absolute_url: string, analytics: any, callouts: list<string>, attachments: any, body: string, canonical_url: string, commenting_mode: string, description: string, archival_mode: string, email_type: record, featured: bool, filters: record<filters: list<record>, groups: list<any>, predicate: string>, image: string, metadata: record, modification_date: string, publish_date: any, related_email_ids: list<string>, secondary_id: any, should_trigger_pay_per_email_billing: bool, slug: any, source: string, status: string, subject: string, suppression_reason: any, template: any> {
@@ -1285,7 +1285,7 @@ export def "emails-send-draft draft" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --subscribers: any # A list of subscriber ids to which to send the email. (e.g. [bc5601f4-b180-4e02-8501-c18080662376, 24ee3338-daaf-42b0-bf7b-0cab38972fe5])
+  --subscribers: any # A list of subscriber ids to which to send the email. (e.g. [sub_01h8xg4j3k2m1n0p9q8r7s6t5v])
   --recipients: any # A list of email addresses to send the email to. (e.g. [telemachus@buttondown.email])
 ]: any -> any {
   let input = $in
@@ -2546,25 +2546,25 @@ export def "subscribers subscribers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --bounce-date-end: string # If provided, only return subscribers who last bounced on or before the given date.
-  --bounce-date-start: string # If provided, only return subscribers who last bounced on or after the given date.
+  --bounce-date-end: string # If provided, only return subscribers who last bounced on or before the given date. (format: date)
+  --bounce-date-start: string # If provided, only return subscribers who last bounced on or after the given date. (format: date)
   --bounce-reason: list # If provided, only return subscribers with the given bounce reason(s).
-  --churn-date-end: string # If provided, only return subscribers who churned on or before the given date.
-  --churn-date-start: string # If provided, only return subscribers who churned on or after the given date.
+  --churn-date-end: string # If provided, only return subscribers who churned on or before the given date. (format: date)
+  --churn-date-start: string # If provided, only return subscribers who churned on or after the given date. (format: date)
   --coupon: list # If provided, only return subscribers with the given coupon ID(s).
   --current-price: list # If provided, only return subscribers who are currently subscribed to the given price ID(s).
-  --date-end: string # If provided, only return subscribers created before the given date.
-  --date-start: string # If provided, only return subscribers created on or after the given date.
+  --date-end: string # If provided, only return subscribers created before the given date. (format: date)
+  --date-start: string # If provided, only return subscribers created on or after the given date. (format: date)
   --domain: list # If provided, only return subscribers whose email domain matches the given domain(s). (e.g. [gmail.com])
   --email-address: string # If provided, only return subscribers whose email address contains the given string.
   --expand: list # If provided, expand the given field. (Supported: 'stripe_customer', 'stripe_subscription'.)
   --form: list # If provided, only return subscribers that came through the given [form(s)](https://docs.buttondown.com/registration-forms). (e.g. [form_abc123])
   --ids: list # If provided, only return subscribers with the given IDs.
   --ip-address: list # If provided, only return subscribers with the given IP address(es).
-  --last-click-date-end: string # If provided, only return subscribers whose last click was on or before the given date.
-  --last-click-date-start: string # If provided, only return subscribers whose last click was on or after the given date.
-  --last-open-date-end: string # If provided, only return subscribers whose last open was on or before the given date.
-  --last-open-date-start: string # If provided, only return subscribers whose last open was on or after the given date.
+  --last-click-date-end: string # If provided, only return subscribers whose last click was on or before the given date. (format: date)
+  --last-click-date-start: string # If provided, only return subscribers whose last click was on or after the given date. (format: date)
+  --last-open-date-end: string # If provided, only return subscribers whose last open was on or before the given date. (format: date)
+  --last-open-date-start: string # If provided, only return subscribers whose last open was on or after the given date. (format: date)
   --domain: list # If provided, only return subscribers whose email domain does not match the given domain(s). (e.g. [gmail.com])
   --tag: string # If provided, only return subscribers without the given [tag](https://docs.buttondown.com/api-tags-introduction). (e.g. vip)
   --type: list # If provided, only return subscribers without the given type.
@@ -2582,14 +2582,14 @@ export def "subscribers subscribers" [
   --subscriber-import: list # If provided, only return subscribers that were imported by the given subscriber import. (e.g. [import_abc123])
   --tag: list # If provided, only return subscribers with the given [tag(s)](https://docs.buttondown.com/api-tags-introduction).
   --type: list # If provided, only return subscribers with the given type. (e.g. [regular])
-  --undeliverability-date-end: string # If provided, only return subscribers who became undeliverable on or before the given date.
-  --undeliverability-date-start: string # If provided, only return subscribers who became undeliverable on or after the given date.
+  --undeliverability-date-end: string # If provided, only return subscribers who became undeliverable on or before the given date. (format: date)
+  --undeliverability-date-start: string # If provided, only return subscribers who became undeliverable on or after the given date. (format: date)
   --undeliverability-reason: list # If provided, only return subscribers with the given undeliverability reason(s).
-  --unsubscription-date-end: string # If provided, only return subscribers who unsubscribed on or before the given date.
-  --unsubscription-date-start: string # If provided, only return subscribers who unsubscribed on or after the given date.
+  --unsubscription-date-end: string # If provided, only return subscribers who unsubscribed on or before the given date. (format: date)
+  --unsubscription-date-start: string # If provided, only return subscribers who unsubscribed on or after the given date. (format: date)
   --unsubscription-reason: list # If provided, only return subscribers with the given unsubscription reason(s). (e.g. [no longer interested])
-  --upgrade-date-end: string # If provided, only return subscribers who upgraded on or before the given date.
-  --upgrade-date-start: string # If provided, only return subscribers who upgraded on or after the given date.
+  --upgrade-date-end: string # If provided, only return subscribers who upgraded on or before the given date. (format: date)
+  --upgrade-date-start: string # If provided, only return subscribers who upgraded on or after the given date. (format: date)
   --utm-campaign: list # If provided, only return subscribers with the given UTM campaign(s). (e.g. [paid_campaign_2024])
   --utm-medium: list # If provided, only return subscribers with the given UTM medium(s). (e.g. [paid_campaign_2024])
   --utm-source: list # If provided, only return subscribers with the given UTM source(s). (e.g. [paid_campaign_2024])

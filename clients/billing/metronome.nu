@@ -278,12 +278,13 @@ export def "customer-alerts-get post" [
   --seat-filter: record # Only allowed for `low_remaining_seat_balance_reached` notifications. This filters alerts by the seat group key-value pair. — shape: {seat_group_key: string, seat_group_value: string}
   --alert-specifiers: list # Can be used with only `low_remaining_contract_credit_and_commit_balance_reached` notifications. Used to filter the alert by the custom field key-value pair. — item shape: {custom_field_filters: list, exclude?: list}
   --custom-field-filters: list # Used to filter the alert by the custom field key-value pair. — item shape: {entity: "Contract"|"Commit"|"ContractCredit"|"ContractCreditOrCommit", key: string, value: string}
+  --webhook-notification-id: string # Indicates that this API request was triggered by a webhook notification with the provided ID.
 ]: any -> record<data: record<customer_status: string, triggered_by: string, alert: record<id: string, name: string, uniqueness_key: string, type: string, status: string, credit_type: record, threshold: float, updated_at: string, credit_grant_type_filters: list, custom_field_filters: list, group_key_filter: record, invoice_types_filter: list, group_values: list, seat_filter: record, alert_specifiers: list>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/customer-alerts/get")
-  let body = {customer_id: $customer_id, alert_id: $alert_id, plans_or_contracts: $plans_or_contracts, group_values: $group_values, seat_filter: $seat_filter, alert_specifiers: $alert_specifiers, custom_field_filters: $custom_field_filters} | compact
+  let body = {customer_id: $customer_id, alert_id: $alert_id, plans_or_contracts: $plans_or_contracts, group_values: $group_values, seat_filter: $seat_filter, alert_specifiers: $alert_specifiers, custom_field_filters: $custom_field_filters, webhook_notification_id: $webhook_notification_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1090,10 +1091,11 @@ export def "customers-invoices listInvoices-v1" [
   --contract-id: string # Only return invoices for the specified contract (format: uuid)
   --starting-on: string # RFC 3339 timestamp (inclusive). Invoices will only be returned for billing periods that start at or after this time. (format: date-time)
   --ending-before: string # RFC 3339 timestamp (exclusive). Invoices will only be returned for billing periods that end before this time. (format: date-time)
+  --webhook-notification-id: string # Indicates that this API request was triggered by a webhook notification with the provided ID.
 ]: nothing -> record<data: table<id: string, customer_id: string, customer_custom_fields: record, netsuite_sales_order_id: string, salesforce_opportunity_id: string, net_payment_terms_days: float, credit_type: record, line_items: list, start_timestamp: string, end_timestamp: string, issued_at: string, created_at: string, status: string, total: float, type: string, external_invoice: record, revenue_system_invoices: list, contract_id: string, contract_custom_fields: record, amendment_id: string, correction_record: record, reseller_royalty: record, custom_fields: record, billable_status: string, constituent_invoices: list, payer: record, regenerated_from_invoice_id: string>, next_page: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "next_page" $next_page "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "skip_zero_qty_line_items" $skip_zero_qty_line_items "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "credit_type_id" $credit_type_id "scalar") (serialize-qp "contract_id" $contract_id "scalar") (serialize-qp "starting_on" $starting_on "scalar") (serialize-qp "ending_before" $ending_before "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "next_page" $next_page "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "skip_zero_qty_line_items" $skip_zero_qty_line_items "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "credit_type_id" $credit_type_id "scalar") (serialize-qp "contract_id" $contract_id "scalar") (serialize-qp "starting_on" $starting_on "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "webhook_notification_id" $webhook_notification_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/customers/($customer_id)/invoices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3085,12 +3087,13 @@ export def "contracts-customer-balances-list listCustomerBalances-v1" [
   --next-page: string # The next page token from a previous response.
   --limit: int # The maximum number of commits to return. Defaults to 25. (default: 25)
   --exclude-zero-balances: oneof<nothing, bool> # Exclude balances with zero amounts from the response.
+  --webhook-notification-id: string # Indicates that this API request was triggered by a webhook notification with the provided ID.
 ]: any -> record<data: list<any>, next_page: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/contracts/customerBalances/list")
-  let body = {customer_id: $customer_id, id: $id, covering_date: $covering_date, starting_at: $starting_at, effective_before: $effective_before, include_contract_balances: $include_contract_balances, include_archived: $include_archived, include_ledgers: $include_ledgers, include_balance: $include_balance, next_page: $next_page, limit: $limit, exclude_zero_balances: $exclude_zero_balances} | compact
+  let body = {customer_id: $customer_id, id: $id, covering_date: $covering_date, starting_at: $starting_at, effective_before: $effective_before, include_contract_balances: $include_contract_balances, include_archived: $include_archived, include_ledgers: $include_ledgers, include_balance: $include_balance, next_page: $next_page, limit: $limit, exclude_zero_balances: $exclude_zero_balances, webhook_notification_id: $webhook_notification_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3144,6 +3147,7 @@ export def "contracts-seat-balances-list listSeatBalances-v1" [
   contract_id: string # The contract ID to retrieve seat balances for (format: uuid)
   --subscription-ids: list # Optional filter to only include seats from specific subscriptions. If subscriptions ids are not mapped to SEAT_BASED subscriptions, error will be returned.
   --seat-ids: list # Optional filter to only include specific seats.
+  --skip-missing-seat-ids: oneof<nothing, bool> # When true, any seat_ids not found in contract subscriptions will be silently omitted from the response instead of returning a 400 error. (default: false)
   --include-credits-and-commits: oneof<nothing, bool> # Include credits and commits in the response (default: false)
   --include-ledgers: oneof<nothing, bool> # Include ledger entries for each commit and commit. `include_credits_and_commits` must be set to `true` for `include_ledgers=true` to apply. (default: false)
   --starting-at: string # Include only commits or credits with access effective on or after this date (cannot be used with covering_date). (format: date-time)
@@ -3156,7 +3160,7 @@ export def "contracts-seat-balances-list listSeatBalances-v1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/contracts/seatBalances/list")
-  let body = {customer_id: $customer_id, contract_id: $contract_id, subscription_ids: $subscription_ids, seat_ids: $seat_ids, include_credits_and_commits: $include_credits_and_commits, include_ledgers: $include_ledgers, starting_at: $starting_at, effective_before: $effective_before, covering_date: $covering_date, limit: $limit, cursor: $cursor} | compact
+  let body = {customer_id: $customer_id, contract_id: $contract_id, subscription_ids: $subscription_ids, seat_ids: $seat_ids, skip_missing_seat_ids: $skip_missing_seat_ids, include_credits_and_commits: $include_credits_and_commits, include_ledgers: $include_ledgers, starting_at: $starting_at, effective_before: $effective_before, covering_date: $covering_date, limit: $limit, cursor: $cursor} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3683,12 +3687,13 @@ export def "contracts-get post-1" [
   --include-ledgers: oneof<nothing, bool> # Include commit/credit ledgers in the response. Setting this flag may cause the query to be slower. Cannot be used with as_of_date parameter.
   --as-of-date: string # Optional RFC 3339 timestamp. Return the contract as of this date. Cannot be used with include_ledgers parameter. (format: date-time)
   --include-balance: oneof<nothing, bool> # Include the balance of credits and commits in the response. Setting this flag may cause the query to be slower.
+  --webhook-notification-id: string # Indicates that this API request was triggered by a webhook notification with the provided ID.
 ]: any -> record<data: record<id: string, customer_id: string, package_id: string, uniqueness_key: string, name: string, salesforce_opportunity_id: string, rate_card_id: string, starting_at: string, commits: list<record>, credits: list<record>, has_more: record<commits: bool, credits: bool>, overrides: list<record>, discounts: list<record>, professional_services: list<record>, scheduled_charges: list<record>, scheduled_charges_on_usage_invoices: string, transitions: list<record>, reseller_royalties: list<record>, created_at: string, created_by: string, netsuite_sales_order_id: string, net_payment_terms_days: float, ending_before: string, archived_at: string, total_contract_value: float, usage_filter: list<record>, usage_statement_schedule: record<frequency: string, billing_anchor_date: string>, multiplier_override_prioritization: string, custom_fields: record, customer_billing_provider_configuration: record<id: string, billing_provider: string, delivery_method: string>, recurring_commits: list<record>, recurring_credits: list<record>, spend_threshold_configuration: record<is_enabled: bool, threshold_amount: float, commit: record, payment_gate_config: record, discount_configuration: record>, prepaid_balance_threshold_configuration: record<is_enabled: bool, threshold_amount: float, recharge_to_amount: float, custom_credit_type_id: string, commit: record, payment_gate_config: record, discount_configuration: record, threshold_balance_specifiers: list>, spend_trackers: list<record>, subscriptions: list<record>, hierarchy_configuration: any, priority: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/contracts/get")
-  let body = {customer_id: $customer_id, contract_id: $contract_id, include_ledgers: $include_ledgers, as_of_date: $as_of_date, include_balance: $include_balance} | compact
+  let body = {customer_id: $customer_id, contract_id: $contract_id, include_ledgers: $include_ledgers, as_of_date: $as_of_date, include_balance: $include_balance, webhook_notification_id: $webhook_notification_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -1,5 +1,5 @@
 # Auto-generated client for Datadog API V2 Collection v1.0
-# Source: /Users/colombos/projects/personal/nu-http-clients/specs/datadog.yaml
+# Source: /home/runner/work/nu-http-client-collection/nu-http-client-collection/specs/datadog.yaml
 # Auth: --token flag or $env.DATADOG_API_V2_COLLECTION_TOKEN
 
 const BASE_URL = "https://api.datadoghq.com"

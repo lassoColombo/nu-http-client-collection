@@ -2172,10 +2172,11 @@ export def "0-organizations-release-threshold-statuses Retrieve-Statuses-of-Rele
   --environment: list # A list of environment names to filter your results by.
   --projectSlug: list # A list of project slugs to filter your results by.
   --release: list # A list of release versions to filter your results by.
+  --project: list # A list of project IDs or slugs to filter your results by.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "environment" $environment "multi") (serialize-qp "projectSlug" $projectSlug "multi") (serialize-qp "release" $release "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "environment" $environment "multi") (serialize-qp "projectSlug" $projectSlug "multi") (serialize-qp "release" $release "multi") (serialize-qp "project" $project "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/release-threshold-statuses/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2186,6 +2187,7 @@ export def "0-organizations-release-threshold-statuses Retrieve-Statuses-of-Rele
 #
 # GET /api/0/organizations/{organization_id_or_slug}/releases/{version}/
 # operationId: Retrieve an Organization's Release
+@deprecated --flag project-id
 export def "0-organizations-releases Retrieve-an-Organizations-Release" [
   organization_id_or_slug: string
   version: string
@@ -2197,7 +2199,8 @@ export def "0-organizations-releases Retrieve-an-Organizations-Release" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --project-id: string # The project ID to filter by.
+  --project-id: string # Deprecated. Use project instead. (DEPRECATED)
+  --project: string # The project ID or slug to filter by. Overrides project_id when both are sent.
   --health: oneof<nothing, bool> # Whether or not to include health data with the release. By default, this is false.
   --adoptionStages: oneof<nothing, bool> # Whether or not to include adoption stages with the release. By default, this is false.
   --summaryStatsPeriod: string@summaryStatsPeriod-completer # The period of time used to query summary stats for the release. By default, this is 14d.
@@ -2208,7 +2211,7 @@ export def "0-organizations-releases Retrieve-an-Organizations-Release" [
 ]: nothing -> record<ref: string, url: string, dateReleased: string, dateCreated: string, dateStarted: string, owner: record, lastCommit: record, lastDeploy: record<dateStarted: string, url: string, id: string, environment: string, dateFinished: string, name: string>, firstEvent: string, lastEvent: string, currentProjectMeta: record, userAgent: string, adoptionStages: record, id: int, version: string, newGroups: int, status: string, shortVersion: string, versionInfo: record<description: string, package: string, version: record, buildHash: string>, data: record, commitCount: int, deployCount: int, authors: list<any>, projects: table<healthData: record, dateReleased: string, dateCreated: string, dateStarted: string, id: int, slug: string, name: string, platform: string, platforms: list, hasHealthData: bool, newGroups: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "project_id" $project_id "scalar") (serialize-qp "health" $health "scalar") (serialize-qp "adoptionStages" $adoptionStages "scalar") (serialize-qp "summaryStatsPeriod" $summaryStatsPeriod "scalar") (serialize-qp "healthStatsPeriod" $healthStatsPeriod "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "project_id" $project_id "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "health" $health "scalar") (serialize-qp "adoptionStages" $adoptionStages "scalar") (serialize-qp "summaryStatsPeriod" $summaryStatsPeriod "scalar") (serialize-qp "healthStatsPeriod" $healthStatsPeriod "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/releases/($version)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
