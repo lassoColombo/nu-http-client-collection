@@ -1,0 +1,1436 @@
+# Auto-generated client for DataLakeAnalyticsCatalogManagementClient v2016-11-01
+# Source: https://api.apis.guru/v2/specs/azure.com/datalake-analytics-catalog/2016-11-01/swagger.json
+# Auth: --token flag or $env.DATALAKEANALYTICSCATALOGMANAGEMENTCLIENT_TOKEN
+
+const BASE_URL = "https://azure.local"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o DATALAKEANALYTICSCATALOGMANAGEMENTCLIENT_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["https://azure.local"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "catalog-usql-acl ListAcls" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Retrieves the list of access control list (ACL) entries for the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/acl
+# operationId: Catalog_ListAcls
+export def "catalog-usql-acl ListAcls" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # OData filter. Optional.
+  --top: int # The number of items to return. Optional. (format: int32)
+  --skip: int # The number of items to skip over before returning elements. Optional. (format: int32)
+  --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
+  --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
+  --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
+  --api-version: string # Client Api Version.
+]: nothing -> record<value: table<aceType: string, permission: string, principalId: string>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/catalog/usql/acl" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the list of databases from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases
+# operationId: Catalog_ListDatabases
+export def "catalog-usql-databases ListDatabases" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # OData filter. Optional.
+  --top: int # The number of items to return. Optional. (format: int32)
+  --skip: int # The number of items to skip over before returning elements. Optional. (format: int32)
+  --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
+  --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
+  --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
+  --api-version: string # Client Api Version.
+]: nothing -> record<value: table<databaseName: string, computeAccountName: string, version: string>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/catalog/usql/databases" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the specified database from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}
+# operationId: Catalog_GetDatabase
+export def "catalog-usql-databases GetDatabase" [
+  databaseName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+]: nothing -> record<databaseName: string, computeAccountName: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the list of access control list (ACL) entries for the database from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/acl
+# operationId: Catalog_ListAclsByDatabase
+export def "catalog-usql-databases-acl ListAclsByDatabase" [
+  databaseName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # OData filter. Optional.
+  --top: int # The number of items to return. Optional. (format: int32)
+  --skip: int # The number of items to skip over before returning elements. Optional. (format: int32)
+  --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
+  --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
+  --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
+  --api-version: string # Client Api Version.
+]: nothing -> record<value: table<aceType: string, permission: string, principalId: string>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/acl" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the list of assemblies from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/assemblies
+# operationId: Catalog_ListAssemblies
+export def "catalog-usql-databases-assemblies ListAssemblies" [
+  databaseName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # OData filter. Optional.
+  --top: int # The number of items to return. Optional. (format: int32)
+  --skip: int # The number of items to skip over before returning elements. Optional. (format: int32)
+  --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
+  --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
+  --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
+  --api-version: string # Client Api Version.
+]: nothing -> record<value: table<assemblyClrName: string, clrName: string, databaseName: string, computeAccountName: string, version: string>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/assemblies" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the specified assembly from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/assemblies/{assemblyName}
+# operationId: Catalog_GetAssembly
+export def "catalog-usql-databases-assemblies GetAssembly" [
+  databaseName: string
+  assemblyName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+]: nothing -> record<assemblyName: string, clrName: string, databaseName: string, dependencies: table<entityId: record>, files: table<contentPath: string, originalPath: string, type: string>, isUserDefined: bool, isVisible: bool, computeAccountName: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/assemblies/($assemblyName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the list of credentials from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/credentials
+# operationId: Catalog_ListCredentials
+export def "catalog-usql-databases-credentials ListCredentials" [
+  databaseName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # OData filter. Optional.
+  --top: int # The number of items to return. Optional. (format: int32)
+  --skip: int # The number of items to skip over before returning elements. Optional. (format: int32)
+  --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
+  --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
+  --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
+  --api-version: string # Client Api Version.
+]: nothing -> record<value: table<credentialName: string, computeAccountName: string, version: string>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/credentials" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the specified credential from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/credentials/{credentialName}
+# operationId: Catalog_GetCredential
+export def "catalog-usql-databases-credentials GetCredential" [
+  databaseName: string
+  credentialName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+]: nothing -> record<credentialName: string, computeAccountName: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/credentials/($credentialName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Modifies the specified credential for use with external data sources in the specified database
+#
+# PATCH /catalog/usql/databases/{databaseName}/credentials/{credentialName}
+# operationId: Catalog_UpdateCredential
+export def "catalog-usql-databases-credentials UpdateCredential" [
+  databaseName: string
+  credentialName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+  --newPassword: string # the new password for the credential and user with access to the data source.
+  --password: string # the current password for the credential and user with access to the data source. This is required if the requester is not the account owner.
+  --uri: string # the URI identifier for the data source this credential can connect to in the format <hostname>:<port>
+  --userId: string # the object identifier for the user associated with this credential with access to the data source.
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/credentials/($credentialName)" $qp)
+  let body = {newPassword: $newPassword, password: $password, uri: $uri, userId: $userId} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Deletes the specified credential in the specified database
+#
+# POST /catalog/usql/databases/{databaseName}/credentials/{credentialName}
+# operationId: Catalog_DeleteCredential
+export def "catalog-usql-databases-credentials DeleteCredential" [
+  databaseName: string
+  credentialName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --cascade: oneof<nothing, bool> # Indicates if the delete should be a cascading delete (which deletes all resources dependent on the credential as well as the credential) or not. If false will fail if there are any resources relying on the credential. (default: false)
+  --api-version: string # Client Api Version.
+  --password: string # the current password for the credential and user with access to the data source. This is required if the requester is not the account owner.
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "cascade" $cascade "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/credentials/($credentialName)" $qp)
+  let body = {password: $password} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Creates the specified credential for use with external data sources in the specified database.
+#
+# PUT /catalog/usql/databases/{databaseName}/credentials/{credentialName}
+# operationId: Catalog_CreateCredential
+export def "catalog-usql-databases-credentials CreateCredential" [
+  databaseName: string
+  credentialName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+  password: string # the password for the credential and user with access to the data source.
+  uri: string # the URI identifier for the data source this credential can connect to in the format <hostname>:<port>
+  userId: string # the object identifier for the user associated with this credential with access to the data source.
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/credentials/($credentialName)" $qp)
+  let body = {password: $password, uri: $uri, userId: $userId} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieves the list of external data sources from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/externaldatasources
+# operationId: Catalog_ListExternalDataSources
+export def "catalog-usql-databases-externaldatasources ListExternalDataSources" [
+  databaseName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # OData filter. Optional.
+  --top: int # The number of items to return. Optional. (format: int32)
+  --skip: int # The number of items to skip over before returning elements. Optional. (format: int32)
+  --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
+  --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
+  --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
+  --api-version: string # Client Api Version.
+]: nothing -> record<value: table<databaseName: string, externalDataSourceName: string, provider: string, providerString: string, pushdownTypes: list, computeAccountName: string, version: string>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/externaldatasources" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the specified external data source from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/externaldatasources/{externalDataSourceName}
+# operationId: Catalog_GetExternalDataSource
+export def "catalog-usql-databases-externaldatasources GetExternalDataSource" [
+  databaseName: string
+  externalDataSourceName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+]: nothing -> record<databaseName: string, externalDataSourceName: string, provider: string, providerString: string, pushdownTypes: list<string>, computeAccountName: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/externaldatasources/($externalDataSourceName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the list of schemas from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/schemas
+# operationId: Catalog_ListSchemas
+export def "catalog-usql-databases-schemas ListSchemas" [
+  databaseName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # OData filter. Optional.
+  --top: int # The number of items to return. Optional. (format: int32)
+  --skip: int # The number of items to skip over before returning elements. Optional. (format: int32)
+  --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
+  --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
+  --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
+  --api-version: string # Client Api Version.
+]: nothing -> record<value: table<databaseName: string, schemaName: string, computeAccountName: string, version: string>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the specified schema from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}
+# operationId: Catalog_GetSchema
+export def "catalog-usql-databases-schemas GetSchema" [
+  databaseName: string
+  schemaName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+]: nothing -> record<databaseName: string, schemaName: string, computeAccountName: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the list of packages from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/packages
+# operationId: Catalog_ListPackages
+export def "catalog-usql-databases-schemas-packages ListPackages" [
+  databaseName: string
+  schemaName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # OData filter. Optional.
+  --top: int # The number of items to return. Optional. (format: int32)
+  --skip: int # The number of items to skip over before returning elements. Optional. (format: int32)
+  --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
+  --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
+  --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
+  --api-version: string # Client Api Version.
+]: nothing -> record<value: table<databaseName: string, definition: string, packageName: string, schemaName: string, computeAccountName: string, version: string>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/packages" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the specified package from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/packages/{packageName}
+# operationId: Catalog_GetPackage
+export def "catalog-usql-databases-schemas-packages GetPackage" [
+  databaseName: string
+  schemaName: string
+  packageName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+]: nothing -> record<databaseName: string, definition: string, packageName: string, schemaName: string, computeAccountName: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/packages/($packageName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the list of procedures from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/procedures
+# operationId: Catalog_ListProcedures
+export def "catalog-usql-databases-schemas-procedures ListProcedures" [
+  databaseName: string
+  schemaName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # OData filter. Optional.
+  --top: int # The number of items to return. Optional. (format: int32)
+  --skip: int # The number of items to skip over before returning elements. Optional. (format: int32)
+  --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
+  --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
+  --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
+  --api-version: string # Client Api Version.
+]: nothing -> record<value: table<databaseName: string, definition: string, procName: string, schemaName: string, computeAccountName: string, version: string>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/procedures" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the specified procedure from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/procedures/{procedureName}
+# operationId: Catalog_GetProcedure
+export def "catalog-usql-databases-schemas-procedures GetProcedure" [
+  databaseName: string
+  schemaName: string
+  procedureName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+]: nothing -> record<databaseName: string, definition: string, procName: string, schemaName: string, computeAccountName: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/procedures/($procedureName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the list of all table statistics within the specified schema from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/statistics
+# operationId: Catalog_ListTableStatisticsByDatabaseAndSchema
+export def "catalog-usql-databases-schemas-statistics ListTableStatisticsByDatabaseAndSchema" [
+  databaseName: string
+  schemaName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # OData filter. Optional.
+  --top: int # The number of items to return. Optional. (format: int32)
+  --skip: int # The number of items to skip over before returning elements. Optional. (format: int32)
+  --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
+  --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
+  --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
+  --api-version: string # Client Api Version.
+]: nothing -> record<value: table<colNames: list, createTime: string, databaseName: string, filterDefinition: string, hasFilter: bool, isAutoCreated: bool, isUserCreated: bool, schemaName: string, statDataPath: string, statisticsName: string, tableName: string, updateTime: string, userStatName: string, computeAccountName: string, version: string>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/statistics" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the list of tables from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables
+# operationId: Catalog_ListTables
+export def "catalog-usql-databases-schemas-tables ListTables" [
+  databaseName: string
+  schemaName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # OData filter. Optional.
+  --top: int # The number of items to return. Optional. (format: int32)
+  --skip: int # The number of items to skip over before returning elements. Optional. (format: int32)
+  --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
+  --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
+  --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
+  --basic: oneof<nothing, bool> # The basic switch indicates what level of information to return when listing tables. When basic is true, only database_name, schema_name, table_name and version are returned for each table, otherwise all table metadata is returned. By default, it is false. Optional. (default: false)
+  --api-version: string # Client Api Version.
+]: nothing -> record<value: table<columnList: list, databaseName: string, distributionInfo: record, externalTable: record, indexList: list, partitionKeyList: list, schemaName: string, tableName: string, computeAccountName: string, version: string>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "basic" $basic "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tables" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the specified table from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}
+# operationId: Catalog_GetTable
+export def "catalog-usql-databases-schemas-tables GetTable" [
+  databaseName: string
+  schemaName: string
+  tableName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+]: nothing -> record<columnList: table<name: string, type: string>, databaseName: string, distributionInfo: record<count: int, dynamicCount: int, keys: list<record>, type: int>, externalTable: record<dataSource: record<name: record, version: string>, tableName: string>, indexList: table<columns: list, distributionInfo: record, indexId: int, indexKeys: list, isColumnstore: bool, isUnique: bool, name: string, partitionFunction: string, partitionKeyList: list, streamNames: list>, partitionKeyList: list<string>, schemaName: string, tableName: string, computeAccountName: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tables/($tableName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the list of table partitions from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/partitions
+# operationId: Catalog_ListTablePartitions
+export def "catalog-usql-databases-schemas-tables-partitions ListTablePartitions" [
+  databaseName: string
+  schemaName: string
+  tableName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # OData filter. Optional.
+  --top: int # The number of items to return. Optional. (format: int32)
+  --skip: int # The number of items to skip over before returning elements. Optional. (format: int32)
+  --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
+  --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
+  --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
+  --api-version: string # Client Api Version.
+]: nothing -> record<value: table<createDate: string, databaseName: string, indexId: int, label: list, parentName: record, partitionName: string, schemaName: string, computeAccountName: string, version: string>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tables/($tableName)/partitions" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the specified table partition from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/partitions/{partitionName}
+# operationId: Catalog_GetTablePartition
+export def "catalog-usql-databases-schemas-tables-partitions GetTablePartition" [
+  databaseName: string
+  schemaName: string
+  tableName: string
+  partitionName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+]: nothing -> record<createDate: string, databaseName: string, indexId: int, label: list<string>, parentName: record<firstPart: string, secondPart: string, server: string, thirdPart: string>, partitionName: string, schemaName: string, computeAccountName: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tables/($tableName)/partitions/($partitionName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves a preview set of rows in given partition.
+#
+# GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/partitions/{partitionName}/previewrows
+# operationId: Catalog_PreviewTablePartition
+export def "catalog-usql-databases-schemas-tables-partitions-previewrows PreviewTablePartition" [
+  databaseName: string
+  schemaName: string
+  tableName: string
+  partitionName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --maxRows: int # The maximum number of preview rows to be retrieved.Rows returned may be less than or equal to this number depending on row sizes and number of rows in the partition. (format: int64)
+  --maxColumns: int # The maximum number of columns to be retrieved. (format: int64)
+  --api-version: string # Client Api Version.
+]: nothing -> record<rows: list<list<string>>, schema: table<name: string, type: string>, totalColumnCount: int, totalRowCount: int, truncated: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "maxRows" $maxRows "scalar") (serialize-qp "maxColumns" $maxColumns "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tables/($tableName)/partitions/($partitionName)/previewrows" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves a preview set of rows in given table.
+#
+# GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/previewrows
+# operationId: Catalog_PreviewTable
+export def "catalog-usql-databases-schemas-tables-previewrows PreviewTable" [
+  databaseName: string
+  schemaName: string
+  tableName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --maxRows: int # The maximum number of preview rows to be retrieved. Rows returned may be less than or equal to this number depending on row sizes and number of rows in the table. (format: int64)
+  --maxColumns: int # The maximum number of columns to be retrieved. (format: int64)
+  --api-version: string # Client Api Version.
+]: nothing -> record<rows: list<list<string>>, schema: table<name: string, type: string>, totalColumnCount: int, totalRowCount: int, truncated: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "maxRows" $maxRows "scalar") (serialize-qp "maxColumns" $maxColumns "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tables/($tableName)/previewrows" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the list of table statistics from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/statistics
+# operationId: Catalog_ListTableStatistics
+export def "catalog-usql-databases-schemas-tables-statistics ListTableStatistics" [
+  databaseName: string
+  schemaName: string
+  tableName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # OData filter. Optional.
+  --top: int # The number of items to return. Optional. (format: int32)
+  --skip: int # The number of items to skip over before returning elements. Optional. (format: int32)
+  --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
+  --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
+  --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
+  --api-version: string # Client Api Version.
+]: nothing -> record<value: table<colNames: list, createTime: string, databaseName: string, filterDefinition: string, hasFilter: bool, isAutoCreated: bool, isUserCreated: bool, schemaName: string, statDataPath: string, statisticsName: string, tableName: string, updateTime: string, userStatName: string, computeAccountName: string, version: string>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tables/($tableName)/statistics" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the specified table statistics from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/statistics/{statisticsName}
+# operationId: Catalog_GetTableStatistic
+export def "catalog-usql-databases-schemas-tables-statistics GetTableStatistic" [
+  databaseName: string
+  schemaName: string
+  tableName: string
+  statisticsName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+]: nothing -> record<colNames: list<string>, createTime: string, databaseName: string, filterDefinition: string, hasFilter: bool, isAutoCreated: bool, isUserCreated: bool, schemaName: string, statDataPath: string, statisticsName: string, tableName: string, updateTime: string, userStatName: string, computeAccountName: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tables/($tableName)/statistics/($statisticsName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the list of table fragments from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/tablefragments
+# operationId: Catalog_ListTableFragments
+export def "catalog-usql-databases-schemas-tables-tablefragments ListTableFragments" [
+  databaseName: string
+  schemaName: string
+  tableName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # OData filter. Optional.
+  --top: int # The number of items to return. Optional. (format: int32)
+  --skip: int # The number of items to skip over before returning elements. Optional. (format: int32)
+  --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
+  --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
+  --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
+  --api-version: string # Client Api Version.
+]: nothing -> record<value: table<createDate: string, fragmentId: string, indexId: int, parentId: string, rowCount: int, size: int, streamPath: string>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tables/($tableName)/tablefragments" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the list of table types from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tabletypes
+# operationId: Catalog_ListTableTypes
+export def "catalog-usql-databases-schemas-tabletypes ListTableTypes" [
+  databaseName: string
+  schemaName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # OData filter. Optional.
+  --top: int # The number of items to return. Optional. (format: int32)
+  --skip: int # The number of items to skip over before returning elements. Optional. (format: int32)
+  --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
+  --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
+  --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
+  --api-version: string # Client Api Version.
+]: nothing -> record<value: table<columns: list, cSharpName: string, databaseName: string, fullCSharpName: string, isAssemblyType: bool, isComplexType: bool, isNullable: bool, isTableType: bool, isUserDefined: bool, principalId: int, schemaId: int, schemaName: string, systemTypeId: int, typeFamily: string, typeName: string, userTypeId: int>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tabletypes" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the specified table type from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tabletypes/{tableTypeName}
+# operationId: Catalog_GetTableType
+export def "catalog-usql-databases-schemas-tabletypes GetTableType" [
+  databaseName: string
+  schemaName: string
+  tableTypeName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+]: nothing -> record<columns: table<name: string, type: string>, cSharpName: string, databaseName: string, fullCSharpName: string, isAssemblyType: bool, isComplexType: bool, isNullable: bool, isTableType: bool, isUserDefined: bool, principalId: int, schemaId: int, schemaName: string, systemTypeId: int, typeFamily: string, typeName: string, userTypeId: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tabletypes/($tableTypeName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the list of table valued functions from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tablevaluedfunctions
+# operationId: Catalog_ListTableValuedFunctions
+export def "catalog-usql-databases-schemas-tablevaluedfunctions ListTableValuedFunctions" [
+  databaseName: string
+  schemaName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # OData filter. Optional.
+  --top: int # The number of items to return. Optional. (format: int32)
+  --skip: int # The number of items to skip over before returning elements. Optional. (format: int32)
+  --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
+  --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
+  --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
+  --api-version: string # Client Api Version.
+]: nothing -> record<value: table<databaseName: string, definition: string, schemaName: string, tvfName: string, computeAccountName: string, version: string>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tablevaluedfunctions" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the specified table valued function from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tablevaluedfunctions/{tableValuedFunctionName}
+# operationId: Catalog_GetTableValuedFunction
+export def "catalog-usql-databases-schemas-tablevaluedfunctions GetTableValuedFunction" [
+  databaseName: string
+  schemaName: string
+  tableValuedFunctionName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+]: nothing -> record<databaseName: string, definition: string, schemaName: string, tvfName: string, computeAccountName: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tablevaluedfunctions/($tableValuedFunctionName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the list of types within the specified database and schema from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/types
+# operationId: Catalog_ListTypes
+export def "catalog-usql-databases-schemas-types ListTypes" [
+  databaseName: string
+  schemaName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # OData filter. Optional.
+  --top: int # The number of items to return. Optional. (format: int32)
+  --skip: int # The number of items to skip over before returning elements. Optional. (format: int32)
+  --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
+  --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
+  --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
+  --api-version: string # Client Api Version.
+]: nothing -> record<value: table<cSharpName: string, databaseName: string, fullCSharpName: string, isAssemblyType: bool, isComplexType: bool, isNullable: bool, isTableType: bool, isUserDefined: bool, principalId: int, schemaId: int, schemaName: string, systemTypeId: int, typeFamily: string, typeName: string, userTypeId: int, computeAccountName: string, version: string>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/types" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the list of views from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/views
+# operationId: Catalog_ListViews
+export def "catalog-usql-databases-schemas-views ListViews" [
+  databaseName: string
+  schemaName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # OData filter. Optional.
+  --top: int # The number of items to return. Optional. (format: int32)
+  --skip: int # The number of items to skip over before returning elements. Optional. (format: int32)
+  --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
+  --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
+  --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
+  --api-version: string # Client Api Version.
+]: nothing -> record<value: table<databaseName: string, definition: string, schemaName: string, viewName: string, computeAccountName: string, version: string>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/views" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the specified view from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/views/{viewName}
+# operationId: Catalog_GetView
+export def "catalog-usql-databases-schemas-views GetView" [
+  databaseName: string
+  schemaName: string
+  viewName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+]: nothing -> record<databaseName: string, definition: string, schemaName: string, viewName: string, computeAccountName: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/views/($viewName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Deletes all secrets in the specified database. This is deprecated and will be removed in the next release. In the future, please only drop individual credentials using DeleteCredential
+#
+# DELETE /catalog/usql/databases/{databaseName}/secrets
+# DEPRECATED
+# operationId: Catalog_DeleteAllSecrets
+@deprecated
+export def "catalog-usql-databases-secrets DeleteAllSecrets" [
+  databaseName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/secrets" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Deletes the specified secret in the specified database. This is deprecated and will be removed in the next release. Please use DeleteCredential instead.
+#
+# DELETE /catalog/usql/databases/{databaseName}/secrets/{secretName}
+# DEPRECATED
+# operationId: Catalog_DeleteSecret
+@deprecated
+export def "catalog-usql-databases-secrets DeleteSecret" [
+  databaseName: string
+  secretName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/secrets/($secretName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets the specified secret in the specified database. This is deprecated and will be removed in the next release. Please use GetCredential instead.
+#
+# GET /catalog/usql/databases/{databaseName}/secrets/{secretName}
+# DEPRECATED
+# operationId: Catalog_GetSecret
+@deprecated
+export def "catalog-usql-databases-secrets GetSecret" [
+  databaseName: string
+  secretName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+]: nothing -> record<creationTime: string, databaseName: string, password: string, secretName: string, uri: string, computeAccountName: string, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/secrets/($secretName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Modifies the specified secret for use with external data sources in the specified database. This is deprecated and will be removed in the next release. Please use UpdateCredential instead.
+#
+# PATCH /catalog/usql/databases/{databaseName}/secrets/{secretName}
+# DEPRECATED
+# operationId: Catalog_UpdateSecret
+@deprecated
+export def "catalog-usql-databases-secrets UpdateSecret" [
+  databaseName: string
+  secretName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+  password: string # the password for the secret to pass in
+  --uri: string # the URI identifier for the secret in the format <hostname>:<port>
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/secrets/($secretName)" $qp)
+  let body = {password: $password, uri: $uri} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Creates the specified secret for use with external data sources in the specified database. This is deprecated and will be removed in the next release. Please use CreateCredential instead.
+#
+# PUT /catalog/usql/databases/{databaseName}/secrets/{secretName}
+# DEPRECATED
+# operationId: Catalog_CreateSecret
+@deprecated
+export def "catalog-usql-databases-secrets CreateSecret" [
+  databaseName: string
+  secretName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client Api Version.
+  password: string # the password for the secret to pass in
+  --uri: string # the URI identifier for the secret in the format <hostname>:<port>
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/secrets/($secretName)" $qp)
+  let body = {password: $password, uri: $uri} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieves the list of all statistics in a database from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/statistics
+# operationId: Catalog_ListTableStatisticsByDatabase
+export def "catalog-usql-databases-statistics ListTableStatisticsByDatabase" [
+  databaseName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # OData filter. Optional.
+  --top: int # The number of items to return. Optional. (format: int32)
+  --skip: int # The number of items to skip over before returning elements. Optional. (format: int32)
+  --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
+  --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
+  --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
+  --api-version: string # Client Api Version.
+]: nothing -> record<value: table<colNames: list, createTime: string, databaseName: string, filterDefinition: string, hasFilter: bool, isAutoCreated: bool, isUserCreated: bool, schemaName: string, statDataPath: string, statisticsName: string, tableName: string, updateTime: string, userStatName: string, computeAccountName: string, version: string>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/statistics" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the list of all tables in a database from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/tables
+# operationId: Catalog_ListTablesByDatabase
+export def "catalog-usql-databases-tables ListTablesByDatabase" [
+  databaseName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # OData filter. Optional.
+  --top: int # The number of items to return. Optional. (format: int32)
+  --skip: int # The number of items to skip over before returning elements. Optional. (format: int32)
+  --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
+  --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
+  --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
+  --basic: oneof<nothing, bool> # The basic switch indicates what level of information to return when listing tables. When basic is true, only database_name, schema_name, table_name and version are returned for each table, otherwise all table metadata is returned. By default, it is false (default: false)
+  --api-version: string # Client Api Version.
+]: nothing -> record<value: table<columnList: list, databaseName: string, distributionInfo: record, externalTable: record, indexList: list, partitionKeyList: list, schemaName: string, tableName: string, computeAccountName: string, version: string>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "basic" $basic "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/tables" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the list of all table valued functions in a database from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/tablevaluedfunctions
+# operationId: Catalog_ListTableValuedFunctionsByDatabase
+export def "catalog-usql-databases-tablevaluedfunctions ListTableValuedFunctionsByDatabase" [
+  databaseName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # OData filter. Optional.
+  --top: int # The number of items to return. Optional. (format: int32)
+  --skip: int # The number of items to skip over before returning elements. Optional. (format: int32)
+  --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
+  --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
+  --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
+  --api-version: string # Client Api Version.
+]: nothing -> record<value: table<databaseName: string, definition: string, schemaName: string, tvfName: string, computeAccountName: string, version: string>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/tablevaluedfunctions" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves the list of all views in a database from the Data Lake Analytics catalog.
+#
+# GET /catalog/usql/databases/{databaseName}/views
+# operationId: Catalog_ListViewsByDatabase
+export def "catalog-usql-databases-views ListViewsByDatabase" [
+  databaseName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: string # OData filter. Optional.
+  --top: int # The number of items to return. Optional. (format: int32)
+  --skip: int # The number of items to skip over before returning elements. Optional. (format: int32)
+  --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
+  --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
+  --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
+  --api-version: string # Client Api Version.
+]: nothing -> record<value: table<databaseName: string, definition: string, schemaName: string, viewName: string, computeAccountName: string, version: string>, nextLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/views" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}

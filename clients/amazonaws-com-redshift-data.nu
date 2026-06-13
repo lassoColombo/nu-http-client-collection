@@ -1,0 +1,532 @@
+# Auto-generated client for Redshift Data API Service v2019-12-20
+# Source: https://api.apis.guru/v2/specs/amazonaws.com/redshift-data/2019-12-20/openapi.json
+# Auth: --token flag or $env.REDSHIFT_DATA_API_SERVICE_TOKEN
+
+const BASE_URL = "http://redshift-data.us-east-1.amazonaws.com"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o REDSHIFT_DATA_API_SERVICE_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["http://redshift-data.us-east-1.amazonaws.com" "http://redshift-data.us-east-2.amazonaws.com" "http://redshift-data.us-west-1.amazonaws.com" "http://redshift-data.us-west-2.amazonaws.com" "http://redshift-data.us-gov-west-1.amazonaws.com" "http://redshift-data.us-gov-east-1.amazonaws.com" "http://redshift-data.ca-central-1.amazonaws.com" "http://redshift-data.eu-north-1.amazonaws.com" "http://redshift-data.eu-west-1.amazonaws.com" "http://redshift-data.eu-west-2.amazonaws.com" "http://redshift-data.eu-west-3.amazonaws.com" "http://redshift-data.eu-central-1.amazonaws.com" "http://redshift-data.eu-south-1.amazonaws.com" "http://redshift-data.af-south-1.amazonaws.com" "http://redshift-data.ap-northeast-1.amazonaws.com" "http://redshift-data.ap-northeast-2.amazonaws.com" "http://redshift-data.ap-northeast-3.amazonaws.com" "http://redshift-data.ap-southeast-1.amazonaws.com" "http://redshift-data.ap-southeast-2.amazonaws.com" "http://redshift-data.ap-east-1.amazonaws.com" "http://redshift-data.ap-south-1.amazonaws.com" "http://redshift-data.sa-east-1.amazonaws.com" "http://redshift-data.me-south-1.amazonaws.com" "https://redshift-data.us-east-1.amazonaws.com" "https://redshift-data.us-east-2.amazonaws.com" "https://redshift-data.us-west-1.amazonaws.com" "https://redshift-data.us-west-2.amazonaws.com" "https://redshift-data.us-gov-west-1.amazonaws.com" "https://redshift-data.us-gov-east-1.amazonaws.com" "https://redshift-data.ca-central-1.amazonaws.com" "https://redshift-data.eu-north-1.amazonaws.com" "https://redshift-data.eu-west-1.amazonaws.com" "https://redshift-data.eu-west-2.amazonaws.com" "https://redshift-data.eu-west-3.amazonaws.com" "https://redshift-data.eu-central-1.amazonaws.com" "https://redshift-data.eu-south-1.amazonaws.com" "https://redshift-data.af-south-1.amazonaws.com" "https://redshift-data.ap-northeast-1.amazonaws.com" "https://redshift-data.ap-northeast-2.amazonaws.com" "https://redshift-data.ap-northeast-3.amazonaws.com" "https://redshift-data.ap-southeast-1.amazonaws.com" "https://redshift-data.ap-southeast-2.amazonaws.com" "https://redshift-data.ap-east-1.amazonaws.com" "https://redshift-data.ap-south-1.amazonaws.com" "https://redshift-data.sa-east-1.amazonaws.com" "https://redshift-data.me-south-1.amazonaws.com" "http://redshift-data.cn-north-1.amazonaws.com.cn" "http://redshift-data.cn-northwest-1.amazonaws.com.cn" "https://redshift-data.cn-north-1.amazonaws.com.cn" "https://redshift-data.cn-northwest-1.amazonaws.com.cn"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+# Completers for enum parameters
+def X-Amz-Target-completer [] { ["RedshiftData.BatchExecuteStatement"] }
+def X-Amz-Target-completer-1 [] { ["RedshiftData.CancelStatement"] }
+def X-Amz-Target-completer-2 [] { ["RedshiftData.DescribeStatement"] }
+def X-Amz-Target-completer-3 [] { ["RedshiftData.DescribeTable"] }
+def X-Amz-Target-completer-4 [] { ["RedshiftData.ExecuteStatement"] }
+def X-Amz-Target-completer-5 [] { ["RedshiftData.GetStatementResult"] }
+def X-Amz-Target-completer-6 [] { ["RedshiftData.ListDatabases"] }
+def X-Amz-Target-completer-7 [] { ["RedshiftData.ListSchemas"] }
+def X-Amz-Target-completer-8 [] { ["RedshiftData.ListStatements"] }
+def X-Amz-Target-completer-9 [] { ["RedshiftData.ListTables"] }
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-redshift-data-batch-execute-statement BatchExecuteStatement" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# <p>Runs one or more SQL statements, which can be data manipulation language (DML) or data definition language (DDL). Depending on the authorization method, use one of the following combinations of request parameters: </p> <ul> <li> <p>Secrets Manager - when connecting to a cluster, provide the <code>secret-arn</code> of a secret stored in Secrets Manager which has <code>username</code> and <code>password</code>. The specified secret contains credentials to connect to the <code>database</code> you specify. When you are connecting to a cluster, you also supply the database name, If you provide a cluster identifier (<code>dbClusterIdentifier</code>), it must match the cluster identifier stored in the secret. When you are connecting to a serverless workgroup, you also supply the database name.</p> </li> <li> <p>Temporary credentials - when connecting to your data warehouse, choose one of the following options:</p> <ul> <li> <p>When connecting to a serverless workgroup, specify the workgroup name and database name. The database user name is derived from the IAM identity. For example, <code>arn:iam::123456789012:user:foo</code> has the database user name <code>IAM:foo</code>. Also, permission to call the <code>redshift-serverless:GetCredentials</code> operation is required.</p> </li> <li> <p>When connecting to a cluster as an IAM identity, specify the cluster identifier and the database name. The database user name is derived from the IAM identity. For example, <code>arn:iam::123456789012:user:foo</code> has the database user name <code>IAM:foo</code>. Also, permission to call the <code>redshift:GetClusterCredentialsWithIAM</code> operation is required.</p> </li> <li> <p>When connecting to a cluster as a database user, specify the cluster identifier, the database name, and the database user name. Also, permission to call the <code>redshift:GetClusterCredentials</code> operation is required.</p> </li> </ul> </li> </ul> <p>For more information about the Amazon Redshift Data API and CLI usage examples, see <a href="https://docs.aws.amazon.com/redshift/latest/mgmt/data-api.html">Using the Amazon Redshift Data API</a> in the <i>Amazon Redshift Management Guide</i>. </p>
+#
+# POST /#X-Amz-Target=RedshiftData.BatchExecuteStatement
+# operationId: BatchExecuteStatement
+export def "x-amz-target-redshift-data-batch-execute-statement BatchExecuteStatement" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer
+  --ClientToken: any
+  --ClusterIdentifier: any
+  Database: any
+  --DbUser: any
+  --SecretArn: any
+  Sqls: any
+  --StatementName: any
+  --WithEvent: any
+  --WorkgroupName: any
+]: any -> record<ClusterIdentifier: record, CreatedAt: record, Database: record, DbUser: record, Id: record, SecretArn: record, WorkgroupName: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=RedshiftData.BatchExecuteStatement")
+  let body = {ClientToken: $ClientToken, ClusterIdentifier: $ClusterIdentifier, Database: $Database, DbUser: $DbUser, SecretArn: $SecretArn, Sqls: $Sqls, StatementName: $StatementName, WithEvent: $WithEvent, WorkgroupName: $WorkgroupName} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# <p>Cancels a running query. To be canceled, a query must be running. </p> <p>For more information about the Amazon Redshift Data API and CLI usage examples, see <a href="https://docs.aws.amazon.com/redshift/latest/mgmt/data-api.html">Using the Amazon Redshift Data API</a> in the <i>Amazon Redshift Management Guide</i>. </p>
+#
+# POST /#X-Amz-Target=RedshiftData.CancelStatement
+# operationId: CancelStatement
+export def "x-amz-target-redshift-data-cancel-statement CancelStatement" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-1
+  Id: any
+]: any -> record<Status: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=RedshiftData.CancelStatement")
+  let body = {Id: $Id} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# <p>Describes the details about a specific instance when a query was run by the Amazon Redshift Data API. The information includes when the query started, when it finished, the query status, the number of rows returned, and the SQL statement. </p> <p>For more information about the Amazon Redshift Data API and CLI usage examples, see <a href="https://docs.aws.amazon.com/redshift/latest/mgmt/data-api.html">Using the Amazon Redshift Data API</a> in the <i>Amazon Redshift Management Guide</i>. </p>
+#
+# POST /#X-Amz-Target=RedshiftData.DescribeStatement
+# operationId: DescribeStatement
+export def "x-amz-target-redshift-data-describe-statement DescribeStatement" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-2
+  Id: any
+]: any -> record<ClusterIdentifier: record, CreatedAt: record, Database: record, DbUser: record, Duration: record, Error: record, HasResultSet: record, Id: record, QueryParameters: record, QueryString: record, RedshiftPid: record, RedshiftQueryId: record, ResultRows: record, ResultSize: record, SecretArn: record, Status: record, SubStatements: record, UpdatedAt: record, WorkgroupName: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=RedshiftData.DescribeStatement")
+  let body = {Id: $Id} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# <p>Describes the detailed information about a table from metadata in the cluster. The information includes its columns. A token is returned to page through the column list. Depending on the authorization method, use one of the following combinations of request parameters: </p> <ul> <li> <p>Secrets Manager - when connecting to a cluster, provide the <code>secret-arn</code> of a secret stored in Secrets Manager which has <code>username</code> and <code>password</code>. The specified secret contains credentials to connect to the <code>database</code> you specify. When you are connecting to a cluster, you also supply the database name, If you provide a cluster identifier (<code>dbClusterIdentifier</code>), it must match the cluster identifier stored in the secret. When you are connecting to a serverless workgroup, you also supply the database name.</p> </li> <li> <p>Temporary credentials - when connecting to your data warehouse, choose one of the following options:</p> <ul> <li> <p>When connecting to a serverless workgroup, specify the workgroup name and database name. The database user name is derived from the IAM identity. For example, <code>arn:iam::123456789012:user:foo</code> has the database user name <code>IAM:foo</code>. Also, permission to call the <code>redshift-serverless:GetCredentials</code> operation is required.</p> </li> <li> <p>When connecting to a cluster as an IAM identity, specify the cluster identifier and the database name. The database user name is derived from the IAM identity. For example, <code>arn:iam::123456789012:user:foo</code> has the database user name <code>IAM:foo</code>. Also, permission to call the <code>redshift:GetClusterCredentialsWithIAM</code> operation is required.</p> </li> <li> <p>When connecting to a cluster as a database user, specify the cluster identifier, the database name, and the database user name. Also, permission to call the <code>redshift:GetClusterCredentials</code> operation is required.</p> </li> </ul> </li> </ul> <p>For more information about the Amazon Redshift Data API and CLI usage examples, see <a href="https://docs.aws.amazon.com/redshift/latest/mgmt/data-api.html">Using the Amazon Redshift Data API</a> in the <i>Amazon Redshift Management Guide</i>. </p>
+#
+# POST /#X-Amz-Target=RedshiftData.DescribeTable
+# operationId: DescribeTable
+export def "x-amz-target-redshift-data-describe-table DescribeTable" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --MaxResults: string # Pagination limit
+  --NextToken: string # Pagination token
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-3
+  --ClusterIdentifier: any
+  --ConnectedDatabase: any
+  Database: any
+  --DbUser: any
+  --MaxResults: any
+  --NextToken: any
+  --Schema: any
+  --SecretArn: any
+  --Table: any
+  --WorkgroupName: any
+]: any -> record<ColumnList: record, NextToken: record, TableName: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/#X-Amz-Target=RedshiftData.DescribeTable" $qp)
+  let body = {ClusterIdentifier: $ClusterIdentifier, ConnectedDatabase: $ConnectedDatabase, Database: $Database, DbUser: $DbUser, MaxResults: $MaxResults, NextToken: $NextToken, Schema: $Schema, SecretArn: $SecretArn, Table: $Table, WorkgroupName: $WorkgroupName} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# <p>Runs an SQL statement, which can be data manipulation language (DML) or data definition language (DDL). This statement must be a single SQL statement. Depending on the authorization method, use one of the following combinations of request parameters: </p> <ul> <li> <p>Secrets Manager - when connecting to a cluster, provide the <code>secret-arn</code> of a secret stored in Secrets Manager which has <code>username</code> and <code>password</code>. The specified secret contains credentials to connect to the <code>database</code> you specify. When you are connecting to a cluster, you also supply the database name, If you provide a cluster identifier (<code>dbClusterIdentifier</code>), it must match the cluster identifier stored in the secret. When you are connecting to a serverless workgroup, you also supply the database name.</p> </li> <li> <p>Temporary credentials - when connecting to your data warehouse, choose one of the following options:</p> <ul> <li> <p>When connecting to a serverless workgroup, specify the workgroup name and database name. The database user name is derived from the IAM identity. For example, <code>arn:iam::123456789012:user:foo</code> has the database user name <code>IAM:foo</code>. Also, permission to call the <code>redshift-serverless:GetCredentials</code> operation is required.</p> </li> <li> <p>When connecting to a cluster as an IAM identity, specify the cluster identifier and the database name. The database user name is derived from the IAM identity. For example, <code>arn:iam::123456789012:user:foo</code> has the database user name <code>IAM:foo</code>. Also, permission to call the <code>redshift:GetClusterCredentialsWithIAM</code> operation is required.</p> </li> <li> <p>When connecting to a cluster as a database user, specify the cluster identifier, the database name, and the database user name. Also, permission to call the <code>redshift:GetClusterCredentials</code> operation is required.</p> </li> </ul> </li> </ul> <p>For more information about the Amazon Redshift Data API and CLI usage examples, see <a href="https://docs.aws.amazon.com/redshift/latest/mgmt/data-api.html">Using the Amazon Redshift Data API</a> in the <i>Amazon Redshift Management Guide</i>. </p>
+#
+# POST /#X-Amz-Target=RedshiftData.ExecuteStatement
+# operationId: ExecuteStatement
+export def "x-amz-target-redshift-data-execute-statement ExecuteStatement" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-4
+  --ClientToken: any
+  --ClusterIdentifier: any
+  Database: any
+  --DbUser: any
+  --Parameters: any
+  --SecretArn: any
+  Sql: any
+  --StatementName: any
+  --WithEvent: any
+  --WorkgroupName: any
+]: any -> record<ClusterIdentifier: record, CreatedAt: record, Database: record, DbUser: record, Id: record, SecretArn: record, WorkgroupName: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=RedshiftData.ExecuteStatement")
+  let body = {ClientToken: $ClientToken, ClusterIdentifier: $ClusterIdentifier, Database: $Database, DbUser: $DbUser, Parameters: $Parameters, SecretArn: $SecretArn, Sql: $Sql, StatementName: $StatementName, WithEvent: $WithEvent, WorkgroupName: $WorkgroupName} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# <p>Fetches the temporarily cached result of an SQL statement. A token is returned to page through the statement results. </p> <p>For more information about the Amazon Redshift Data API and CLI usage examples, see <a href="https://docs.aws.amazon.com/redshift/latest/mgmt/data-api.html">Using the Amazon Redshift Data API</a> in the <i>Amazon Redshift Management Guide</i>. </p>
+#
+# POST /#X-Amz-Target=RedshiftData.GetStatementResult
+# operationId: GetStatementResult
+export def "x-amz-target-redshift-data-get-statement-result GetStatementResult" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --NextToken: string # Pagination token
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-5
+  Id: any
+  --NextToken: any
+]: any -> record<ColumnMetadata: record, NextToken: record, Records: record, TotalNumRows: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/#X-Amz-Target=RedshiftData.GetStatementResult" $qp)
+  let body = {Id: $Id, NextToken: $NextToken} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# <p>List the databases in a cluster. A token is returned to page through the database list. Depending on the authorization method, use one of the following combinations of request parameters: </p> <ul> <li> <p>Secrets Manager - when connecting to a cluster, provide the <code>secret-arn</code> of a secret stored in Secrets Manager which has <code>username</code> and <code>password</code>. The specified secret contains credentials to connect to the <code>database</code> you specify. When you are connecting to a cluster, you also supply the database name, If you provide a cluster identifier (<code>dbClusterIdentifier</code>), it must match the cluster identifier stored in the secret. When you are connecting to a serverless workgroup, you also supply the database name.</p> </li> <li> <p>Temporary credentials - when connecting to your data warehouse, choose one of the following options:</p> <ul> <li> <p>When connecting to a serverless workgroup, specify the workgroup name and database name. The database user name is derived from the IAM identity. For example, <code>arn:iam::123456789012:user:foo</code> has the database user name <code>IAM:foo</code>. Also, permission to call the <code>redshift-serverless:GetCredentials</code> operation is required.</p> </li> <li> <p>When connecting to a cluster as an IAM identity, specify the cluster identifier and the database name. The database user name is derived from the IAM identity. For example, <code>arn:iam::123456789012:user:foo</code> has the database user name <code>IAM:foo</code>. Also, permission to call the <code>redshift:GetClusterCredentialsWithIAM</code> operation is required.</p> </li> <li> <p>When connecting to a cluster as a database user, specify the cluster identifier, the database name, and the database user name. Also, permission to call the <code>redshift:GetClusterCredentials</code> operation is required.</p> </li> </ul> </li> </ul> <p>For more information about the Amazon Redshift Data API and CLI usage examples, see <a href="https://docs.aws.amazon.com/redshift/latest/mgmt/data-api.html">Using the Amazon Redshift Data API</a> in the <i>Amazon Redshift Management Guide</i>. </p>
+#
+# POST /#X-Amz-Target=RedshiftData.ListDatabases
+# operationId: ListDatabases
+export def "x-amz-target-redshift-data-list-databases ListDatabases" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --MaxResults: string # Pagination limit
+  --NextToken: string # Pagination token
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-6
+  --ClusterIdentifier: any
+  Database: any
+  --DbUser: any
+  --MaxResults: any
+  --NextToken: any
+  --SecretArn: any
+  --WorkgroupName: any
+]: any -> record<Databases: record, NextToken: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/#X-Amz-Target=RedshiftData.ListDatabases" $qp)
+  let body = {ClusterIdentifier: $ClusterIdentifier, Database: $Database, DbUser: $DbUser, MaxResults: $MaxResults, NextToken: $NextToken, SecretArn: $SecretArn, WorkgroupName: $WorkgroupName} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# <p>Lists the schemas in a database. A token is returned to page through the schema list. Depending on the authorization method, use one of the following combinations of request parameters: </p> <ul> <li> <p>Secrets Manager - when connecting to a cluster, provide the <code>secret-arn</code> of a secret stored in Secrets Manager which has <code>username</code> and <code>password</code>. The specified secret contains credentials to connect to the <code>database</code> you specify. When you are connecting to a cluster, you also supply the database name, If you provide a cluster identifier (<code>dbClusterIdentifier</code>), it must match the cluster identifier stored in the secret. When you are connecting to a serverless workgroup, you also supply the database name.</p> </li> <li> <p>Temporary credentials - when connecting to your data warehouse, choose one of the following options:</p> <ul> <li> <p>When connecting to a serverless workgroup, specify the workgroup name and database name. The database user name is derived from the IAM identity. For example, <code>arn:iam::123456789012:user:foo</code> has the database user name <code>IAM:foo</code>. Also, permission to call the <code>redshift-serverless:GetCredentials</code> operation is required.</p> </li> <li> <p>When connecting to a cluster as an IAM identity, specify the cluster identifier and the database name. The database user name is derived from the IAM identity. For example, <code>arn:iam::123456789012:user:foo</code> has the database user name <code>IAM:foo</code>. Also, permission to call the <code>redshift:GetClusterCredentialsWithIAM</code> operation is required.</p> </li> <li> <p>When connecting to a cluster as a database user, specify the cluster identifier, the database name, and the database user name. Also, permission to call the <code>redshift:GetClusterCredentials</code> operation is required.</p> </li> </ul> </li> </ul> <p>For more information about the Amazon Redshift Data API and CLI usage examples, see <a href="https://docs.aws.amazon.com/redshift/latest/mgmt/data-api.html">Using the Amazon Redshift Data API</a> in the <i>Amazon Redshift Management Guide</i>. </p>
+#
+# POST /#X-Amz-Target=RedshiftData.ListSchemas
+# operationId: ListSchemas
+export def "x-amz-target-redshift-data-list-schemas ListSchemas" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --MaxResults: string # Pagination limit
+  --NextToken: string # Pagination token
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-7
+  --ClusterIdentifier: any
+  --ConnectedDatabase: any
+  Database: any
+  --DbUser: any
+  --MaxResults: any
+  --NextToken: any
+  --SchemaPattern: any
+  --SecretArn: any
+  --WorkgroupName: any
+]: any -> record<NextToken: record, Schemas: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/#X-Amz-Target=RedshiftData.ListSchemas" $qp)
+  let body = {ClusterIdentifier: $ClusterIdentifier, ConnectedDatabase: $ConnectedDatabase, Database: $Database, DbUser: $DbUser, MaxResults: $MaxResults, NextToken: $NextToken, SchemaPattern: $SchemaPattern, SecretArn: $SecretArn, WorkgroupName: $WorkgroupName} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# <p>List of SQL statements. By default, only finished statements are shown. A token is returned to page through the statement list. </p> <p>For more information about the Amazon Redshift Data API and CLI usage examples, see <a href="https://docs.aws.amazon.com/redshift/latest/mgmt/data-api.html">Using the Amazon Redshift Data API</a> in the <i>Amazon Redshift Management Guide</i>. </p>
+#
+# POST /#X-Amz-Target=RedshiftData.ListStatements
+# operationId: ListStatements
+export def "x-amz-target-redshift-data-list-statements ListStatements" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --MaxResults: string # Pagination limit
+  --NextToken: string # Pagination token
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-8
+  --MaxResults: any
+  --NextToken: any
+  --RoleLevel: any
+  --StatementName: any
+  --Status: any
+]: any -> record<NextToken: record, Statements: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/#X-Amz-Target=RedshiftData.ListStatements" $qp)
+  let body = {MaxResults: $MaxResults, NextToken: $NextToken, RoleLevel: $RoleLevel, StatementName: $StatementName, Status: $Status} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# <p>List the tables in a database. If neither <code>SchemaPattern</code> nor <code>TablePattern</code> are specified, then all tables in the database are returned. A token is returned to page through the table list. Depending on the authorization method, use one of the following combinations of request parameters: </p> <ul> <li> <p>Secrets Manager - when connecting to a cluster, provide the <code>secret-arn</code> of a secret stored in Secrets Manager which has <code>username</code> and <code>password</code>. The specified secret contains credentials to connect to the <code>database</code> you specify. When you are connecting to a cluster, you also supply the database name, If you provide a cluster identifier (<code>dbClusterIdentifier</code>), it must match the cluster identifier stored in the secret. When you are connecting to a serverless workgroup, you also supply the database name.</p> </li> <li> <p>Temporary credentials - when connecting to your data warehouse, choose one of the following options:</p> <ul> <li> <p>When connecting to a serverless workgroup, specify the workgroup name and database name. The database user name is derived from the IAM identity. For example, <code>arn:iam::123456789012:user:foo</code> has the database user name <code>IAM:foo</code>. Also, permission to call the <code>redshift-serverless:GetCredentials</code> operation is required.</p> </li> <li> <p>When connecting to a cluster as an IAM identity, specify the cluster identifier and the database name. The database user name is derived from the IAM identity. For example, <code>arn:iam::123456789012:user:foo</code> has the database user name <code>IAM:foo</code>. Also, permission to call the <code>redshift:GetClusterCredentialsWithIAM</code> operation is required.</p> </li> <li> <p>When connecting to a cluster as a database user, specify the cluster identifier, the database name, and the database user name. Also, permission to call the <code>redshift:GetClusterCredentials</code> operation is required.</p> </li> </ul> </li> </ul> <p>For more information about the Amazon Redshift Data API and CLI usage examples, see <a href="https://docs.aws.amazon.com/redshift/latest/mgmt/data-api.html">Using the Amazon Redshift Data API</a> in the <i>Amazon Redshift Management Guide</i>. </p>
+#
+# POST /#X-Amz-Target=RedshiftData.ListTables
+# operationId: ListTables
+export def "x-amz-target-redshift-data-list-tables ListTables" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --MaxResults: string # Pagination limit
+  --NextToken: string # Pagination token
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-9
+  --ClusterIdentifier: any
+  --ConnectedDatabase: any
+  Database: any
+  --DbUser: any
+  --MaxResults: any
+  --NextToken: any
+  --SchemaPattern: any
+  --SecretArn: any
+  --TablePattern: any
+  --WorkgroupName: any
+]: any -> record<NextToken: record, Tables: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/#X-Amz-Target=RedshiftData.ListTables" $qp)
+  let body = {ClusterIdentifier: $ClusterIdentifier, ConnectedDatabase: $ConnectedDatabase, Database: $Database, DbUser: $DbUser, MaxResults: $MaxResults, NextToken: $NextToken, SchemaPattern: $SchemaPattern, SecretArn: $SecretArn, TablePattern: $TablePattern, WorkgroupName: $WorkgroupName} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}

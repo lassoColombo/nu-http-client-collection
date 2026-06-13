@@ -1,0 +1,174 @@
+# Auto-generated client for Amazon Personalize Runtime v2018-05-22
+# Source: https://api.apis.guru/v2/specs/amazonaws.com/personalize-runtime/2018-05-22/openapi.json
+# Auth: --token flag or $env.AMAZON_PERSONALIZE_RUNTIME_TOKEN
+
+const BASE_URL = "http://personalize-runtime.us-east-1.amazonaws.com"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AMAZON_PERSONALIZE_RUNTIME_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["http://personalize-runtime.us-east-1.amazonaws.com" "http://personalize-runtime.us-east-2.amazonaws.com" "http://personalize-runtime.us-west-1.amazonaws.com" "http://personalize-runtime.us-west-2.amazonaws.com" "http://personalize-runtime.us-gov-west-1.amazonaws.com" "http://personalize-runtime.us-gov-east-1.amazonaws.com" "http://personalize-runtime.ca-central-1.amazonaws.com" "http://personalize-runtime.eu-north-1.amazonaws.com" "http://personalize-runtime.eu-west-1.amazonaws.com" "http://personalize-runtime.eu-west-2.amazonaws.com" "http://personalize-runtime.eu-west-3.amazonaws.com" "http://personalize-runtime.eu-central-1.amazonaws.com" "http://personalize-runtime.eu-south-1.amazonaws.com" "http://personalize-runtime.af-south-1.amazonaws.com" "http://personalize-runtime.ap-northeast-1.amazonaws.com" "http://personalize-runtime.ap-northeast-2.amazonaws.com" "http://personalize-runtime.ap-northeast-3.amazonaws.com" "http://personalize-runtime.ap-southeast-1.amazonaws.com" "http://personalize-runtime.ap-southeast-2.amazonaws.com" "http://personalize-runtime.ap-east-1.amazonaws.com" "http://personalize-runtime.ap-south-1.amazonaws.com" "http://personalize-runtime.sa-east-1.amazonaws.com" "http://personalize-runtime.me-south-1.amazonaws.com" "https://personalize-runtime.us-east-1.amazonaws.com" "https://personalize-runtime.us-east-2.amazonaws.com" "https://personalize-runtime.us-west-1.amazonaws.com" "https://personalize-runtime.us-west-2.amazonaws.com" "https://personalize-runtime.us-gov-west-1.amazonaws.com" "https://personalize-runtime.us-gov-east-1.amazonaws.com" "https://personalize-runtime.ca-central-1.amazonaws.com" "https://personalize-runtime.eu-north-1.amazonaws.com" "https://personalize-runtime.eu-west-1.amazonaws.com" "https://personalize-runtime.eu-west-2.amazonaws.com" "https://personalize-runtime.eu-west-3.amazonaws.com" "https://personalize-runtime.eu-central-1.amazonaws.com" "https://personalize-runtime.eu-south-1.amazonaws.com" "https://personalize-runtime.af-south-1.amazonaws.com" "https://personalize-runtime.ap-northeast-1.amazonaws.com" "https://personalize-runtime.ap-northeast-2.amazonaws.com" "https://personalize-runtime.ap-northeast-3.amazonaws.com" "https://personalize-runtime.ap-southeast-1.amazonaws.com" "https://personalize-runtime.ap-southeast-2.amazonaws.com" "https://personalize-runtime.ap-east-1.amazonaws.com" "https://personalize-runtime.ap-south-1.amazonaws.com" "https://personalize-runtime.sa-east-1.amazonaws.com" "https://personalize-runtime.me-south-1.amazonaws.com" "http://personalize-runtime.cn-north-1.amazonaws.com.cn" "http://personalize-runtime.cn-northwest-1.amazonaws.com.cn" "https://personalize-runtime.cn-north-1.amazonaws.com.cn" "https://personalize-runtime.cn-northwest-1.amazonaws.com.cn"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "personalize-ranking GetPersonalizedRanking" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# <p>Re-ranks a list of recommended items for the given user. The first item in the list is deemed the most likely item to be of interest to the user.</p> <note> <p>The solution backing the campaign must have been created using a recipe of type PERSONALIZED_RANKING.</p> </note>
+#
+# POST /personalize-ranking
+# operationId: GetPersonalizedRanking
+export def "personalize-ranking GetPersonalizedRanking" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  campaignArn: string # The Amazon Resource Name (ARN) of the campaign to use for generating the personalized ranking.
+  inputList: list # A list of items (by <code>itemId</code>) to rank. If an item was not included in the training dataset, the item is appended to the end of the reranked list. The maximum is 500.
+  userId: string # The user for which you want the campaign to provide a personalized ranking.
+  --context: record # The contextual metadata to use when getting recommendations. Contextual metadata includes any interaction information that might be relevant when getting a user's recommendations, such as the user's current location or device type.
+  --filterArn: string # The Amazon Resource Name (ARN) of a filter you created to include items or exclude items from recommendations for a given user. For more information, see <a href="https://docs.aws.amazon.com/personalize/latest/dg/filter.html">Filtering Recommendations</a>.
+  --filterValues: record # <p>The values to use when filtering recommendations. For each placeholder parameter in your filter expression, provide the parameter name (in matching case) as a key and the filter value(s) as the corresponding value. Separate multiple values for one parameter with a comma. </p> <p>For filter expressions that use an <code>INCLUDE</code> element to include items, you must provide values for all parameters that are defined in the expression. For filters with expressions that use an <code>EXCLUDE</code> element to exclude items, you can omit the <code>filter-values</code>.In this case, Amazon Personalize doesn't use that portion of the expression to filter recommendations.</p> <p>For more information, see <a href="https://docs.aws.amazon.com/personalize/latest/dg/filter.html">Filtering Recommendations</a>.</p>
+]: any -> record<personalizedRanking: record, recommendationId: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/personalize-ranking")
+  let body = {campaignArn: $campaignArn, inputList: $inputList, userId: $userId, context: $context, filterArn: $filterArn, filterValues: $filterValues} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# <p>Returns a list of recommended items. For campaigns, the campaign's Amazon Resource Name (ARN) is required and the required user and item input depends on the recipe type used to create the solution backing the campaign as follows:</p> <ul> <li> <p>USER_PERSONALIZATION - <code>userId</code> required, <code>itemId</code> not used</p> </li> <li> <p>RELATED_ITEMS - <code>itemId</code> required, <code>userId</code> not used</p> </li> </ul> <note> <p>Campaigns that are backed by a solution created using a recipe of type PERSONALIZED_RANKING use the API.</p> </note> <p> For recommenders, the recommender's ARN is required and the required item and user input depends on the use case (domain-based recipe) backing the recommender. For information on use case requirements see <a href="https://docs.aws.amazon.com/personalize/latest/dg/domain-use-cases.html">Choosing recommender use cases</a>. </p>
+#
+# POST /recommendations
+# operationId: GetRecommendations
+# --promotions item shape: {name?: any, percentPromotedItems?: any, filterArn?: any, filterValues?: any}
+export def "recommendations GetRecommendations" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --campaignArn: string # The Amazon Resource Name (ARN) of the campaign to use for getting recommendations.
+  --itemId: string # <p>The item ID to provide recommendations for.</p> <p>Required for <code>RELATED_ITEMS</code> recipe type.</p>
+  --userId: string # <p>The user ID to provide recommendations for.</p> <p>Required for <code>USER_PERSONALIZATION</code> recipe type.</p>
+  --numResults: int # The number of results to return. The default is 25. The maximum is 500.
+  --context: record # The contextual metadata to use when getting recommendations. Contextual metadata includes any interaction information that might be relevant when getting a user's recommendations, such as the user's current location or device type.
+  --filterArn: string # <p>The ARN of the filter to apply to the returned recommendations. For more information, see <a href="https://docs.aws.amazon.com/personalize/latest/dg/filter.html">Filtering Recommendations</a>.</p> <p>When using this parameter, be sure the filter resource is <code>ACTIVE</code>.</p>
+  --filterValues: record # <p>The values to use when filtering recommendations. For each placeholder parameter in your filter expression, provide the parameter name (in matching case) as a key and the filter value(s) as the corresponding value. Separate multiple values for one parameter with a comma. </p> <p>For filter expressions that use an <code>INCLUDE</code> element to include items, you must provide values for all parameters that are defined in the expression. For filters with expressions that use an <code>EXCLUDE</code> element to exclude items, you can omit the <code>filter-values</code>.In this case, Amazon Personalize doesn't use that portion of the expression to filter recommendations.</p> <p>For more information, see <a href="https://docs.aws.amazon.com/personalize/latest/dg/filter.html">Filtering recommendations and user segments</a>.</p>
+  --recommenderArn: string # The Amazon Resource Name (ARN) of the recommender to use to get recommendations. Provide a recommender ARN if you created a Domain dataset group with a recommender for a domain use case.
+  --promotions: list # The promotions to apply to the recommendation request. A promotion defines additional business rules that apply to a configurable subset of recommended items. — item shape: {name?: any, percentPromotedItems?: any, filterArn?: any, filterValues?: any}
+]: any -> record<itemList: record, recommendationId: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/recommendations")
+  let body = {campaignArn: $campaignArn, itemId: $itemId, userId: $userId, numResults: $numResults, context: $context, filterArn: $filterArn, filterValues: $filterValues, recommenderArn: $recommenderArn, promotions: $promotions} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}

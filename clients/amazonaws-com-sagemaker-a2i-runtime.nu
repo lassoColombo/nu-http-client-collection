@@ -1,0 +1,269 @@
+# Auto-generated client for Amazon Augmented AI Runtime v2019-11-07
+# Source: https://api.apis.guru/v2/specs/amazonaws.com/sagemaker-a2i-runtime/2019-11-07/openapi.json
+# Auth: --token flag or $env.AMAZON_AUGMENTED_AI_RUNTIME_TOKEN
+
+const BASE_URL = "http://a2i-runtime.sagemaker.us-east-1.amazonaws.com"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AMAZON_AUGMENTED_AI_RUNTIME_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["http://a2i-runtime.sagemaker.us-east-1.amazonaws.com" "http://a2i-runtime.sagemaker.us-east-2.amazonaws.com" "http://a2i-runtime.sagemaker.us-west-1.amazonaws.com" "http://a2i-runtime.sagemaker.us-west-2.amazonaws.com" "http://a2i-runtime.sagemaker.us-gov-west-1.amazonaws.com" "http://a2i-runtime.sagemaker.us-gov-east-1.amazonaws.com" "http://a2i-runtime.sagemaker.ca-central-1.amazonaws.com" "http://a2i-runtime.sagemaker.eu-north-1.amazonaws.com" "http://a2i-runtime.sagemaker.eu-west-1.amazonaws.com" "http://a2i-runtime.sagemaker.eu-west-2.amazonaws.com" "http://a2i-runtime.sagemaker.eu-west-3.amazonaws.com" "http://a2i-runtime.sagemaker.eu-central-1.amazonaws.com" "http://a2i-runtime.sagemaker.eu-south-1.amazonaws.com" "http://a2i-runtime.sagemaker.af-south-1.amazonaws.com" "http://a2i-runtime.sagemaker.ap-northeast-1.amazonaws.com" "http://a2i-runtime.sagemaker.ap-northeast-2.amazonaws.com" "http://a2i-runtime.sagemaker.ap-northeast-3.amazonaws.com" "http://a2i-runtime.sagemaker.ap-southeast-1.amazonaws.com" "http://a2i-runtime.sagemaker.ap-southeast-2.amazonaws.com" "http://a2i-runtime.sagemaker.ap-east-1.amazonaws.com" "http://a2i-runtime.sagemaker.ap-south-1.amazonaws.com" "http://a2i-runtime.sagemaker.sa-east-1.amazonaws.com" "http://a2i-runtime.sagemaker.me-south-1.amazonaws.com" "https://a2i-runtime.sagemaker.us-east-1.amazonaws.com" "https://a2i-runtime.sagemaker.us-east-2.amazonaws.com" "https://a2i-runtime.sagemaker.us-west-1.amazonaws.com" "https://a2i-runtime.sagemaker.us-west-2.amazonaws.com" "https://a2i-runtime.sagemaker.us-gov-west-1.amazonaws.com" "https://a2i-runtime.sagemaker.us-gov-east-1.amazonaws.com" "https://a2i-runtime.sagemaker.ca-central-1.amazonaws.com" "https://a2i-runtime.sagemaker.eu-north-1.amazonaws.com" "https://a2i-runtime.sagemaker.eu-west-1.amazonaws.com" "https://a2i-runtime.sagemaker.eu-west-2.amazonaws.com" "https://a2i-runtime.sagemaker.eu-west-3.amazonaws.com" "https://a2i-runtime.sagemaker.eu-central-1.amazonaws.com" "https://a2i-runtime.sagemaker.eu-south-1.amazonaws.com" "https://a2i-runtime.sagemaker.af-south-1.amazonaws.com" "https://a2i-runtime.sagemaker.ap-northeast-1.amazonaws.com" "https://a2i-runtime.sagemaker.ap-northeast-2.amazonaws.com" "https://a2i-runtime.sagemaker.ap-northeast-3.amazonaws.com" "https://a2i-runtime.sagemaker.ap-southeast-1.amazonaws.com" "https://a2i-runtime.sagemaker.ap-southeast-2.amazonaws.com" "https://a2i-runtime.sagemaker.ap-east-1.amazonaws.com" "https://a2i-runtime.sagemaker.ap-south-1.amazonaws.com" "https://a2i-runtime.sagemaker.sa-east-1.amazonaws.com" "https://a2i-runtime.sagemaker.me-south-1.amazonaws.com" "http://a2i-runtime.sagemaker.cn-north-1.amazonaws.com.cn" "http://a2i-runtime.sagemaker.cn-northwest-1.amazonaws.com.cn" "https://a2i-runtime.sagemaker.cn-north-1.amazonaws.com.cn" "https://a2i-runtime.sagemaker.cn-northwest-1.amazonaws.com.cn"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+# Completers for enum parameters
+def SortOrder-completer [] { ["Ascending" "Descending"] }
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "human-loops DeleteHumanLoop" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# <p>Deletes the specified human loop for a flow definition.</p> <p>If the human loop was deleted, this operation will return a <code>ResourceNotFoundException</code>. </p>
+#
+# DELETE /human-loops/{HumanLoopName}
+# operationId: DeleteHumanLoop
+export def "human-loops DeleteHumanLoop" [
+  HumanLoopName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+]: nothing -> record {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/human-loops/($HumanLoopName)")
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns information about the specified human loop. If the human loop was deleted, this operation will return a <code>ResourceNotFoundException</code> error. 
+#
+# GET /human-loops/{HumanLoopName}
+# operationId: DescribeHumanLoop
+export def "human-loops DescribeHumanLoop" [
+  HumanLoopName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+]: nothing -> record<CreationTime: record, FailureReason: record, FailureCode: record, HumanLoopStatus: record, HumanLoopName: record, HumanLoopArn: record, FlowDefinitionArn: record, HumanLoopOutput: record<OutputS3Uri: record>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/human-loops/($HumanLoopName)")
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns information about human loops, given the specified parameters. If a human loop was deleted, it will not be included.
+#
+# GET /human-loops#FlowDefinitionArn
+# operationId: ListHumanLoops
+export def "human-loops-flow-definition-arn ListHumanLoops" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --CreationTimeAfter: string # (Optional) The timestamp of the date when you want the human loops to begin in ISO 8601 format. For example, <code>2020-02-24</code>. (format: date-time)
+  --CreationTimeBefore: string # (Optional) The timestamp of the date before which you want the human loops to begin in ISO 8601 format. For example, <code>2020-02-24</code>. (format: date-time)
+  --FlowDefinitionArn: string # The Amazon Resource Name (ARN) of a flow definition.
+  --SortOrder: string@SortOrder-completer # Optional. The order for displaying results. Valid values: <code>Ascending</code> and <code>Descending</code>.
+  --NextToken: string # A token to display the next page of results.
+  --MaxResults: int # The total number of items to return. If the total number of available items is more than the value specified in <code>MaxResults</code>, then a <code>NextToken</code> is returned in the output. You can use this token to display the next page of results. 
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+]: nothing -> record<HumanLoopSummaries: record, NextToken: record> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "CreationTimeAfter" $CreationTimeAfter "scalar") (serialize-qp "CreationTimeBefore" $CreationTimeBefore "scalar") (serialize-qp "FlowDefinitionArn" $FlowDefinitionArn "scalar") (serialize-qp "SortOrder" $SortOrder "scalar") (serialize-qp "NextToken" $NextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/human-loops#FlowDefinitionArn" $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Starts a human loop, provided that at least one activation condition is met.
+#
+# POST /human-loops
+# operationId: StartHumanLoop
+# --HumanLoopInput shape: {InputContent?: any}
+# --DataAttributes shape: {ContentClassifiers?: any}
+export def "human-loops StartHumanLoop" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  HumanLoopName: string # The name of the human loop.
+  FlowDefinitionArn: string # The Amazon Resource Name (ARN) of the flow definition associated with this human loop.
+  HumanLoopInput: record # An object containing the human loop input in JSON format. — shape: {InputContent?: any}
+  --DataAttributes: record # Attributes of the data specified by the customer. Use these to describe the data to be labeled. — shape: {ContentClassifiers?: any}
+]: any -> record<HumanLoopArn: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/human-loops")
+  let body = {HumanLoopName: $HumanLoopName, FlowDefinitionArn: $FlowDefinitionArn, HumanLoopInput: $HumanLoopInput, DataAttributes: $DataAttributes} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Stops the specified human loop.
+#
+# POST /human-loops/stop
+# operationId: StopHumanLoop
+export def "human-loops-stop StopHumanLoop" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  HumanLoopName: string # The name of the human loop that you want to stop.
+]: any -> record {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/human-loops/stop")
+  let body = {HumanLoopName: $HumanLoopName} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}

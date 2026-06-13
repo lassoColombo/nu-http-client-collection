@@ -1,0 +1,390 @@
+# Auto-generated client for SqlManagementClient v2017-10-01-preview
+# Source: https://api.apis.guru/v2/specs/azure.com/sql-databases/2017-10-01-preview/swagger.json
+# Auth: --token flag or $env.SQLMANAGEMENTCLIENT_TOKEN
+
+const BASE_URL = "https://management.azure.com"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o SQLMANAGEMENTCLIENT_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["https://management.azure.com"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-databases ListByServer" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Gets a list of databases.
+#
+# GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases
+# operationId: Databases_ListByServer
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases ListByServer" [
+  resourceGroupName: string
+  serverName: string
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # The API version to use for the request.
+]: nothing -> record<nextLink: string, value: table<kind: string, managedBy: string, properties: record, sku: record>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Deletes the database.
+#
+# DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}
+# operationId: Databases_Delete
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases Delete" [
+  resourceGroupName: string
+  serverName: string
+  databaseName: string
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # The API version to use for the request.
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets a database.
+#
+# GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}
+# operationId: Databases_Get
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases Get" [
+  resourceGroupName: string
+  serverName: string
+  databaseName: string
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # The API version to use for the request.
+]: nothing -> record<kind: string, managedBy: string, properties: record<autoPauseDelay: int, catalogCollation: string, collation: string, createMode: string, creationDate: string, currentServiceObjectiveName: string, currentSku: record<capacity: int, family: string, name: string, size: string, tier: string>, databaseId: string, defaultSecondaryLocation: string, earliestRestoreDate: string, elasticPoolId: string, failoverGroupId: string, licenseType: string, longTermRetentionBackupResourceId: string, maxLogSizeBytes: int, maxSizeBytes: int, minCapacity: float, pausedDate: string, readReplicaCount: int, readScale: string, recoverableDatabaseId: string, recoveryServicesRecoveryPointId: string, requestedServiceObjectiveName: string, restorableDroppedDatabaseId: string, restorePointInTime: string, resumedDate: string, sampleName: string, sourceDatabaseDeletionDate: string, sourceDatabaseId: string, status: string, zoneRedundant: bool>, sku: record<capacity: int, family: string, name: string, size: string, tier: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates an existing database.
+#
+# PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}
+# operationId: Databases_Update
+# --properties shape: {autoPauseDelay?: int, catalogCollation?: "DATABASE_DEFAULT"|"SQL_Latin1_General_CP1_CI_AS", collation?: string, createMode?: "Default"|"Copy"|"Secondary"|"PointInTimeRestore"|"Restore"|"Recovery"|"RestoreExternalBackup"|"RestoreExternalBackupSecondary"|"RestoreLongTermRetentionBackup"|"OnlineSecondary", currentSku?: record, elasticPoolId?: string, licenseType?: "LicenseIncluded"|"BasePrice", longTermRetentionBackupResourceId?: string, maxSizeBytes?: int, minCapacity?: float, readReplicaCount?: int, readScale?: "Enabled"|"Disabled", recoverableDatabaseId?: string, recoveryServicesRecoveryPointId?: string, restorableDroppedDatabaseId?: string, restorePointInTime?: string, sampleName?: "AdventureWorksLT"|"WideWorldImportersStd"|"WideWorldImportersFull", sourceDatabaseDeletionDate?: string, sourceDatabaseId?: string, zoneRedundant?: bool}
+# --sku shape: {capacity?: int, family?: string, name: string, size?: string, tier?: string}
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases Update" [
+  resourceGroupName: string
+  serverName: string
+  databaseName: string
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # The API version to use for the request.
+  --properties: record # The database's properties. — shape: {autoPauseDelay?: int, catalogCollation?: "DATABASE_DEFAULT"|"SQL_Latin1_General_CP1_CI_AS", collation?: string, createMode?: "Default"|"Copy"|"Secondary"|"PointInTimeRestore"|"Restore"|"Recovery"|"RestoreExternalBackup"|"RestoreExternalBackupSecondary"|"RestoreLongTermRetentionBackup"|"OnlineSecondary", currentSku?: record, elasticPoolId?: string, licenseType?: "LicenseIncluded"|"BasePrice", longTermRetentionBackupResourceId?: string, maxSizeBytes?: int, minCapacity?: float, readReplicaCount?: int, readScale?: "Enabled"|"Disabled", recoverableDatabaseId?: string, recoveryServicesRecoveryPointId?: string, restorableDroppedDatabaseId?: string, restorePointInTime?: string, sampleName?: "AdventureWorksLT"|"WideWorldImportersStd"|"WideWorldImportersFull", sourceDatabaseDeletionDate?: string, sourceDatabaseId?: string, zoneRedundant?: bool}
+  --sku: record # An ARM Resource SKU. — shape: {capacity?: int, family?: string, name: string, size?: string, tier?: string}
+  --tags: record # Resource tags.
+]: any -> record<kind: string, managedBy: string, properties: record<autoPauseDelay: int, catalogCollation: string, collation: string, createMode: string, creationDate: string, currentServiceObjectiveName: string, currentSku: record<capacity: int, family: string, name: string, size: string, tier: string>, databaseId: string, defaultSecondaryLocation: string, earliestRestoreDate: string, elasticPoolId: string, failoverGroupId: string, licenseType: string, longTermRetentionBackupResourceId: string, maxLogSizeBytes: int, maxSizeBytes: int, minCapacity: float, pausedDate: string, readReplicaCount: int, readScale: string, recoverableDatabaseId: string, recoveryServicesRecoveryPointId: string, requestedServiceObjectiveName: string, restorableDroppedDatabaseId: string, restorePointInTime: string, resumedDate: string, sampleName: string, sourceDatabaseDeletionDate: string, sourceDatabaseId: string, status: string, zoneRedundant: bool>, sku: record<capacity: int, family: string, name: string, size: string, tier: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)" $qp)
+  let body = {properties: $properties, sku: $sku, tags: $tags} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Creates a new database or updates an existing database.
+#
+# PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}
+# operationId: Databases_CreateOrUpdate
+# --properties shape: {autoPauseDelay?: int, catalogCollation?: "DATABASE_DEFAULT"|"SQL_Latin1_General_CP1_CI_AS", collation?: string, createMode?: "Default"|"Copy"|"Secondary"|"PointInTimeRestore"|"Restore"|"Recovery"|"RestoreExternalBackup"|"RestoreExternalBackupSecondary"|"RestoreLongTermRetentionBackup"|"OnlineSecondary", currentSku?: record, elasticPoolId?: string, licenseType?: "LicenseIncluded"|"BasePrice", longTermRetentionBackupResourceId?: string, maxSizeBytes?: int, minCapacity?: float, readReplicaCount?: int, readScale?: "Enabled"|"Disabled", recoverableDatabaseId?: string, recoveryServicesRecoveryPointId?: string, restorableDroppedDatabaseId?: string, restorePointInTime?: string, sampleName?: "AdventureWorksLT"|"WideWorldImportersStd"|"WideWorldImportersFull", sourceDatabaseDeletionDate?: string, sourceDatabaseId?: string, zoneRedundant?: bool}
+# --sku shape: {capacity?: int, family?: string, name: string, size?: string, tier?: string}
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases CreateOrUpdate" [
+  resourceGroupName: string
+  serverName: string
+  databaseName: string
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # The API version to use for the request.
+  --properties: record # The database's properties. — shape: {autoPauseDelay?: int, catalogCollation?: "DATABASE_DEFAULT"|"SQL_Latin1_General_CP1_CI_AS", collation?: string, createMode?: "Default"|"Copy"|"Secondary"|"PointInTimeRestore"|"Restore"|"Recovery"|"RestoreExternalBackup"|"RestoreExternalBackupSecondary"|"RestoreLongTermRetentionBackup"|"OnlineSecondary", currentSku?: record, elasticPoolId?: string, licenseType?: "LicenseIncluded"|"BasePrice", longTermRetentionBackupResourceId?: string, maxSizeBytes?: int, minCapacity?: float, readReplicaCount?: int, readScale?: "Enabled"|"Disabled", recoverableDatabaseId?: string, recoveryServicesRecoveryPointId?: string, restorableDroppedDatabaseId?: string, restorePointInTime?: string, sampleName?: "AdventureWorksLT"|"WideWorldImportersStd"|"WideWorldImportersFull", sourceDatabaseDeletionDate?: string, sourceDatabaseId?: string, zoneRedundant?: bool}
+  --sku: record # An ARM Resource SKU. — shape: {capacity?: int, family?: string, name: string, size?: string, tier?: string}
+  location: string # Resource location.
+  --tags: record # Resource tags.
+]: any -> record<kind: string, managedBy: string, properties: record<autoPauseDelay: int, catalogCollation: string, collation: string, createMode: string, creationDate: string, currentServiceObjectiveName: string, currentSku: record<capacity: int, family: string, name: string, size: string, tier: string>, databaseId: string, defaultSecondaryLocation: string, earliestRestoreDate: string, elasticPoolId: string, failoverGroupId: string, licenseType: string, longTermRetentionBackupResourceId: string, maxLogSizeBytes: int, maxSizeBytes: int, minCapacity: float, pausedDate: string, readReplicaCount: int, readScale: string, recoverableDatabaseId: string, recoveryServicesRecoveryPointId: string, requestedServiceObjectiveName: string, restorableDroppedDatabaseId: string, restorePointInTime: string, resumedDate: string, sampleName: string, sourceDatabaseDeletionDate: string, sourceDatabaseId: string, status: string, zoneRedundant: bool>, sku: record<capacity: int, family: string, name: string, size: string, tier: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)" $qp)
+  let body = {properties: $properties, sku: $sku, location: $location, tags: $tags} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Renames a database.
+#
+# POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/move
+# operationId: Databases_Rename
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-move Rename" [
+  resourceGroupName: string
+  serverName: string
+  databaseName: string
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # The API version to use for the request.
+  id: string # The target ID for the resource
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)/move" $qp)
+  let body = {id: $id} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Pauses a database.
+#
+# POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/pause
+# operationId: Databases_Pause
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-pause Pause" [
+  resourceGroupName: string
+  serverName: string
+  databaseName: string
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # The API version to use for the request.
+]: nothing -> record<kind: string, managedBy: string, properties: record<autoPauseDelay: int, catalogCollation: string, collation: string, createMode: string, creationDate: string, currentServiceObjectiveName: string, currentSku: record<capacity: int, family: string, name: string, size: string, tier: string>, databaseId: string, defaultSecondaryLocation: string, earliestRestoreDate: string, elasticPoolId: string, failoverGroupId: string, licenseType: string, longTermRetentionBackupResourceId: string, maxLogSizeBytes: int, maxSizeBytes: int, minCapacity: float, pausedDate: string, readReplicaCount: int, readScale: string, recoverableDatabaseId: string, recoveryServicesRecoveryPointId: string, requestedServiceObjectiveName: string, restorableDroppedDatabaseId: string, restorePointInTime: string, resumedDate: string, sampleName: string, sourceDatabaseDeletionDate: string, sourceDatabaseId: string, status: string, zoneRedundant: bool>, sku: record<capacity: int, family: string, name: string, size: string, tier: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)/pause" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Resumes a database.
+#
+# POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/resume
+# operationId: Databases_Resume
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-resume Resume" [
+  resourceGroupName: string
+  serverName: string
+  databaseName: string
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # The API version to use for the request.
+]: nothing -> record<kind: string, managedBy: string, properties: record<autoPauseDelay: int, catalogCollation: string, collation: string, createMode: string, creationDate: string, currentServiceObjectiveName: string, currentSku: record<capacity: int, family: string, name: string, size: string, tier: string>, databaseId: string, defaultSecondaryLocation: string, earliestRestoreDate: string, elasticPoolId: string, failoverGroupId: string, licenseType: string, longTermRetentionBackupResourceId: string, maxLogSizeBytes: int, maxSizeBytes: int, minCapacity: float, pausedDate: string, readReplicaCount: int, readScale: string, recoverableDatabaseId: string, recoveryServicesRecoveryPointId: string, requestedServiceObjectiveName: string, restorableDroppedDatabaseId: string, restorePointInTime: string, resumedDate: string, sampleName: string, sourceDatabaseDeletionDate: string, sourceDatabaseId: string, status: string, zoneRedundant: bool>, sku: record<capacity: int, family: string, name: string, size: string, tier: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)/resume" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Upgrades a data warehouse.
+#
+# POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/upgradeDataWarehouse
+# operationId: Databases_UpgradeDataWarehouse
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-upgrade-data-warehouse UpgradeDataWarehouse" [
+  resourceGroupName: string
+  serverName: string
+  databaseName: string
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # The API version to use for the request.
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)/upgradeDataWarehouse" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets a list of databases in an elastic pool.
+#
+# GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/elasticPools/{elasticPoolName}/databases
+# operationId: Databases_ListByElasticPool
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elastic-pools-databases ListByElasticPool" [
+  resourceGroupName: string
+  serverName: string
+  elasticPoolName: string
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # The API version to use for the request.
+]: nothing -> record<nextLink: string, value: table<kind: string, managedBy: string, properties: record, sku: record>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/elasticPools/($elasticPoolName)/databases" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}

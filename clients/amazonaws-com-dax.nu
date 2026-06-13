@@ -1,0 +1,918 @@
+# Auto-generated client for Amazon DynamoDB Accelerator (DAX) v2017-04-19
+# Source: https://api.apis.guru/v2/specs/amazonaws.com/dax/2017-04-19/openapi.json
+# Auth: --token flag or $env.AMAZON_DYNAMODB_ACCELERATOR_DAX_TOKEN
+
+const BASE_URL = "http://dax.us-east-1.amazonaws.com"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AMAZON_DYNAMODB_ACCELERATOR_DAX_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["http://dax.us-east-1.amazonaws.com" "http://dax.us-east-2.amazonaws.com" "http://dax.us-west-1.amazonaws.com" "http://dax.us-west-2.amazonaws.com" "http://dax.us-gov-west-1.amazonaws.com" "http://dax.us-gov-east-1.amazonaws.com" "http://dax.ca-central-1.amazonaws.com" "http://dax.eu-north-1.amazonaws.com" "http://dax.eu-west-1.amazonaws.com" "http://dax.eu-west-2.amazonaws.com" "http://dax.eu-west-3.amazonaws.com" "http://dax.eu-central-1.amazonaws.com" "http://dax.eu-south-1.amazonaws.com" "http://dax.af-south-1.amazonaws.com" "http://dax.ap-northeast-1.amazonaws.com" "http://dax.ap-northeast-2.amazonaws.com" "http://dax.ap-northeast-3.amazonaws.com" "http://dax.ap-southeast-1.amazonaws.com" "http://dax.ap-southeast-2.amazonaws.com" "http://dax.ap-east-1.amazonaws.com" "http://dax.ap-south-1.amazonaws.com" "http://dax.sa-east-1.amazonaws.com" "http://dax.me-south-1.amazonaws.com" "https://dax.us-east-1.amazonaws.com" "https://dax.us-east-2.amazonaws.com" "https://dax.us-west-1.amazonaws.com" "https://dax.us-west-2.amazonaws.com" "https://dax.us-gov-west-1.amazonaws.com" "https://dax.us-gov-east-1.amazonaws.com" "https://dax.ca-central-1.amazonaws.com" "https://dax.eu-north-1.amazonaws.com" "https://dax.eu-west-1.amazonaws.com" "https://dax.eu-west-2.amazonaws.com" "https://dax.eu-west-3.amazonaws.com" "https://dax.eu-central-1.amazonaws.com" "https://dax.eu-south-1.amazonaws.com" "https://dax.af-south-1.amazonaws.com" "https://dax.ap-northeast-1.amazonaws.com" "https://dax.ap-northeast-2.amazonaws.com" "https://dax.ap-northeast-3.amazonaws.com" "https://dax.ap-southeast-1.amazonaws.com" "https://dax.ap-southeast-2.amazonaws.com" "https://dax.ap-east-1.amazonaws.com" "https://dax.ap-south-1.amazonaws.com" "https://dax.sa-east-1.amazonaws.com" "https://dax.me-south-1.amazonaws.com" "http://dax.cn-north-1.amazonaws.com.cn" "http://dax.cn-northwest-1.amazonaws.com.cn" "https://dax.cn-north-1.amazonaws.com.cn" "https://dax.cn-northwest-1.amazonaws.com.cn"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+# Completers for enum parameters
+def X-Amz-Target-completer [] { ["AmazonDAXV3.CreateCluster"] }
+def X-Amz-Target-completer-1 [] { ["AmazonDAXV3.CreateParameterGroup"] }
+def X-Amz-Target-completer-2 [] { ["AmazonDAXV3.CreateSubnetGroup"] }
+def X-Amz-Target-completer-3 [] { ["AmazonDAXV3.DecreaseReplicationFactor"] }
+def X-Amz-Target-completer-4 [] { ["AmazonDAXV3.DeleteCluster"] }
+def X-Amz-Target-completer-5 [] { ["AmazonDAXV3.DeleteParameterGroup"] }
+def X-Amz-Target-completer-6 [] { ["AmazonDAXV3.DeleteSubnetGroup"] }
+def X-Amz-Target-completer-7 [] { ["AmazonDAXV3.DescribeClusters"] }
+def X-Amz-Target-completer-8 [] { ["AmazonDAXV3.DescribeDefaultParameters"] }
+def X-Amz-Target-completer-9 [] { ["AmazonDAXV3.DescribeEvents"] }
+def X-Amz-Target-completer-10 [] { ["AmazonDAXV3.DescribeParameterGroups"] }
+def X-Amz-Target-completer-11 [] { ["AmazonDAXV3.DescribeParameters"] }
+def X-Amz-Target-completer-12 [] { ["AmazonDAXV3.DescribeSubnetGroups"] }
+def X-Amz-Target-completer-13 [] { ["AmazonDAXV3.IncreaseReplicationFactor"] }
+def X-Amz-Target-completer-14 [] { ["AmazonDAXV3.ListTags"] }
+def X-Amz-Target-completer-15 [] { ["AmazonDAXV3.RebootNode"] }
+def X-Amz-Target-completer-16 [] { ["AmazonDAXV3.TagResource"] }
+def X-Amz-Target-completer-17 [] { ["AmazonDAXV3.UntagResource"] }
+def X-Amz-Target-completer-18 [] { ["AmazonDAXV3.UpdateCluster"] }
+def X-Amz-Target-completer-19 [] { ["AmazonDAXV3.UpdateParameterGroup"] }
+def X-Amz-Target-completer-20 [] { ["AmazonDAXV3.UpdateSubnetGroup"] }
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-amazon-daxv3-create-cluster CreateCluster" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Creates a DAX cluster. All nodes in the cluster run the same DAX caching software.
+#
+# POST /#X-Amz-Target=AmazonDAXV3.CreateCluster
+# operationId: CreateCluster
+export def "x-amz-target-amazon-daxv3-create-cluster CreateCluster" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer
+  ClusterName: any
+  NodeType: any
+  --Description: any
+  ReplicationFactor: any
+  --AvailabilityZones: any
+  --SubnetGroupName: any
+  --SecurityGroupIds: any
+  --PreferredMaintenanceWindow: any
+  --NotificationTopicArn: any
+  IamRoleArn: any
+  --ParameterGroupName: any
+  --Tags: any
+  --SSESpecification: any
+  --ClusterEndpointEncryptionType: any
+]: any -> record<Cluster: record<ClusterName: record, Description: record, ClusterArn: record, TotalNodes: record, ActiveNodes: record, NodeType: record, Status: record, ClusterDiscoveryEndpoint: record<Address: record, Port: record, URL: record>, NodeIdsToRemove: record, Nodes: record, PreferredMaintenanceWindow: record, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, SubnetGroup: record, SecurityGroups: record, IamRoleArn: record, ParameterGroup: record<ParameterGroupName: record, ParameterApplyStatus: record, NodeIdsToReboot: record>, SSEDescription: record<Status: record>, ClusterEndpointEncryptionType: record>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=AmazonDAXV3.CreateCluster")
+  let body = {ClusterName: $ClusterName, NodeType: $NodeType, Description: $Description, ReplicationFactor: $ReplicationFactor, AvailabilityZones: $AvailabilityZones, SubnetGroupName: $SubnetGroupName, SecurityGroupIds: $SecurityGroupIds, PreferredMaintenanceWindow: $PreferredMaintenanceWindow, NotificationTopicArn: $NotificationTopicArn, IamRoleArn: $IamRoleArn, ParameterGroupName: $ParameterGroupName, Tags: $Tags, SSESpecification: $SSESpecification, ClusterEndpointEncryptionType: $ClusterEndpointEncryptionType} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Creates a new parameter group. A parameter group is a collection of parameters that you apply to all of the nodes in a DAX cluster.
+#
+# POST /#X-Amz-Target=AmazonDAXV3.CreateParameterGroup
+# operationId: CreateParameterGroup
+export def "x-amz-target-amazon-daxv3-create-parameter-group CreateParameterGroup" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-1
+  ParameterGroupName: any
+  --Description: any
+]: any -> record<ParameterGroup: record<ParameterGroupName: record, Description: record>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=AmazonDAXV3.CreateParameterGroup")
+  let body = {ParameterGroupName: $ParameterGroupName, Description: $Description} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Creates a new subnet group.
+#
+# POST /#X-Amz-Target=AmazonDAXV3.CreateSubnetGroup
+# operationId: CreateSubnetGroup
+export def "x-amz-target-amazon-daxv3-create-subnet-group CreateSubnetGroup" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-2
+  SubnetGroupName: any
+  --Description: any
+  SubnetIds: any
+]: any -> record<SubnetGroup: record<SubnetGroupName: record, Description: record, VpcId: record, Subnets: record>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=AmazonDAXV3.CreateSubnetGroup")
+  let body = {SubnetGroupName: $SubnetGroupName, Description: $Description, SubnetIds: $SubnetIds} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# <p>Removes one or more nodes from a DAX cluster.</p> <note> <p>You cannot use <code>DecreaseReplicationFactor</code> to remove the last node in a DAX cluster. If you need to do this, use <code>DeleteCluster</code> instead.</p> </note>
+#
+# POST /#X-Amz-Target=AmazonDAXV3.DecreaseReplicationFactor
+# operationId: DecreaseReplicationFactor
+export def "x-amz-target-amazon-daxv3-decrease-replication-factor DecreaseReplicationFactor" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-3
+  ClusterName: any
+  NewReplicationFactor: any
+  --AvailabilityZones: any
+  --NodeIdsToRemove: any
+]: any -> record<Cluster: record<ClusterName: record, Description: record, ClusterArn: record, TotalNodes: record, ActiveNodes: record, NodeType: record, Status: record, ClusterDiscoveryEndpoint: record<Address: record, Port: record, URL: record>, NodeIdsToRemove: record, Nodes: record, PreferredMaintenanceWindow: record, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, SubnetGroup: record, SecurityGroups: record, IamRoleArn: record, ParameterGroup: record<ParameterGroupName: record, ParameterApplyStatus: record, NodeIdsToReboot: record>, SSEDescription: record<Status: record>, ClusterEndpointEncryptionType: record>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=AmazonDAXV3.DecreaseReplicationFactor")
+  let body = {ClusterName: $ClusterName, NewReplicationFactor: $NewReplicationFactor, AvailabilityZones: $AvailabilityZones, NodeIdsToRemove: $NodeIdsToRemove} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Deletes a previously provisioned DAX cluster. <i>DeleteCluster</i> deletes all associated nodes, node endpoints and the DAX cluster itself. When you receive a successful response from this action, DAX immediately begins deleting the cluster; you cannot cancel or revert this action.
+#
+# POST /#X-Amz-Target=AmazonDAXV3.DeleteCluster
+# operationId: DeleteCluster
+export def "x-amz-target-amazon-daxv3-delete-cluster DeleteCluster" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-4
+  ClusterName: any
+]: any -> record<Cluster: record<ClusterName: record, Description: record, ClusterArn: record, TotalNodes: record, ActiveNodes: record, NodeType: record, Status: record, ClusterDiscoveryEndpoint: record<Address: record, Port: record, URL: record>, NodeIdsToRemove: record, Nodes: record, PreferredMaintenanceWindow: record, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, SubnetGroup: record, SecurityGroups: record, IamRoleArn: record, ParameterGroup: record<ParameterGroupName: record, ParameterApplyStatus: record, NodeIdsToReboot: record>, SSEDescription: record<Status: record>, ClusterEndpointEncryptionType: record>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=AmazonDAXV3.DeleteCluster")
+  let body = {ClusterName: $ClusterName} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Deletes the specified parameter group. You cannot delete a parameter group if it is associated with any DAX clusters.
+#
+# POST /#X-Amz-Target=AmazonDAXV3.DeleteParameterGroup
+# operationId: DeleteParameterGroup
+export def "x-amz-target-amazon-daxv3-delete-parameter-group DeleteParameterGroup" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-5
+  ParameterGroupName: any
+]: any -> record<DeletionMessage: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=AmazonDAXV3.DeleteParameterGroup")
+  let body = {ParameterGroupName: $ParameterGroupName} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# <p>Deletes a subnet group.</p> <note> <p>You cannot delete a subnet group if it is associated with any DAX clusters.</p> </note>
+#
+# POST /#X-Amz-Target=AmazonDAXV3.DeleteSubnetGroup
+# operationId: DeleteSubnetGroup
+export def "x-amz-target-amazon-daxv3-delete-subnet-group DeleteSubnetGroup" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-6
+  SubnetGroupName: any
+]: any -> record<DeletionMessage: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=AmazonDAXV3.DeleteSubnetGroup")
+  let body = {SubnetGroupName: $SubnetGroupName} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# <p>Returns information about all provisioned DAX clusters if no cluster identifier is specified, or about a specific DAX cluster if a cluster identifier is supplied.</p> <p>If the cluster is in the CREATING state, only cluster level information will be displayed until all of the nodes are successfully provisioned.</p> <p>If the cluster is in the DELETING state, only cluster level information will be displayed.</p> <p>If nodes are currently being added to the DAX cluster, node endpoint information and creation time for the additional nodes will not be displayed until they are completely provisioned. When the DAX cluster state is <i>available</i>, the cluster is ready for use.</p> <p>If nodes are currently being removed from the DAX cluster, no endpoint information for the removed nodes is displayed.</p>
+#
+# POST /#X-Amz-Target=AmazonDAXV3.DescribeClusters
+# operationId: DescribeClusters
+export def "x-amz-target-amazon-daxv3-describe-clusters DescribeClusters" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-7
+  --ClusterNames: any
+  --MaxResults: any
+  --NextToken: any
+]: any -> record<NextToken: record, Clusters: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=AmazonDAXV3.DescribeClusters")
+  let body = {ClusterNames: $ClusterNames, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Returns the default system parameter information for the DAX caching software.
+#
+# POST /#X-Amz-Target=AmazonDAXV3.DescribeDefaultParameters
+# operationId: DescribeDefaultParameters
+export def "x-amz-target-amazon-daxv3-describe-default-parameters DescribeDefaultParameters" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-8
+  --MaxResults: any
+  --NextToken: any
+]: any -> record<NextToken: record, Parameters: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=AmazonDAXV3.DescribeDefaultParameters")
+  let body = {MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# <p>Returns events related to DAX clusters and parameter groups. You can obtain events specific to a particular DAX cluster or parameter group by providing the name as a parameter.</p> <p>By default, only the events occurring within the last 24 hours are returned; however, you can retrieve up to 14 days' worth of events if necessary.</p>
+#
+# POST /#X-Amz-Target=AmazonDAXV3.DescribeEvents
+# operationId: DescribeEvents
+export def "x-amz-target-amazon-daxv3-describe-events DescribeEvents" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-9
+  --SourceName: any
+  --SourceType: any
+  --StartTime: any
+  --EndTime: any
+  --Duration: any
+  --MaxResults: any
+  --NextToken: any
+]: any -> record<NextToken: record, Events: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=AmazonDAXV3.DescribeEvents")
+  let body = {SourceName: $SourceName, SourceType: $SourceType, StartTime: $StartTime, EndTime: $EndTime, Duration: $Duration, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Returns a list of parameter group descriptions. If a parameter group name is specified, the list will contain only the descriptions for that group.
+#
+# POST /#X-Amz-Target=AmazonDAXV3.DescribeParameterGroups
+# operationId: DescribeParameterGroups
+export def "x-amz-target-amazon-daxv3-describe-parameter-groups DescribeParameterGroups" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-10
+  --ParameterGroupNames: any
+  --MaxResults: any
+  --NextToken: any
+]: any -> record<NextToken: record, ParameterGroups: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=AmazonDAXV3.DescribeParameterGroups")
+  let body = {ParameterGroupNames: $ParameterGroupNames, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Returns the detailed parameter list for a particular parameter group.
+#
+# POST /#X-Amz-Target=AmazonDAXV3.DescribeParameters
+# operationId: DescribeParameters
+export def "x-amz-target-amazon-daxv3-describe-parameters DescribeParameters" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-11
+  ParameterGroupName: any
+  --Source: any
+  --MaxResults: any
+  --NextToken: any
+]: any -> record<NextToken: record, Parameters: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=AmazonDAXV3.DescribeParameters")
+  let body = {ParameterGroupName: $ParameterGroupName, Source: $Source, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Returns a list of subnet group descriptions. If a subnet group name is specified, the list will contain only the description of that group.
+#
+# POST /#X-Amz-Target=AmazonDAXV3.DescribeSubnetGroups
+# operationId: DescribeSubnetGroups
+export def "x-amz-target-amazon-daxv3-describe-subnet-groups DescribeSubnetGroups" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-12
+  --SubnetGroupNames: any
+  --MaxResults: any
+  --NextToken: any
+]: any -> record<NextToken: record, SubnetGroups: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=AmazonDAXV3.DescribeSubnetGroups")
+  let body = {SubnetGroupNames: $SubnetGroupNames, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Adds one or more nodes to a DAX cluster.
+#
+# POST /#X-Amz-Target=AmazonDAXV3.IncreaseReplicationFactor
+# operationId: IncreaseReplicationFactor
+export def "x-amz-target-amazon-daxv3-increase-replication-factor IncreaseReplicationFactor" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-13
+  ClusterName: any
+  NewReplicationFactor: any
+  --AvailabilityZones: any
+]: any -> record<Cluster: record<ClusterName: record, Description: record, ClusterArn: record, TotalNodes: record, ActiveNodes: record, NodeType: record, Status: record, ClusterDiscoveryEndpoint: record<Address: record, Port: record, URL: record>, NodeIdsToRemove: record, Nodes: record, PreferredMaintenanceWindow: record, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, SubnetGroup: record, SecurityGroups: record, IamRoleArn: record, ParameterGroup: record<ParameterGroupName: record, ParameterApplyStatus: record, NodeIdsToReboot: record>, SSEDescription: record<Status: record>, ClusterEndpointEncryptionType: record>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=AmazonDAXV3.IncreaseReplicationFactor")
+  let body = {ClusterName: $ClusterName, NewReplicationFactor: $NewReplicationFactor, AvailabilityZones: $AvailabilityZones} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# List all of the tags for a DAX cluster. You can call <code>ListTags</code> up to 10 times per second, per account.
+#
+# POST /#X-Amz-Target=AmazonDAXV3.ListTags
+# operationId: ListTags
+export def "x-amz-target-amazon-daxv3-list-tags ListTags" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-14
+  ResourceName: any
+  --NextToken: any
+]: any -> record<Tags: record, NextToken: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=AmazonDAXV3.ListTags")
+  let body = {ResourceName: $ResourceName, NextToken: $NextToken} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# <p>Reboots a single node of a DAX cluster. The reboot action takes place as soon as possible. During the reboot, the node status is set to REBOOTING.</p> <note> <p> <code>RebootNode</code> restarts the DAX engine process and does not remove the contents of the cache. </p> </note>
+#
+# POST /#X-Amz-Target=AmazonDAXV3.RebootNode
+# operationId: RebootNode
+export def "x-amz-target-amazon-daxv3-reboot-node RebootNode" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-15
+  ClusterName: any
+  NodeId: any
+]: any -> record<Cluster: record<ClusterName: record, Description: record, ClusterArn: record, TotalNodes: record, ActiveNodes: record, NodeType: record, Status: record, ClusterDiscoveryEndpoint: record<Address: record, Port: record, URL: record>, NodeIdsToRemove: record, Nodes: record, PreferredMaintenanceWindow: record, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, SubnetGroup: record, SecurityGroups: record, IamRoleArn: record, ParameterGroup: record<ParameterGroupName: record, ParameterApplyStatus: record, NodeIdsToReboot: record>, SSEDescription: record<Status: record>, ClusterEndpointEncryptionType: record>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=AmazonDAXV3.RebootNode")
+  let body = {ClusterName: $ClusterName, NodeId: $NodeId} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Associates a set of tags with a DAX resource. You can call <code>TagResource</code> up to 5 times per second, per account. 
+#
+# POST /#X-Amz-Target=AmazonDAXV3.TagResource
+# operationId: TagResource
+export def "x-amz-target-amazon-daxv3-tag-resource TagResource" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-16
+  ResourceName: any
+  Tags: any
+]: any -> record<Tags: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=AmazonDAXV3.TagResource")
+  let body = {ResourceName: $ResourceName, Tags: $Tags} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Removes the association of tags from a DAX resource. You can call <code>UntagResource</code> up to 5 times per second, per account. 
+#
+# POST /#X-Amz-Target=AmazonDAXV3.UntagResource
+# operationId: UntagResource
+export def "x-amz-target-amazon-daxv3-untag-resource UntagResource" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-17
+  ResourceName: any
+  TagKeys: any
+]: any -> record<Tags: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=AmazonDAXV3.UntagResource")
+  let body = {ResourceName: $ResourceName, TagKeys: $TagKeys} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Modifies the settings for a DAX cluster. You can use this action to change one or more cluster configuration parameters by specifying the parameters and the new values.
+#
+# POST /#X-Amz-Target=AmazonDAXV3.UpdateCluster
+# operationId: UpdateCluster
+export def "x-amz-target-amazon-daxv3-update-cluster UpdateCluster" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-18
+  ClusterName: any
+  --Description: any
+  --PreferredMaintenanceWindow: any
+  --NotificationTopicArn: any
+  --NotificationTopicStatus: any
+  --ParameterGroupName: any
+  --SecurityGroupIds: any
+]: any -> record<Cluster: record<ClusterName: record, Description: record, ClusterArn: record, TotalNodes: record, ActiveNodes: record, NodeType: record, Status: record, ClusterDiscoveryEndpoint: record<Address: record, Port: record, URL: record>, NodeIdsToRemove: record, Nodes: record, PreferredMaintenanceWindow: record, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, SubnetGroup: record, SecurityGroups: record, IamRoleArn: record, ParameterGroup: record<ParameterGroupName: record, ParameterApplyStatus: record, NodeIdsToReboot: record>, SSEDescription: record<Status: record>, ClusterEndpointEncryptionType: record>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=AmazonDAXV3.UpdateCluster")
+  let body = {ClusterName: $ClusterName, Description: $Description, PreferredMaintenanceWindow: $PreferredMaintenanceWindow, NotificationTopicArn: $NotificationTopicArn, NotificationTopicStatus: $NotificationTopicStatus, ParameterGroupName: $ParameterGroupName, SecurityGroupIds: $SecurityGroupIds} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Modifies the parameters of a parameter group. You can modify up to 20 parameters in a single request by submitting a list parameter name and value pairs.
+#
+# POST /#X-Amz-Target=AmazonDAXV3.UpdateParameterGroup
+# operationId: UpdateParameterGroup
+export def "x-amz-target-amazon-daxv3-update-parameter-group UpdateParameterGroup" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-19
+  ParameterGroupName: any
+  ParameterNameValues: any
+]: any -> record<ParameterGroup: record<ParameterGroupName: record, Description: record>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=AmazonDAXV3.UpdateParameterGroup")
+  let body = {ParameterGroupName: $ParameterGroupName, ParameterNameValues: $ParameterNameValues} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Modifies an existing subnet group.
+#
+# POST /#X-Amz-Target=AmazonDAXV3.UpdateSubnetGroup
+# operationId: UpdateSubnetGroup
+export def "x-amz-target-amazon-daxv3-update-subnet-group UpdateSubnetGroup" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --X-Amz-Content-Sha256: string
+  --X-Amz-Date: string
+  --X-Amz-Algorithm: string
+  --X-Amz-Credential: string
+  --X-Amz-Security-Token: string
+  --X-Amz-Signature: string
+  --X-Amz-SignedHeaders: string
+  --X-Amz-Target: string@X-Amz-Target-completer-20
+  SubnetGroupName: any
+  --Description: any
+  --SubnetIds: any
+]: any -> record<SubnetGroup: record<SubnetGroupName: record, Description: record, VpcId: record, Subnets: record>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/#X-Amz-Target=AmazonDAXV3.UpdateSubnetGroup")
+  let body = {SubnetGroupName: $SubnetGroupName, Description: $Description, SubnetIds: $SubnetIds} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}

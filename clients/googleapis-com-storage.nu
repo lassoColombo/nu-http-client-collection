@@ -1,0 +1,2493 @@
+# Auto-generated client for Cloud Storage JSON API vv1
+# Source: https://api.apis.guru/v2/specs/googleapis.com/storage/v1/openapi.json
+# Auth: --token flag or $env.CLOUD_STORAGE_JSON_API_TOKEN
+
+const BASE_URL = "https://storage.googleapis.com/storage/v1"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o CLOUD_STORAGE_JSON_API_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["https://storage.googleapis.com/storage/v1"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+# Completers for enum parameters
+def alt-completer [] { ["json"] }
+def projection-completer [] { ["full" "noAcl"] }
+def predefinedAcl-completer [] { ["authenticatedRead" "private" "projectPrivate" "publicRead" "publicReadWrite"] }
+def predefinedDefaultObjectAcl-completer [] { ["authenticatedRead" "bucketOwnerFullControl" "bucketOwnerRead" "private" "projectPrivate" "publicRead"] }
+def predefinedAcl-completer-1 [] { ["authenticatedRead" "bucketOwnerFullControl" "bucketOwnerRead" "private" "projectPrivate" "publicRead"] }
+def destinationPredefinedAcl-completer [] { ["authenticatedRead" "bucketOwnerFullControl" "bucketOwnerRead" "private" "projectPrivate" "publicRead"] }
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "b storagebucketslist" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Retrieves a list of buckets for a given project.
+#
+# GET /b
+# operationId: storage.buckets.list
+export def "b storagebucketslist" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --project: string # A valid API project identifier.
+  --maxResults: int # Maximum number of buckets to return in a single response. The service will use this parameter or 1,000 items, whichever is smaller.
+  --pageToken: string # A previously-returned page token representing part of the larger set of results to view.
+  --prefix: string # Filter results to buckets whose names begin with this prefix.
+  --projection: string@projection-completer # Set of properties to return. Defaults to noAcl.
+  --userProject: string # The project to be billed for this request.
+]: nothing -> record<items: table<acl: list, autoclass: record, billing: record, cors: list, customPlacementConfig: record, defaultEventBasedHold: bool, defaultObjectAcl: list, encryption: record, etag: string, iamConfiguration: record, id: string, kind: string, labels: record, lifecycle: record, location: string, locationType: string, logging: record, metageneration: string, name: string, owner: record, projectNumber: string, retentionPolicy: record, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record, website: record>, kind: string, nextPageToken: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/b" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a new bucket.
+#
+# POST /b
+# operationId: storage.buckets.insert
+# --acl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, id?: string, kind?: string, projectTeam?: record, role?: string, selfLink?: string}
+# --autoclass shape: {enabled?: bool, toggleTime?: string}
+# --billing shape: {requesterPays?: bool}
+# --cors item shape: {maxAgeSeconds?: int, method?: list, origin?: list, responseHeader?: list}
+# --customPlacementConfig shape: {dataLocations?: list}
+# --defaultObjectAcl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
+# --encryption shape: {defaultKmsKeyName?: string}
+# --iamConfiguration shape: {bucketPolicyOnly?: record, publicAccessPrevention?: string, uniformBucketLevelAccess?: record}
+# --lifecycle shape: {rule?: list}
+# --logging shape: {logBucket?: string, logObjectPrefix?: string}
+# --owner shape: {entity?: string, entityId?: string}
+# --retentionPolicy shape: {effectiveTime?: string, isLocked?: bool, retentionPeriod?: string}
+# --versioning shape: {enabled?: bool}
+# --website shape: {mainPageSuffix?: string, notFoundPage?: string}
+export def "b storagebucketsinsert" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --project: string # A valid API project identifier.
+  --predefinedAcl: string@predefinedAcl-completer # Apply a predefined set of access controls to this bucket.
+  --predefinedDefaultObjectAcl: string@predefinedDefaultObjectAcl-completer # Apply a predefined set of default object access controls to this bucket.
+  --projection: string@projection-completer # Set of properties to return. Defaults to noAcl, unless the bucket resource specifies acl or defaultObjectAcl properties, when it defaults to full.
+  --userProject: string # The project to be billed for this request.
+  --acl: list # Access controls on the bucket. — item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, id?: string, kind?: string, projectTeam?: record, role?: string, selfLink?: string}
+  --autoclass: record # The bucket's Autoclass configuration. — shape: {enabled?: bool, toggleTime?: string}
+  --billing: record # The bucket's billing configuration. — shape: {requesterPays?: bool}
+  --cors: list # The bucket's Cross-Origin Resource Sharing (CORS) configuration. — item shape: {maxAgeSeconds?: int, method?: list, origin?: list, responseHeader?: list}
+  --customPlacementConfig: record # The bucket's custom placement configuration for Custom Dual Regions. — shape: {dataLocations?: list}
+  --defaultEventBasedHold: oneof<nothing, bool> # The default value for event-based hold on newly created objects in this bucket. Event-based hold is a way to retain objects indefinitely until an event occurs, signified by the hold's release. After being released, such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false. Objects under event-based hold cannot be deleted, overwritten or archived until the hold is removed.
+  --defaultObjectAcl: list # Default access controls to apply to new objects when no ACL is provided. — item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
+  --encryption: record # Encryption configuration for a bucket. — shape: {defaultKmsKeyName?: string}
+  --etag: string # HTTP 1.1 Entity tag for the bucket.
+  --iamConfiguration: record # The bucket's IAM configuration. — shape: {bucketPolicyOnly?: record, publicAccessPrevention?: string, uniformBucketLevelAccess?: record}
+  --id: string # The ID of the bucket. For buckets, the id and name properties are the same.
+  --kind: string # The kind of item this is. For buckets, this is always storage#bucket. (default: storage#bucket)
+  --labels: record # User-provided labels, in key/value pairs.
+  --lifecycle: record # The bucket's lifecycle configuration. See lifecycle management for more information. — shape: {rule?: list}
+  --location: string # The location of the bucket. Object data for objects in the bucket resides in physical storage within this region. Defaults to US. See the developer's guide for the authoritative list.
+  --locationType: string # The type of the bucket location.
+  --logging: record # The bucket's logging configuration, which defines the destination bucket and optional name prefix for the current bucket's logs. — shape: {logBucket?: string, logObjectPrefix?: string}
+  --metageneration: string # The metadata generation of this bucket. (format: int64)
+  --name: string # The name of the bucket.
+  --owner: record # The owner of the bucket. This is always the project team's owner group. — shape: {entity?: string, entityId?: string}
+  --projectNumber: string # The project number of the project the bucket belongs to. (format: uint64)
+  --retentionPolicy: record # The bucket's retention policy. The retention policy enforces a minimum retention time for all objects contained in the bucket, based on their creation time. Any attempt to overwrite or delete objects younger than the retention period will result in a PERMISSION_DENIED error. An unlocked retention policy can be modified or removed from the bucket via a storage.buckets.update operation. A locked retention policy cannot be removed or shortened in duration for the lifetime of the bucket. Attempting to remove or decrease period of a locked retention policy will result in a PERMISSION_DENIED error. — shape: {effectiveTime?: string, isLocked?: bool, retentionPeriod?: string}
+  --rpo: string # The Recovery Point Objective (RPO) of this bucket. Set to ASYNC_TURBO to turn on Turbo Replication on a bucket.
+  --satisfiesPZS: oneof<nothing, bool> # Reserved for future use.
+  --selfLink: string # The URI of this bucket.
+  --storageClass: string # The bucket's default storage class, used whenever no storageClass is specified for a newly-created object. This defines how objects in the bucket are stored and determines the SLA and the cost of storage. Values include MULTI_REGIONAL, REGIONAL, STANDARD, NEARLINE, COLDLINE, ARCHIVE, and DURABLE_REDUCED_AVAILABILITY. If this value is not specified when the bucket is created, it will default to STANDARD. For more information, see storage classes.
+  --timeCreated: string # The creation time of the bucket in RFC 3339 format. (format: date-time)
+  --updated: string # The modification time of the bucket in RFC 3339 format. (format: date-time)
+  --versioning: record # The bucket's versioning configuration. — shape: {enabled?: bool}
+  --website: record # The bucket's website configuration, controlling how the service behaves when accessing bucket contents as a web site. See the Static Website Examples for more information. — shape: {mainPageSuffix?: string, notFoundPage?: string}
+]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "predefinedAcl" $predefinedAcl "scalar") (serialize-qp "predefinedDefaultObjectAcl" $predefinedDefaultObjectAcl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/b" $qp)
+  let body = {acl: $acl, autoclass: $autoclass, billing: $billing, cors: $cors, customPlacementConfig: $customPlacementConfig, defaultEventBasedHold: $defaultEventBasedHold, defaultObjectAcl: $defaultObjectAcl, encryption: $encryption, etag: $etag, iamConfiguration: $iamConfiguration, id: $id, kind: $kind, labels: $labels, lifecycle: $lifecycle, location: $location, locationType: $locationType, logging: $logging, metageneration: $metageneration, name: $name, owner: $owner, projectNumber: $projectNumber, retentionPolicy: $retentionPolicy, rpo: $rpo, satisfiesPZS: $satisfiesPZS, selfLink: $selfLink, storageClass: $storageClass, timeCreated: $timeCreated, updated: $updated, versioning: $versioning, website: $website} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Permanently deletes an empty bucket.
+#
+# DELETE /b/{bucket}
+# operationId: storage.buckets.delete
+export def "b storagebucketsdelete" [
+  bucket: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --ifMetagenerationMatch: string # If set, only deletes the bucket if its metageneration matches this value.
+  --ifMetagenerationNotMatch: string # If set, only deletes the bucket if its metageneration does not match this value.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns metadata for the specified bucket.
+#
+# GET /b/{bucket}
+# operationId: storage.buckets.get
+export def "b storagebucketsget" [
+  bucket: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --ifMetagenerationMatch: string # Makes the return of the bucket metadata conditional on whether the bucket's current metageneration matches the given value.
+  --ifMetagenerationNotMatch: string # Makes the return of the bucket metadata conditional on whether the bucket's current metageneration does not match the given value.
+  --projection: string@projection-completer # Set of properties to return. Defaults to noAcl.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+]: nothing -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Patches a bucket. Changes to the bucket will be readable immediately after writing, but configuration changes may take time to propagate.
+#
+# PATCH /b/{bucket}
+# operationId: storage.buckets.patch
+# --acl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, id?: string, kind?: string, projectTeam?: record, role?: string, selfLink?: string}
+# --autoclass shape: {enabled?: bool, toggleTime?: string}
+# --billing shape: {requesterPays?: bool}
+# --cors item shape: {maxAgeSeconds?: int, method?: list, origin?: list, responseHeader?: list}
+# --customPlacementConfig shape: {dataLocations?: list}
+# --defaultObjectAcl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
+# --encryption shape: {defaultKmsKeyName?: string}
+# --iamConfiguration shape: {bucketPolicyOnly?: record, publicAccessPrevention?: string, uniformBucketLevelAccess?: record}
+# --lifecycle shape: {rule?: list}
+# --logging shape: {logBucket?: string, logObjectPrefix?: string}
+# --owner shape: {entity?: string, entityId?: string}
+# --retentionPolicy shape: {effectiveTime?: string, isLocked?: bool, retentionPeriod?: string}
+# --versioning shape: {enabled?: bool}
+# --website shape: {mainPageSuffix?: string, notFoundPage?: string}
+export def "b storagebucketspatch" [
+  bucket: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --ifMetagenerationMatch: string # Makes the return of the bucket metadata conditional on whether the bucket's current metageneration matches the given value.
+  --ifMetagenerationNotMatch: string # Makes the return of the bucket metadata conditional on whether the bucket's current metageneration does not match the given value.
+  --predefinedAcl: string@predefinedAcl-completer # Apply a predefined set of access controls to this bucket.
+  --predefinedDefaultObjectAcl: string@predefinedDefaultObjectAcl-completer # Apply a predefined set of default object access controls to this bucket.
+  --projection: string@projection-completer # Set of properties to return. Defaults to full.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+  --acl: list # Access controls on the bucket. — item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, id?: string, kind?: string, projectTeam?: record, role?: string, selfLink?: string}
+  --autoclass: record # The bucket's Autoclass configuration. — shape: {enabled?: bool, toggleTime?: string}
+  --billing: record # The bucket's billing configuration. — shape: {requesterPays?: bool}
+  --cors: list # The bucket's Cross-Origin Resource Sharing (CORS) configuration. — item shape: {maxAgeSeconds?: int, method?: list, origin?: list, responseHeader?: list}
+  --customPlacementConfig: record # The bucket's custom placement configuration for Custom Dual Regions. — shape: {dataLocations?: list}
+  --defaultEventBasedHold: oneof<nothing, bool> # The default value for event-based hold on newly created objects in this bucket. Event-based hold is a way to retain objects indefinitely until an event occurs, signified by the hold's release. After being released, such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false. Objects under event-based hold cannot be deleted, overwritten or archived until the hold is removed.
+  --defaultObjectAcl: list # Default access controls to apply to new objects when no ACL is provided. — item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
+  --encryption: record # Encryption configuration for a bucket. — shape: {defaultKmsKeyName?: string}
+  --etag: string # HTTP 1.1 Entity tag for the bucket.
+  --iamConfiguration: record # The bucket's IAM configuration. — shape: {bucketPolicyOnly?: record, publicAccessPrevention?: string, uniformBucketLevelAccess?: record}
+  --id: string # The ID of the bucket. For buckets, the id and name properties are the same.
+  --kind: string # The kind of item this is. For buckets, this is always storage#bucket. (default: storage#bucket)
+  --labels: record # User-provided labels, in key/value pairs.
+  --lifecycle: record # The bucket's lifecycle configuration. See lifecycle management for more information. — shape: {rule?: list}
+  --location: string # The location of the bucket. Object data for objects in the bucket resides in physical storage within this region. Defaults to US. See the developer's guide for the authoritative list.
+  --locationType: string # The type of the bucket location.
+  --logging: record # The bucket's logging configuration, which defines the destination bucket and optional name prefix for the current bucket's logs. — shape: {logBucket?: string, logObjectPrefix?: string}
+  --metageneration: string # The metadata generation of this bucket. (format: int64)
+  --name: string # The name of the bucket.
+  --owner: record # The owner of the bucket. This is always the project team's owner group. — shape: {entity?: string, entityId?: string}
+  --projectNumber: string # The project number of the project the bucket belongs to. (format: uint64)
+  --retentionPolicy: record # The bucket's retention policy. The retention policy enforces a minimum retention time for all objects contained in the bucket, based on their creation time. Any attempt to overwrite or delete objects younger than the retention period will result in a PERMISSION_DENIED error. An unlocked retention policy can be modified or removed from the bucket via a storage.buckets.update operation. A locked retention policy cannot be removed or shortened in duration for the lifetime of the bucket. Attempting to remove or decrease period of a locked retention policy will result in a PERMISSION_DENIED error. — shape: {effectiveTime?: string, isLocked?: bool, retentionPeriod?: string}
+  --rpo: string # The Recovery Point Objective (RPO) of this bucket. Set to ASYNC_TURBO to turn on Turbo Replication on a bucket.
+  --satisfiesPZS: oneof<nothing, bool> # Reserved for future use.
+  --selfLink: string # The URI of this bucket.
+  --storageClass: string # The bucket's default storage class, used whenever no storageClass is specified for a newly-created object. This defines how objects in the bucket are stored and determines the SLA and the cost of storage. Values include MULTI_REGIONAL, REGIONAL, STANDARD, NEARLINE, COLDLINE, ARCHIVE, and DURABLE_REDUCED_AVAILABILITY. If this value is not specified when the bucket is created, it will default to STANDARD. For more information, see storage classes.
+  --timeCreated: string # The creation time of the bucket in RFC 3339 format. (format: date-time)
+  --updated: string # The modification time of the bucket in RFC 3339 format. (format: date-time)
+  --versioning: record # The bucket's versioning configuration. — shape: {enabled?: bool}
+  --website: record # The bucket's website configuration, controlling how the service behaves when accessing bucket contents as a web site. See the Static Website Examples for more information. — shape: {mainPageSuffix?: string, notFoundPage?: string}
+]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "predefinedAcl" $predefinedAcl "scalar") (serialize-qp "predefinedDefaultObjectAcl" $predefinedDefaultObjectAcl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)" $qp)
+  let body = {acl: $acl, autoclass: $autoclass, billing: $billing, cors: $cors, customPlacementConfig: $customPlacementConfig, defaultEventBasedHold: $defaultEventBasedHold, defaultObjectAcl: $defaultObjectAcl, encryption: $encryption, etag: $etag, iamConfiguration: $iamConfiguration, id: $id, kind: $kind, labels: $labels, lifecycle: $lifecycle, location: $location, locationType: $locationType, logging: $logging, metageneration: $metageneration, name: $name, owner: $owner, projectNumber: $projectNumber, retentionPolicy: $retentionPolicy, rpo: $rpo, satisfiesPZS: $satisfiesPZS, selfLink: $selfLink, storageClass: $storageClass, timeCreated: $timeCreated, updated: $updated, versioning: $versioning, website: $website} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Updates a bucket. Changes to the bucket will be readable immediately after writing, but configuration changes may take time to propagate.
+#
+# PUT /b/{bucket}
+# operationId: storage.buckets.update
+# --acl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, id?: string, kind?: string, projectTeam?: record, role?: string, selfLink?: string}
+# --autoclass shape: {enabled?: bool, toggleTime?: string}
+# --billing shape: {requesterPays?: bool}
+# --cors item shape: {maxAgeSeconds?: int, method?: list, origin?: list, responseHeader?: list}
+# --customPlacementConfig shape: {dataLocations?: list}
+# --defaultObjectAcl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
+# --encryption shape: {defaultKmsKeyName?: string}
+# --iamConfiguration shape: {bucketPolicyOnly?: record, publicAccessPrevention?: string, uniformBucketLevelAccess?: record}
+# --lifecycle shape: {rule?: list}
+# --logging shape: {logBucket?: string, logObjectPrefix?: string}
+# --owner shape: {entity?: string, entityId?: string}
+# --retentionPolicy shape: {effectiveTime?: string, isLocked?: bool, retentionPeriod?: string}
+# --versioning shape: {enabled?: bool}
+# --website shape: {mainPageSuffix?: string, notFoundPage?: string}
+export def "b storagebucketsupdate" [
+  bucket: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --ifMetagenerationMatch: string # Makes the return of the bucket metadata conditional on whether the bucket's current metageneration matches the given value.
+  --ifMetagenerationNotMatch: string # Makes the return of the bucket metadata conditional on whether the bucket's current metageneration does not match the given value.
+  --predefinedAcl: string@predefinedAcl-completer # Apply a predefined set of access controls to this bucket.
+  --predefinedDefaultObjectAcl: string@predefinedDefaultObjectAcl-completer # Apply a predefined set of default object access controls to this bucket.
+  --projection: string@projection-completer # Set of properties to return. Defaults to full.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+  --acl: list # Access controls on the bucket. — item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, id?: string, kind?: string, projectTeam?: record, role?: string, selfLink?: string}
+  --autoclass: record # The bucket's Autoclass configuration. — shape: {enabled?: bool, toggleTime?: string}
+  --billing: record # The bucket's billing configuration. — shape: {requesterPays?: bool}
+  --cors: list # The bucket's Cross-Origin Resource Sharing (CORS) configuration. — item shape: {maxAgeSeconds?: int, method?: list, origin?: list, responseHeader?: list}
+  --customPlacementConfig: record # The bucket's custom placement configuration for Custom Dual Regions. — shape: {dataLocations?: list}
+  --defaultEventBasedHold: oneof<nothing, bool> # The default value for event-based hold on newly created objects in this bucket. Event-based hold is a way to retain objects indefinitely until an event occurs, signified by the hold's release. After being released, such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false. Objects under event-based hold cannot be deleted, overwritten or archived until the hold is removed.
+  --defaultObjectAcl: list # Default access controls to apply to new objects when no ACL is provided. — item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
+  --encryption: record # Encryption configuration for a bucket. — shape: {defaultKmsKeyName?: string}
+  --etag: string # HTTP 1.1 Entity tag for the bucket.
+  --iamConfiguration: record # The bucket's IAM configuration. — shape: {bucketPolicyOnly?: record, publicAccessPrevention?: string, uniformBucketLevelAccess?: record}
+  --id: string # The ID of the bucket. For buckets, the id and name properties are the same.
+  --kind: string # The kind of item this is. For buckets, this is always storage#bucket. (default: storage#bucket)
+  --labels: record # User-provided labels, in key/value pairs.
+  --lifecycle: record # The bucket's lifecycle configuration. See lifecycle management for more information. — shape: {rule?: list}
+  --location: string # The location of the bucket. Object data for objects in the bucket resides in physical storage within this region. Defaults to US. See the developer's guide for the authoritative list.
+  --locationType: string # The type of the bucket location.
+  --logging: record # The bucket's logging configuration, which defines the destination bucket and optional name prefix for the current bucket's logs. — shape: {logBucket?: string, logObjectPrefix?: string}
+  --metageneration: string # The metadata generation of this bucket. (format: int64)
+  --name: string # The name of the bucket.
+  --owner: record # The owner of the bucket. This is always the project team's owner group. — shape: {entity?: string, entityId?: string}
+  --projectNumber: string # The project number of the project the bucket belongs to. (format: uint64)
+  --retentionPolicy: record # The bucket's retention policy. The retention policy enforces a minimum retention time for all objects contained in the bucket, based on their creation time. Any attempt to overwrite or delete objects younger than the retention period will result in a PERMISSION_DENIED error. An unlocked retention policy can be modified or removed from the bucket via a storage.buckets.update operation. A locked retention policy cannot be removed or shortened in duration for the lifetime of the bucket. Attempting to remove or decrease period of a locked retention policy will result in a PERMISSION_DENIED error. — shape: {effectiveTime?: string, isLocked?: bool, retentionPeriod?: string}
+  --rpo: string # The Recovery Point Objective (RPO) of this bucket. Set to ASYNC_TURBO to turn on Turbo Replication on a bucket.
+  --satisfiesPZS: oneof<nothing, bool> # Reserved for future use.
+  --selfLink: string # The URI of this bucket.
+  --storageClass: string # The bucket's default storage class, used whenever no storageClass is specified for a newly-created object. This defines how objects in the bucket are stored and determines the SLA and the cost of storage. Values include MULTI_REGIONAL, REGIONAL, STANDARD, NEARLINE, COLDLINE, ARCHIVE, and DURABLE_REDUCED_AVAILABILITY. If this value is not specified when the bucket is created, it will default to STANDARD. For more information, see storage classes.
+  --timeCreated: string # The creation time of the bucket in RFC 3339 format. (format: date-time)
+  --updated: string # The modification time of the bucket in RFC 3339 format. (format: date-time)
+  --versioning: record # The bucket's versioning configuration. — shape: {enabled?: bool}
+  --website: record # The bucket's website configuration, controlling how the service behaves when accessing bucket contents as a web site. See the Static Website Examples for more information. — shape: {mainPageSuffix?: string, notFoundPage?: string}
+]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "predefinedAcl" $predefinedAcl "scalar") (serialize-qp "predefinedDefaultObjectAcl" $predefinedDefaultObjectAcl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)" $qp)
+  let body = {acl: $acl, autoclass: $autoclass, billing: $billing, cors: $cors, customPlacementConfig: $customPlacementConfig, defaultEventBasedHold: $defaultEventBasedHold, defaultObjectAcl: $defaultObjectAcl, encryption: $encryption, etag: $etag, iamConfiguration: $iamConfiguration, id: $id, kind: $kind, labels: $labels, lifecycle: $lifecycle, location: $location, locationType: $locationType, logging: $logging, metageneration: $metageneration, name: $name, owner: $owner, projectNumber: $projectNumber, retentionPolicy: $retentionPolicy, rpo: $rpo, satisfiesPZS: $satisfiesPZS, selfLink: $selfLink, storageClass: $storageClass, timeCreated: $timeCreated, updated: $updated, versioning: $versioning, website: $website} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieves ACL entries on the specified bucket.
+#
+# GET /b/{bucket}/acl
+# operationId: storage.bucketAccessControls.list
+export def "b-acl storagebucketAccessControlslist" [
+  bucket: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+]: nothing -> record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, kind: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/acl" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a new ACL entry on the specified bucket.
+#
+# POST /b/{bucket}/acl
+# operationId: storage.bucketAccessControls.insert
+# --projectTeam shape: {projectNumber?: string, team?: string}
+export def "b-acl storagebucketAccessControlsinsert" [
+  bucket: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+  --body-bucket: string # The name of the bucket.
+  --domain: string # The domain associated with the entity, if any.
+  --email: string # The email address associated with the entity, if any.
+  --entity: string # The entity holding the permission, in one of the following forms:  - user-userId  - user-email  - group-groupId  - group-email  - domain-domain  - project-team-projectId  - allUsers  - allAuthenticatedUsers Examples:  - The user liz@example.com would be user-liz@example.com.  - The group example@googlegroups.com would be group-example@googlegroups.com.  - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com.
+  --entityId: string # The ID for the entity, if any.
+  --etag: string # HTTP 1.1 Entity tag for the access-control entry.
+  --id: string # The ID of the access-control entry.
+  --kind: string # The kind of item this is. For bucket access control entries, this is always storage#bucketAccessControl. (default: storage#bucketAccessControl)
+  --projectTeam: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
+  --role: string # The access permission for the entity.
+  --selfLink: string # The link to this access-control entry.
+]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/acl" $qp)
+  let body = {bucket: $body_bucket, domain: $domain, email: $email, entity: $entity, entityId: $entityId, etag: $etag, id: $id, kind: $kind, projectTeam: $projectTeam, role: $role, selfLink: $selfLink} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Permanently deletes the ACL entry for the specified entity on the specified bucket.
+#
+# DELETE /b/{bucket}/acl/{entity}
+# operationId: storage.bucketAccessControls.delete
+export def "b-acl storagebucketAccessControlsdelete" [
+  bucket: string
+  entity: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/acl/($entity)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns the ACL entry for the specified entity on the specified bucket.
+#
+# GET /b/{bucket}/acl/{entity}
+# operationId: storage.bucketAccessControls.get
+export def "b-acl storagebucketAccessControlsget" [
+  bucket: string
+  entity: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+]: nothing -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/acl/($entity)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Patches an ACL entry on the specified bucket.
+#
+# PATCH /b/{bucket}/acl/{entity}
+# operationId: storage.bucketAccessControls.patch
+# --projectTeam shape: {projectNumber?: string, team?: string}
+export def "b-acl storagebucketAccessControlspatch" [
+  bucket: string
+  entity: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+  --body-bucket: string # The name of the bucket.
+  --domain: string # The domain associated with the entity, if any.
+  --email: string # The email address associated with the entity, if any.
+  --body-entity: string # The entity holding the permission, in one of the following forms:  - user-userId  - user-email  - group-groupId  - group-email  - domain-domain  - project-team-projectId  - allUsers  - allAuthenticatedUsers Examples:  - The user liz@example.com would be user-liz@example.com.  - The group example@googlegroups.com would be group-example@googlegroups.com.  - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com.
+  --entityId: string # The ID for the entity, if any.
+  --etag: string # HTTP 1.1 Entity tag for the access-control entry.
+  --id: string # The ID of the access-control entry.
+  --kind: string # The kind of item this is. For bucket access control entries, this is always storage#bucketAccessControl. (default: storage#bucketAccessControl)
+  --projectTeam: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
+  --role: string # The access permission for the entity.
+  --selfLink: string # The link to this access-control entry.
+]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/acl/($entity)" $qp)
+  let body = {bucket: $body_bucket, domain: $domain, email: $email, entity: $body_entity, entityId: $entityId, etag: $etag, id: $id, kind: $kind, projectTeam: $projectTeam, role: $role, selfLink: $selfLink} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Updates an ACL entry on the specified bucket.
+#
+# PUT /b/{bucket}/acl/{entity}
+# operationId: storage.bucketAccessControls.update
+# --projectTeam shape: {projectNumber?: string, team?: string}
+export def "b-acl storagebucketAccessControlsupdate" [
+  bucket: string
+  entity: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+  --body-bucket: string # The name of the bucket.
+  --domain: string # The domain associated with the entity, if any.
+  --email: string # The email address associated with the entity, if any.
+  --body-entity: string # The entity holding the permission, in one of the following forms:  - user-userId  - user-email  - group-groupId  - group-email  - domain-domain  - project-team-projectId  - allUsers  - allAuthenticatedUsers Examples:  - The user liz@example.com would be user-liz@example.com.  - The group example@googlegroups.com would be group-example@googlegroups.com.  - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com.
+  --entityId: string # The ID for the entity, if any.
+  --etag: string # HTTP 1.1 Entity tag for the access-control entry.
+  --id: string # The ID of the access-control entry.
+  --kind: string # The kind of item this is. For bucket access control entries, this is always storage#bucketAccessControl. (default: storage#bucketAccessControl)
+  --projectTeam: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
+  --role: string # The access permission for the entity.
+  --selfLink: string # The link to this access-control entry.
+]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/acl/($entity)" $qp)
+  let body = {bucket: $body_bucket, domain: $domain, email: $email, entity: $body_entity, entityId: $entityId, etag: $etag, id: $id, kind: $kind, projectTeam: $projectTeam, role: $role, selfLink: $selfLink} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieves default object ACL entries on the specified bucket.
+#
+# GET /b/{bucket}/defaultObjectAcl
+# operationId: storage.defaultObjectAccessControls.list
+export def "b-default-object-acl storagedefaultObjectAccessControlslist" [
+  bucket: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --ifMetagenerationMatch: string # If present, only return default ACL listing if the bucket's current metageneration matches this value.
+  --ifMetagenerationNotMatch: string # If present, only return default ACL listing if the bucket's current metageneration does not match the given value.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+]: nothing -> record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, kind: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/defaultObjectAcl" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a new default object ACL entry on the specified bucket.
+#
+# POST /b/{bucket}/defaultObjectAcl
+# operationId: storage.defaultObjectAccessControls.insert
+# --projectTeam shape: {projectNumber?: string, team?: string}
+export def "b-default-object-acl storagedefaultObjectAccessControlsinsert" [
+  bucket: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+  --body-bucket: string # The name of the bucket.
+  --domain: string # The domain associated with the entity, if any.
+  --email: string # The email address associated with the entity, if any.
+  --entity: string # The entity holding the permission, in one of the following forms:  - user-userId  - user-email  - group-groupId  - group-email  - domain-domain  - project-team-projectId  - allUsers  - allAuthenticatedUsers Examples:  - The user liz@example.com would be user-liz@example.com.  - The group example@googlegroups.com would be group-example@googlegroups.com.  - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com.
+  --entityId: string # The ID for the entity, if any.
+  --etag: string # HTTP 1.1 Entity tag for the access-control entry.
+  --generation: string # The content generation of the object, if applied to an object. (format: int64)
+  --id: string # The ID of the access-control entry.
+  --kind: string # The kind of item this is. For object access control entries, this is always storage#objectAccessControl. (default: storage#objectAccessControl)
+  --object: string # The name of the object, if applied to an object.
+  --projectTeam: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
+  --role: string # The access permission for the entity.
+  --selfLink: string # The link to this access-control entry.
+]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/defaultObjectAcl" $qp)
+  let body = {bucket: $body_bucket, domain: $domain, email: $email, entity: $entity, entityId: $entityId, etag: $etag, generation: $generation, id: $id, kind: $kind, object: $object, projectTeam: $projectTeam, role: $role, selfLink: $selfLink} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Permanently deletes the default object ACL entry for the specified entity on the specified bucket.
+#
+# DELETE /b/{bucket}/defaultObjectAcl/{entity}
+# operationId: storage.defaultObjectAccessControls.delete
+export def "b-default-object-acl storagedefaultObjectAccessControlsdelete" [
+  bucket: string
+  entity: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/defaultObjectAcl/($entity)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns the default object ACL entry for the specified entity on the specified bucket.
+#
+# GET /b/{bucket}/defaultObjectAcl/{entity}
+# operationId: storage.defaultObjectAccessControls.get
+export def "b-default-object-acl storagedefaultObjectAccessControlsget" [
+  bucket: string
+  entity: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+]: nothing -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/defaultObjectAcl/($entity)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Patches a default object ACL entry on the specified bucket.
+#
+# PATCH /b/{bucket}/defaultObjectAcl/{entity}
+# operationId: storage.defaultObjectAccessControls.patch
+# --projectTeam shape: {projectNumber?: string, team?: string}
+export def "b-default-object-acl storagedefaultObjectAccessControlspatch" [
+  bucket: string
+  entity: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+  --body-bucket: string # The name of the bucket.
+  --domain: string # The domain associated with the entity, if any.
+  --email: string # The email address associated with the entity, if any.
+  --body-entity: string # The entity holding the permission, in one of the following forms:  - user-userId  - user-email  - group-groupId  - group-email  - domain-domain  - project-team-projectId  - allUsers  - allAuthenticatedUsers Examples:  - The user liz@example.com would be user-liz@example.com.  - The group example@googlegroups.com would be group-example@googlegroups.com.  - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com.
+  --entityId: string # The ID for the entity, if any.
+  --etag: string # HTTP 1.1 Entity tag for the access-control entry.
+  --generation: string # The content generation of the object, if applied to an object. (format: int64)
+  --id: string # The ID of the access-control entry.
+  --kind: string # The kind of item this is. For object access control entries, this is always storage#objectAccessControl. (default: storage#objectAccessControl)
+  --object: string # The name of the object, if applied to an object.
+  --projectTeam: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
+  --role: string # The access permission for the entity.
+  --selfLink: string # The link to this access-control entry.
+]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/defaultObjectAcl/($entity)" $qp)
+  let body = {bucket: $body_bucket, domain: $domain, email: $email, entity: $body_entity, entityId: $entityId, etag: $etag, generation: $generation, id: $id, kind: $kind, object: $object, projectTeam: $projectTeam, role: $role, selfLink: $selfLink} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Updates a default object ACL entry on the specified bucket.
+#
+# PUT /b/{bucket}/defaultObjectAcl/{entity}
+# operationId: storage.defaultObjectAccessControls.update
+# --projectTeam shape: {projectNumber?: string, team?: string}
+export def "b-default-object-acl storagedefaultObjectAccessControlsupdate" [
+  bucket: string
+  entity: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+  --body-bucket: string # The name of the bucket.
+  --domain: string # The domain associated with the entity, if any.
+  --email: string # The email address associated with the entity, if any.
+  --body-entity: string # The entity holding the permission, in one of the following forms:  - user-userId  - user-email  - group-groupId  - group-email  - domain-domain  - project-team-projectId  - allUsers  - allAuthenticatedUsers Examples:  - The user liz@example.com would be user-liz@example.com.  - The group example@googlegroups.com would be group-example@googlegroups.com.  - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com.
+  --entityId: string # The ID for the entity, if any.
+  --etag: string # HTTP 1.1 Entity tag for the access-control entry.
+  --generation: string # The content generation of the object, if applied to an object. (format: int64)
+  --id: string # The ID of the access-control entry.
+  --kind: string # The kind of item this is. For object access control entries, this is always storage#objectAccessControl. (default: storage#objectAccessControl)
+  --object: string # The name of the object, if applied to an object.
+  --projectTeam: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
+  --role: string # The access permission for the entity.
+  --selfLink: string # The link to this access-control entry.
+]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/defaultObjectAcl/($entity)" $qp)
+  let body = {bucket: $body_bucket, domain: $domain, email: $email, entity: $body_entity, entityId: $entityId, etag: $etag, generation: $generation, id: $id, kind: $kind, object: $object, projectTeam: $projectTeam, role: $role, selfLink: $selfLink} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Returns an IAM policy for the specified bucket.
+#
+# GET /b/{bucket}/iam
+# operationId: storage.buckets.getIamPolicy
+export def "b-iam storagebucketsgetIamPolicy" [
+  bucket: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --optionsRequestedPolicyVersion: int # The IAM policy format version to be returned. If the optionsRequestedPolicyVersion is for an older version that doesn't support part of the requested IAM policy, the request fails.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+]: nothing -> record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "optionsRequestedPolicyVersion" $optionsRequestedPolicyVersion "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/iam" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates an IAM policy for the specified bucket.
+#
+# PUT /b/{bucket}/iam
+# operationId: storage.buckets.setIamPolicy
+# --bindings item shape: {condition?: record, members?: list, role?: string}
+export def "b-iam storagebucketssetIamPolicy" [
+  bucket: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+  --bindings: list # An association between a role, which comes with a set of permissions, and members who may assume that role. — item shape: {condition?: record, members?: list, role?: string}
+  --etag: string # HTTP 1.1  Entity tag for the policy. (format: byte)
+  --kind: string # The kind of item this is. For policies, this is always storage#policy. This field is ignored on input. (default: storage#policy)
+  --resourceId: string # The ID of the resource to which this policy belongs. Will be of the form projects/_/buckets/bucket for buckets, and projects/_/buckets/bucket/objects/object for objects. A specific generation may be specified by appending #generationNumber to the end of the object name, e.g. projects/_/buckets/my-bucket/objects/data.txt#17. The current generation can be denoted with #0. This field is ignored on input.
+  --version: int # The IAM policy format version. (format: int32)
+]: any -> record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/iam" $qp)
+  let body = {bindings: $bindings, etag: $etag, kind: $kind, resourceId: $resourceId, version: $version} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Tests a set of permissions on the given bucket to see which, if any, are held by the caller.
+#
+# GET /b/{bucket}/iam/testPermissions
+# operationId: storage.buckets.testIamPermissions
+export def "b-iam-test-permissions storagebucketstestIamPermissions" [
+  bucket: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --permissions: list # Permissions to test.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+]: nothing -> record<kind: string, permissions: list<string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "permissions" $permissions "multi") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/iam/testPermissions" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Locks retention policy on a bucket.
+#
+# POST /b/{bucket}/lockRetentionPolicy
+# operationId: storage.buckets.lockRetentionPolicy
+export def "b-lock-retention-policy storagebucketslockRetentionPolicy" [
+  bucket: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --ifMetagenerationMatch: string # Makes the operation conditional on whether bucket's current metageneration matches the given value.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+]: nothing -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/lockRetentionPolicy" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves a list of notification subscriptions for a given bucket.
+#
+# GET /b/{bucket}/notificationConfigs
+# operationId: storage.notifications.list
+export def "b-notification-configs storagenotificationslist" [
+  bucket: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+]: nothing -> record<items: table<custom_attributes: record, etag: string, event_types: list, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string>, kind: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/notificationConfigs" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a notification subscription for a given bucket.
+#
+# POST /b/{bucket}/notificationConfigs
+# operationId: storage.notifications.insert
+export def "b-notification-configs storagenotificationsinsert" [
+  bucket: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+  --custom-attributes: record # An optional list of additional attributes to attach to each Cloud PubSub message published for this notification subscription.
+  --etag: string # HTTP 1.1 Entity tag for this subscription notification.
+  --event-types: list # If present, only send notifications about listed event types. If empty, sent notifications for all event types.
+  --id: string # The ID of the notification.
+  --kind: string # The kind of item this is. For notifications, this is always storage#notification. (default: storage#notification)
+  --object-name-prefix: string # If present, only apply this notification configuration to object names that begin with this prefix.
+  --payload-format: string # The desired content of the Payload. (default: JSON_API_V1)
+  --selfLink: string # The canonical URL of this notification.
+  --topic: string # The Cloud PubSub topic to which this subscription publishes. Formatted as: '//pubsub.googleapis.com/projects/{project-identifier}/topics/{my-topic}'
+]: any -> record<custom_attributes: record, etag: string, event_types: list<string>, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/notificationConfigs" $qp)
+  let body = {custom_attributes: $custom_attributes, etag: $etag, event_types: $event_types, id: $id, kind: $kind, object_name_prefix: $object_name_prefix, payload_format: $payload_format, selfLink: $selfLink, topic: $topic} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Permanently deletes a notification subscription.
+#
+# DELETE /b/{bucket}/notificationConfigs/{notification}
+# operationId: storage.notifications.delete
+export def "b-notification-configs storagenotificationsdelete" [
+  bucket: string
+  notification: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/notificationConfigs/($notification)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# View a notification configuration.
+#
+# GET /b/{bucket}/notificationConfigs/{notification}
+# operationId: storage.notifications.get
+export def "b-notification-configs storagenotificationsget" [
+  bucket: string
+  notification: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+]: nothing -> record<custom_attributes: record, etag: string, event_types: list<string>, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/notificationConfigs/($notification)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves a list of objects matching the criteria.
+#
+# GET /b/{bucket}/o
+# operationId: storage.objects.list
+export def "b-o storageobjectslist" [
+  bucket: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --delimiter: string # Returns results in a directory-like mode. items will contain only objects whose names, aside from the prefix, do not contain delimiter. Objects whose names, aside from the prefix, contain delimiter will have their name, truncated after the delimiter, returned in prefixes. Duplicate prefixes are omitted.
+  --endOffset: string # Filter results to objects whose names are lexicographically before endOffset. If startOffset is also set, the objects listed will have names between startOffset (inclusive) and endOffset (exclusive).
+  --includeTrailingDelimiter: oneof<nothing, bool> # If true, objects that end in exactly one instance of delimiter will have their metadata included in items in addition to prefixes.
+  --matchGlob: string # Filter results to objects and prefixes that match this glob pattern.
+  --maxResults: int # Maximum number of items plus prefixes to return in a single page of responses. As duplicate prefixes are omitted, fewer total results may be returned than requested. The service will use this parameter or 1,000 items, whichever is smaller.
+  --pageToken: string # A previously-returned page token representing part of the larger set of results to view.
+  --prefix: string # Filter results to objects whose names begin with this prefix.
+  --projection: string@projection-completer # Set of properties to return. Defaults to noAcl.
+  --startOffset: string # Filter results to objects whose names are lexicographically equal to or after startOffset. If endOffset is also set, the objects listed will have names between startOffset (inclusive) and endOffset (exclusive).
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+  --versions: oneof<nothing, bool> # If true, lists all versions of an object as distinct results. The default is false. For more information, see Object Versioning.
+]: nothing -> record<items: table<acl: list, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, kind: string, nextPageToken: string, prefixes: list<string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "endOffset" $endOffset "scalar") (serialize-qp "includeTrailingDelimiter" $includeTrailingDelimiter "scalar") (serialize-qp "matchGlob" $matchGlob "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "startOffset" $startOffset "scalar") (serialize-qp "userProject" $userProject "scalar") (serialize-qp "versions" $versions "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/o" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Stores a new object and metadata.
+#
+# POST /b/{bucket}/o
+# operationId: storage.objects.insert
+export def "b-o storageobjectsinsert" [
+  bucket: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --contentEncoding: string # If set, sets the contentEncoding property of the final object to this value. Setting this parameter is equivalent to setting the contentEncoding metadata property. This can be useful when uploading an object with uploadType=media to indicate the encoding of the content being uploaded.
+  --ifGenerationMatch: string # Makes the operation conditional on whether the object's current generation matches the given value. Setting to 0 makes the operation succeed only if there are no live versions of the object.
+  --ifGenerationNotMatch: string # Makes the operation conditional on whether the object's current generation does not match the given value. If no live object exists, the precondition fails. Setting to 0 makes the operation succeed only if there is a live version of the object.
+  --ifMetagenerationMatch: string # Makes the operation conditional on whether the object's current metageneration matches the given value.
+  --ifMetagenerationNotMatch: string # Makes the operation conditional on whether the object's current metageneration does not match the given value.
+  --kmsKeyName: string # Resource name of the Cloud KMS key, of the form projects/my-project/locations/global/keyRings/my-kr/cryptoKeys/my-key, that will be used to encrypt the object. Overrides the object metadata's kms_key_name value, if any.
+  --name: string # Name of the object. Required when the object metadata is not otherwise provided. Overrides the object metadata's name value, if any. For information about how to URL encode object names to be path safe, see Encoding URI Path Parts.
+  --predefinedAcl: string@predefinedAcl-completer-1 # Apply a predefined set of access controls to this object.
+  --projection: string@projection-completer # Set of properties to return. Defaults to noAcl, unless the object resource specifies the acl property, when it defaults to full.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+  --body: record
+]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "contentEncoding" $contentEncoding "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifGenerationNotMatch" $ifGenerationNotMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "kmsKeyName" $kmsKeyName "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "predefinedAcl" $predefinedAcl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/o" $qp)
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
+}
+
+# Watch for changes on all objects in a bucket.
+#
+# POST /b/{bucket}/o/watch
+# operationId: storage.objects.watchAll
+export def "b-o-watch storageobjectswatchAll" [
+  bucket: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --delimiter: string # Returns results in a directory-like mode. items will contain only objects whose names, aside from the prefix, do not contain delimiter. Objects whose names, aside from the prefix, contain delimiter will have their name, truncated after the delimiter, returned in prefixes. Duplicate prefixes are omitted.
+  --endOffset: string # Filter results to objects whose names are lexicographically before endOffset. If startOffset is also set, the objects listed will have names between startOffset (inclusive) and endOffset (exclusive).
+  --includeTrailingDelimiter: oneof<nothing, bool> # If true, objects that end in exactly one instance of delimiter will have their metadata included in items in addition to prefixes.
+  --maxResults: int # Maximum number of items plus prefixes to return in a single page of responses. As duplicate prefixes are omitted, fewer total results may be returned than requested. The service will use this parameter or 1,000 items, whichever is smaller.
+  --pageToken: string # A previously-returned page token representing part of the larger set of results to view.
+  --prefix: string # Filter results to objects whose names begin with this prefix.
+  --projection: string@projection-completer # Set of properties to return. Defaults to noAcl.
+  --startOffset: string # Filter results to objects whose names are lexicographically equal to or after startOffset. If endOffset is also set, the objects listed will have names between startOffset (inclusive) and endOffset (exclusive).
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+  --versions: oneof<nothing, bool> # If true, lists all versions of an object as distinct results. The default is false. For more information, see Object Versioning.
+  --address: string # The address where notifications are delivered for this channel.
+  --expiration: string # Date and time of notification channel expiration, expressed as a Unix timestamp, in milliseconds. Optional. (format: int64)
+  --id: string # A UUID or similar unique string that identifies this channel.
+  --kind: string # Identifies this as a notification channel used to watch for changes to a resource, which is "api#channel". (default: api#channel)
+  --params: record # Additional parameters controlling delivery channel behavior. Optional.
+  --payload: oneof<nothing, bool> # A Boolean value to indicate whether payload is wanted. Optional.
+  --resourceId: string # An opaque ID that identifies the resource being watched on this channel. Stable across different API versions.
+  --resourceUri: string # A version-specific identifier for the watched resource.
+  --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional.
+  --type: string # The type of delivery mechanism used for this channel.
+]: any -> record<address: string, expiration: string, id: string, kind: string, params: record, payload: bool, resourceId: string, resourceUri: string, token: string, type: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "endOffset" $endOffset "scalar") (serialize-qp "includeTrailingDelimiter" $includeTrailingDelimiter "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "startOffset" $startOffset "scalar") (serialize-qp "userProject" $userProject "scalar") (serialize-qp "versions" $versions "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/o/watch" $qp)
+  let body = {address: $address, expiration: $expiration, id: $id, kind: $kind, params: $params, payload: $payload, resourceId: $resourceId, resourceUri: $resourceUri, token: $body_token, type: $type} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Deletes an object and its metadata. Deletions are permanent if versioning is not enabled for the bucket, or if the generation parameter is used.
+#
+# DELETE /b/{bucket}/o/{object}
+# operationId: storage.objects.delete
+export def "b-o storageobjectsdelete" [
+  bucket: string
+  object: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --generation: string # If present, permanently deletes a specific revision of this object (as opposed to the latest version, the default).
+  --ifGenerationMatch: string # Makes the operation conditional on whether the object's current generation matches the given value. Setting to 0 makes the operation succeed only if there are no live versions of the object.
+  --ifGenerationNotMatch: string # Makes the operation conditional on whether the object's current generation does not match the given value. If no live object exists, the precondition fails. Setting to 0 makes the operation succeed only if there is a live version of the object.
+  --ifMetagenerationMatch: string # Makes the operation conditional on whether the object's current metageneration matches the given value.
+  --ifMetagenerationNotMatch: string # Makes the operation conditional on whether the object's current metageneration does not match the given value.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifGenerationNotMatch" $ifGenerationNotMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/o/($object)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves an object or its metadata.
+#
+# GET /b/{bucket}/o/{object}
+# operationId: storage.objects.get
+export def "b-o storageobjectsget" [
+  bucket: string
+  object: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
+  --ifGenerationMatch: string # Makes the operation conditional on whether the object's current generation matches the given value. Setting to 0 makes the operation succeed only if there are no live versions of the object.
+  --ifGenerationNotMatch: string # Makes the operation conditional on whether the object's current generation does not match the given value. If no live object exists, the precondition fails. Setting to 0 makes the operation succeed only if there is a live version of the object.
+  --ifMetagenerationMatch: string # Makes the operation conditional on whether the object's current metageneration matches the given value.
+  --ifMetagenerationNotMatch: string # Makes the operation conditional on whether the object's current metageneration does not match the given value.
+  --projection: string@projection-completer # Set of properties to return. Defaults to noAcl.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+]: nothing -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifGenerationNotMatch" $ifGenerationNotMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/o/($object)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Patches an object's metadata.
+#
+# PATCH /b/{bucket}/o/{object}
+# operationId: storage.objects.patch
+# --acl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
+# --customerEncryption shape: {encryptionAlgorithm?: string, keySha256?: string}
+# --owner shape: {entity?: string, entityId?: string}
+export def "b-o storageobjectspatch" [
+  bucket: string
+  object: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
+  --ifGenerationMatch: string # Makes the operation conditional on whether the object's current generation matches the given value. Setting to 0 makes the operation succeed only if there are no live versions of the object.
+  --ifGenerationNotMatch: string # Makes the operation conditional on whether the object's current generation does not match the given value. If no live object exists, the precondition fails. Setting to 0 makes the operation succeed only if there is a live version of the object.
+  --ifMetagenerationMatch: string # Makes the operation conditional on whether the object's current metageneration matches the given value.
+  --ifMetagenerationNotMatch: string # Makes the operation conditional on whether the object's current metageneration does not match the given value.
+  --predefinedAcl: string@predefinedAcl-completer-1 # Apply a predefined set of access controls to this object.
+  --projection: string@projection-completer # Set of properties to return. Defaults to full.
+  --userProject: string # The project to be billed for this request, for Requester Pays buckets.
+  --acl: list # Access controls on the object. — item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
+  --body-bucket: string # The name of the bucket containing this object.
+  --cacheControl: string # Cache-Control directive for the object data. If omitted, and the object is accessible to all anonymous users, the default will be public, max-age=3600.
+  --componentCount: int # Number of underlying components that make up this object. Components are accumulated by compose operations. (format: int32)
+  --contentDisposition: string # Content-Disposition of the object data.
+  --contentEncoding: string # Content-Encoding of the object data.
+  --contentLanguage: string # Content-Language of the object data.
+  --contentType: string # Content-Type of the object data. If an object is stored without a Content-Type, it is served as application/octet-stream.
+  --crc32c: string # CRC32c checksum, as described in RFC 4960, Appendix B; encoded using base64 in big-endian byte order. For more information about using the CRC32c checksum, see Hashes and ETags: Best Practices.
+  --customTime: string # A timestamp in RFC 3339 format specified by the user for an object. (format: date-time)
+  --customerEncryption: record # Metadata of customer-supplied encryption key, if the object is encrypted by such a key. — shape: {encryptionAlgorithm?: string, keySha256?: string}
+  --etag: string # HTTP 1.1 Entity tag for the object.
+  --eventBasedHold: oneof<nothing, bool> # Whether an object is under event-based hold. Event-based hold is a way to retain objects until an event occurs, which is signified by the hold's release (i.e. this value is set to false). After being released (set to false), such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is the loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false.
+  --generation: string # The content generation of this object. Used for object versioning. (format: int64)
+  --id: string # The ID of the object, including the bucket name, object name, and generation number.
+  --kind: string # The kind of item this is. For objects, this is always storage#object. (default: storage#object)
+  --kmsKeyName: string # Not currently supported. Specifying the parameter causes the request to fail with status code 400 - Bad Request.
+  --md5Hash: string # MD5 hash of the data; encoded using base64. For more information about using the MD5 hash, see Hashes and ETags: Best Practices.
+  --mediaLink: string # Media download link.
+  --metadata: record # User-provided metadata, in key/value pairs.
+  --metageneration: string # The version of the metadata for this object at this generation. Used for preconditions and for detecting changes in metadata. A metageneration number is only meaningful in the context of a particular generation of a particular object. (format: int64)
+  --name: string # The name of the object. Required if not specified by URL parameter.
+  --owner: record # The owner of the object. This will always be the uploader of the object. — shape: {entity?: string, entityId?: string}
+  --retentionExpirationTime: string # A server-determined value that specifies the earliest time that the object's retention period expires. This value is in RFC 3339 format. Note 1: This field is not provided for objects with an active event-based hold, since retention expiration is unknown until the hold is removed. Note 2: This value can be provided even when temporary hold is set (so that the user can reason about policy without having to first unset the temporary hold). (format: date-time)
+  --selfLink: string # The link to this object.
+  --size: string # Content-Length of the data in bytes. (format: uint64)
+  --storageClass: string # Storage class of the object.
+  --temporaryHold: oneof<nothing, bool> # Whether an object is under temporary hold. While this flag is set to true, the object is protected against deletion and overwrites. A common use case of this flag is regulatory investigations where objects need to be retained while the investigation is ongoing. Note that unlike event-based hold, temporary hold does not impact retention expiration time of an object.
+  --timeCreated: string # The creation time of the object in RFC 3339 format. (format: date-time)
+  --timeDeleted: string # The deletion time of the object in RFC 3339 format. Will be returned if and only if this version of the object has been deleted. (format: date-time)
+  --timeStorageClassUpdated: string # The time at which the object's storage class was last changed. When the object is initially created, it will be set to timeCreated. (format: date-time)
+  --updated: string # The modification time of the object metadata in RFC 3339 format. Set initially to object creation time and then updated whenever any metadata of the object changes. This includes changes made by a requester, such as modifying custom metadata, as well as changes made by Cloud Storage on behalf of a requester, such as changing the storage class based on an Object Lifecycle Configuration. (format: date-time)
+]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifGenerationNotMatch" $ifGenerationNotMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "predefinedAcl" $predefinedAcl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/o/($object)" $qp)
+  let body = {acl: $acl, bucket: $body_bucket, cacheControl: $cacheControl, componentCount: $componentCount, contentDisposition: $contentDisposition, contentEncoding: $contentEncoding, contentLanguage: $contentLanguage, contentType: $contentType, crc32c: $crc32c, customTime: $customTime, customerEncryption: $customerEncryption, etag: $etag, eventBasedHold: $eventBasedHold, generation: $generation, id: $id, kind: $kind, kmsKeyName: $kmsKeyName, md5Hash: $md5Hash, mediaLink: $mediaLink, metadata: $metadata, metageneration: $metageneration, name: $name, owner: $owner, retentionExpirationTime: $retentionExpirationTime, selfLink: $selfLink, size: $size, storageClass: $storageClass, temporaryHold: $temporaryHold, timeCreated: $timeCreated, timeDeleted: $timeDeleted, timeStorageClassUpdated: $timeStorageClassUpdated, updated: $updated} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Updates an object's metadata.
+#
+# PUT /b/{bucket}/o/{object}
+# operationId: storage.objects.update
+# --acl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
+# --customerEncryption shape: {encryptionAlgorithm?: string, keySha256?: string}
+# --owner shape: {entity?: string, entityId?: string}
+export def "b-o storageobjectsupdate" [
+  bucket: string
+  object: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
+  --ifGenerationMatch: string # Makes the operation conditional on whether the object's current generation matches the given value. Setting to 0 makes the operation succeed only if there are no live versions of the object.
+  --ifGenerationNotMatch: string # Makes the operation conditional on whether the object's current generation does not match the given value. If no live object exists, the precondition fails. Setting to 0 makes the operation succeed only if there is a live version of the object.
+  --ifMetagenerationMatch: string # Makes the operation conditional on whether the object's current metageneration matches the given value.
+  --ifMetagenerationNotMatch: string # Makes the operation conditional on whether the object's current metageneration does not match the given value.
+  --predefinedAcl: string@predefinedAcl-completer-1 # Apply a predefined set of access controls to this object.
+  --projection: string@projection-completer # Set of properties to return. Defaults to full.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+  --acl: list # Access controls on the object. — item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
+  --body-bucket: string # The name of the bucket containing this object.
+  --cacheControl: string # Cache-Control directive for the object data. If omitted, and the object is accessible to all anonymous users, the default will be public, max-age=3600.
+  --componentCount: int # Number of underlying components that make up this object. Components are accumulated by compose operations. (format: int32)
+  --contentDisposition: string # Content-Disposition of the object data.
+  --contentEncoding: string # Content-Encoding of the object data.
+  --contentLanguage: string # Content-Language of the object data.
+  --contentType: string # Content-Type of the object data. If an object is stored without a Content-Type, it is served as application/octet-stream.
+  --crc32c: string # CRC32c checksum, as described in RFC 4960, Appendix B; encoded using base64 in big-endian byte order. For more information about using the CRC32c checksum, see Hashes and ETags: Best Practices.
+  --customTime: string # A timestamp in RFC 3339 format specified by the user for an object. (format: date-time)
+  --customerEncryption: record # Metadata of customer-supplied encryption key, if the object is encrypted by such a key. — shape: {encryptionAlgorithm?: string, keySha256?: string}
+  --etag: string # HTTP 1.1 Entity tag for the object.
+  --eventBasedHold: oneof<nothing, bool> # Whether an object is under event-based hold. Event-based hold is a way to retain objects until an event occurs, which is signified by the hold's release (i.e. this value is set to false). After being released (set to false), such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is the loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false.
+  --generation: string # The content generation of this object. Used for object versioning. (format: int64)
+  --id: string # The ID of the object, including the bucket name, object name, and generation number.
+  --kind: string # The kind of item this is. For objects, this is always storage#object. (default: storage#object)
+  --kmsKeyName: string # Not currently supported. Specifying the parameter causes the request to fail with status code 400 - Bad Request.
+  --md5Hash: string # MD5 hash of the data; encoded using base64. For more information about using the MD5 hash, see Hashes and ETags: Best Practices.
+  --mediaLink: string # Media download link.
+  --metadata: record # User-provided metadata, in key/value pairs.
+  --metageneration: string # The version of the metadata for this object at this generation. Used for preconditions and for detecting changes in metadata. A metageneration number is only meaningful in the context of a particular generation of a particular object. (format: int64)
+  --name: string # The name of the object. Required if not specified by URL parameter.
+  --owner: record # The owner of the object. This will always be the uploader of the object. — shape: {entity?: string, entityId?: string}
+  --retentionExpirationTime: string # A server-determined value that specifies the earliest time that the object's retention period expires. This value is in RFC 3339 format. Note 1: This field is not provided for objects with an active event-based hold, since retention expiration is unknown until the hold is removed. Note 2: This value can be provided even when temporary hold is set (so that the user can reason about policy without having to first unset the temporary hold). (format: date-time)
+  --selfLink: string # The link to this object.
+  --size: string # Content-Length of the data in bytes. (format: uint64)
+  --storageClass: string # Storage class of the object.
+  --temporaryHold: oneof<nothing, bool> # Whether an object is under temporary hold. While this flag is set to true, the object is protected against deletion and overwrites. A common use case of this flag is regulatory investigations where objects need to be retained while the investigation is ongoing. Note that unlike event-based hold, temporary hold does not impact retention expiration time of an object.
+  --timeCreated: string # The creation time of the object in RFC 3339 format. (format: date-time)
+  --timeDeleted: string # The deletion time of the object in RFC 3339 format. Will be returned if and only if this version of the object has been deleted. (format: date-time)
+  --timeStorageClassUpdated: string # The time at which the object's storage class was last changed. When the object is initially created, it will be set to timeCreated. (format: date-time)
+  --updated: string # The modification time of the object metadata in RFC 3339 format. Set initially to object creation time and then updated whenever any metadata of the object changes. This includes changes made by a requester, such as modifying custom metadata, as well as changes made by Cloud Storage on behalf of a requester, such as changing the storage class based on an Object Lifecycle Configuration. (format: date-time)
+]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifGenerationNotMatch" $ifGenerationNotMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "predefinedAcl" $predefinedAcl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/o/($object)" $qp)
+  let body = {acl: $acl, bucket: $body_bucket, cacheControl: $cacheControl, componentCount: $componentCount, contentDisposition: $contentDisposition, contentEncoding: $contentEncoding, contentLanguage: $contentLanguage, contentType: $contentType, crc32c: $crc32c, customTime: $customTime, customerEncryption: $customerEncryption, etag: $etag, eventBasedHold: $eventBasedHold, generation: $generation, id: $id, kind: $kind, kmsKeyName: $kmsKeyName, md5Hash: $md5Hash, mediaLink: $mediaLink, metadata: $metadata, metageneration: $metageneration, name: $name, owner: $owner, retentionExpirationTime: $retentionExpirationTime, selfLink: $selfLink, size: $size, storageClass: $storageClass, temporaryHold: $temporaryHold, timeCreated: $timeCreated, timeDeleted: $timeDeleted, timeStorageClassUpdated: $timeStorageClassUpdated, updated: $updated} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieves ACL entries on the specified object.
+#
+# GET /b/{bucket}/o/{object}/acl
+# operationId: storage.objectAccessControls.list
+export def "b-o-acl storageobjectAccessControlslist" [
+  bucket: string
+  object: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+]: nothing -> record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, kind: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/o/($object)/acl" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a new ACL entry on the specified object.
+#
+# POST /b/{bucket}/o/{object}/acl
+# operationId: storage.objectAccessControls.insert
+# --projectTeam shape: {projectNumber?: string, team?: string}
+export def "b-o-acl storageobjectAccessControlsinsert" [
+  bucket: string
+  object: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+  --body-bucket: string # The name of the bucket.
+  --domain: string # The domain associated with the entity, if any.
+  --email: string # The email address associated with the entity, if any.
+  --entity: string # The entity holding the permission, in one of the following forms:  - user-userId  - user-email  - group-groupId  - group-email  - domain-domain  - project-team-projectId  - allUsers  - allAuthenticatedUsers Examples:  - The user liz@example.com would be user-liz@example.com.  - The group example@googlegroups.com would be group-example@googlegroups.com.  - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com.
+  --entityId: string # The ID for the entity, if any.
+  --etag: string # HTTP 1.1 Entity tag for the access-control entry.
+  --generation: string # The content generation of the object, if applied to an object. (format: int64)
+  --id: string # The ID of the access-control entry.
+  --kind: string # The kind of item this is. For object access control entries, this is always storage#objectAccessControl. (default: storage#objectAccessControl)
+  --body-object: string # The name of the object, if applied to an object.
+  --projectTeam: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
+  --role: string # The access permission for the entity.
+  --selfLink: string # The link to this access-control entry.
+]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/o/($object)/acl" $qp)
+  let body = {bucket: $body_bucket, domain: $domain, email: $email, entity: $entity, entityId: $entityId, etag: $etag, generation: $generation, id: $id, kind: $kind, object: $body_object, projectTeam: $projectTeam, role: $role, selfLink: $selfLink} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Permanently deletes the ACL entry for the specified entity on the specified object.
+#
+# DELETE /b/{bucket}/o/{object}/acl/{entity}
+# operationId: storage.objectAccessControls.delete
+export def "b-o-acl storageobjectAccessControlsdelete" [
+  bucket: string
+  object: string
+  entity: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/o/($object)/acl/($entity)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Returns the ACL entry for the specified entity on the specified object.
+#
+# GET /b/{bucket}/o/{object}/acl/{entity}
+# operationId: storage.objectAccessControls.get
+export def "b-o-acl storageobjectAccessControlsget" [
+  bucket: string
+  object: string
+  entity: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+]: nothing -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/o/($object)/acl/($entity)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Patches an ACL entry on the specified object.
+#
+# PATCH /b/{bucket}/o/{object}/acl/{entity}
+# operationId: storage.objectAccessControls.patch
+# --projectTeam shape: {projectNumber?: string, team?: string}
+export def "b-o-acl storageobjectAccessControlspatch" [
+  bucket: string
+  object: string
+  entity: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+  --body-bucket: string # The name of the bucket.
+  --domain: string # The domain associated with the entity, if any.
+  --email: string # The email address associated with the entity, if any.
+  --body-entity: string # The entity holding the permission, in one of the following forms:  - user-userId  - user-email  - group-groupId  - group-email  - domain-domain  - project-team-projectId  - allUsers  - allAuthenticatedUsers Examples:  - The user liz@example.com would be user-liz@example.com.  - The group example@googlegroups.com would be group-example@googlegroups.com.  - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com.
+  --entityId: string # The ID for the entity, if any.
+  --etag: string # HTTP 1.1 Entity tag for the access-control entry.
+  --generation: string # The content generation of the object, if applied to an object. (format: int64)
+  --id: string # The ID of the access-control entry.
+  --kind: string # The kind of item this is. For object access control entries, this is always storage#objectAccessControl. (default: storage#objectAccessControl)
+  --body-object: string # The name of the object, if applied to an object.
+  --projectTeam: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
+  --role: string # The access permission for the entity.
+  --selfLink: string # The link to this access-control entry.
+]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/o/($object)/acl/($entity)" $qp)
+  let body = {bucket: $body_bucket, domain: $domain, email: $email, entity: $body_entity, entityId: $entityId, etag: $etag, generation: $generation, id: $id, kind: $kind, object: $body_object, projectTeam: $projectTeam, role: $role, selfLink: $selfLink} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Updates an ACL entry on the specified object.
+#
+# PUT /b/{bucket}/o/{object}/acl/{entity}
+# operationId: storage.objectAccessControls.update
+# --projectTeam shape: {projectNumber?: string, team?: string}
+export def "b-o-acl storageobjectAccessControlsupdate" [
+  bucket: string
+  object: string
+  entity: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+  --body-bucket: string # The name of the bucket.
+  --domain: string # The domain associated with the entity, if any.
+  --email: string # The email address associated with the entity, if any.
+  --body-entity: string # The entity holding the permission, in one of the following forms:  - user-userId  - user-email  - group-groupId  - group-email  - domain-domain  - project-team-projectId  - allUsers  - allAuthenticatedUsers Examples:  - The user liz@example.com would be user-liz@example.com.  - The group example@googlegroups.com would be group-example@googlegroups.com.  - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com.
+  --entityId: string # The ID for the entity, if any.
+  --etag: string # HTTP 1.1 Entity tag for the access-control entry.
+  --generation: string # The content generation of the object, if applied to an object. (format: int64)
+  --id: string # The ID of the access-control entry.
+  --kind: string # The kind of item this is. For object access control entries, this is always storage#objectAccessControl. (default: storage#objectAccessControl)
+  --body-object: string # The name of the object, if applied to an object.
+  --projectTeam: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
+  --role: string # The access permission for the entity.
+  --selfLink: string # The link to this access-control entry.
+]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/o/($object)/acl/($entity)" $qp)
+  let body = {bucket: $body_bucket, domain: $domain, email: $email, entity: $body_entity, entityId: $entityId, etag: $etag, generation: $generation, id: $id, kind: $kind, object: $body_object, projectTeam: $projectTeam, role: $role, selfLink: $selfLink} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Returns an IAM policy for the specified object.
+#
+# GET /b/{bucket}/o/{object}/iam
+# operationId: storage.objects.getIamPolicy
+export def "b-o-iam storageobjectsgetIamPolicy" [
+  bucket: string
+  object: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+]: nothing -> record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/o/($object)/iam" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates an IAM policy for the specified object.
+#
+# PUT /b/{bucket}/o/{object}/iam
+# operationId: storage.objects.setIamPolicy
+# --bindings item shape: {condition?: record, members?: list, role?: string}
+export def "b-o-iam storageobjectssetIamPolicy" [
+  bucket: string
+  object: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+  --bindings: list # An association between a role, which comes with a set of permissions, and members who may assume that role. — item shape: {condition?: record, members?: list, role?: string}
+  --etag: string # HTTP 1.1  Entity tag for the policy. (format: byte)
+  --kind: string # The kind of item this is. For policies, this is always storage#policy. This field is ignored on input. (default: storage#policy)
+  --resourceId: string # The ID of the resource to which this policy belongs. Will be of the form projects/_/buckets/bucket for buckets, and projects/_/buckets/bucket/objects/object for objects. A specific generation may be specified by appending #generationNumber to the end of the object name, e.g. projects/_/buckets/my-bucket/objects/data.txt#17. The current generation can be denoted with #0. This field is ignored on input.
+  --version: int # The IAM policy format version. (format: int32)
+]: any -> record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/o/($object)/iam" $qp)
+  let body = {bindings: $bindings, etag: $etag, kind: $kind, resourceId: $resourceId, version: $version} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Tests a set of permissions on the given object to see which, if any, are held by the caller.
+#
+# GET /b/{bucket}/o/{object}/iam/testPermissions
+# operationId: storage.objects.testIamPermissions
+export def "b-o-iam-test-permissions storageobjectstestIamPermissions" [
+  bucket: string
+  object: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --permissions: list # Permissions to test.
+  --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+]: nothing -> record<kind: string, permissions: list<string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "permissions" $permissions "multi") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($bucket)/o/($object)/iam/testPermissions" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Concatenates a list of existing objects into a new object in the same bucket.
+#
+# POST /b/{destinationBucket}/o/{destinationObject}/compose
+# operationId: storage.objects.compose
+# --destination shape: {acl?: list, bucket?: string, cacheControl?: string, componentCount?: int, contentDisposition?: string, contentEncoding?: string, contentLanguage?: string, contentType?: string, crc32c?: string, customTime?: string, customerEncryption?: record, etag?: string, eventBasedHold?: bool, generation?: string, id?: string, kind?: string, kmsKeyName?: string, md5Hash?: string, mediaLink?: string, metadata?: record, metageneration?: string, name?: string, owner?: record, retentionExpirationTime?: string, selfLink?: string, size?: string, storageClass?: string, temporaryHold?: bool, timeCreated?: string, timeDeleted?: string, timeStorageClassUpdated?: string, updated?: string}
+# --sourceObjects item shape: {generation?: string, name?: string, objectPreconditions?: record}
+export def "b-o-compose storageobjectscompose" [
+  destinationBucket: string
+  destinationObject: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --destinationPredefinedAcl: string@destinationPredefinedAcl-completer # Apply a predefined set of access controls to the destination object.
+  --ifGenerationMatch: string # Makes the operation conditional on whether the object's current generation matches the given value. Setting to 0 makes the operation succeed only if there are no live versions of the object.
+  --ifMetagenerationMatch: string # Makes the operation conditional on whether the object's current metageneration matches the given value.
+  --kmsKeyName: string # Resource name of the Cloud KMS key, of the form projects/my-project/locations/global/keyRings/my-kr/cryptoKeys/my-key, that will be used to encrypt the object. Overrides the object metadata's kms_key_name value, if any.
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+  --destination: record # An object. — shape: {acl?: list, bucket?: string, cacheControl?: string, componentCount?: int, contentDisposition?: string, contentEncoding?: string, contentLanguage?: string, contentType?: string, crc32c?: string, customTime?: string, customerEncryption?: record, etag?: string, eventBasedHold?: bool, generation?: string, id?: string, kind?: string, kmsKeyName?: string, md5Hash?: string, mediaLink?: string, metadata?: record, metageneration?: string, name?: string, owner?: record, retentionExpirationTime?: string, selfLink?: string, size?: string, storageClass?: string, temporaryHold?: bool, timeCreated?: string, timeDeleted?: string, timeStorageClassUpdated?: string, updated?: string}
+  --kind: string # The kind of item this is. (default: storage#composeRequest)
+  --sourceObjects: list # The list of source objects that will be concatenated into a single object. — item shape: {generation?: string, name?: string, objectPreconditions?: record}
+]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "destinationPredefinedAcl" $destinationPredefinedAcl "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "kmsKeyName" $kmsKeyName "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($destinationBucket)/o/($destinationObject)/compose" $qp)
+  let body = {destination: $destination, kind: $kind, sourceObjects: $sourceObjects} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Copies a source object to a destination object. Optionally overrides metadata.
+#
+# POST /b/{sourceBucket}/o/{sourceObject}/copyTo/b/{destinationBucket}/o/{destinationObject}
+# operationId: storage.objects.copy
+# --acl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
+# --customerEncryption shape: {encryptionAlgorithm?: string, keySha256?: string}
+# --owner shape: {entity?: string, entityId?: string}
+export def "b-o-copy-to-b-o storageobjectscopy" [
+  sourceBucket: string
+  sourceObject: string
+  destinationBucket: string
+  destinationObject: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --destinationKmsKeyName: string # Resource name of the Cloud KMS key, of the form projects/my-project/locations/global/keyRings/my-kr/cryptoKeys/my-key, that will be used to encrypt the object. Overrides the object metadata's kms_key_name value, if any.
+  --destinationPredefinedAcl: string@destinationPredefinedAcl-completer # Apply a predefined set of access controls to the destination object.
+  --ifGenerationMatch: string # Makes the operation conditional on whether the destination object's current generation matches the given value. Setting to 0 makes the operation succeed only if there are no live versions of the object.
+  --ifGenerationNotMatch: string # Makes the operation conditional on whether the destination object's current generation does not match the given value. If no live object exists, the precondition fails. Setting to 0 makes the operation succeed only if there is a live version of the object.
+  --ifMetagenerationMatch: string # Makes the operation conditional on whether the destination object's current metageneration matches the given value.
+  --ifMetagenerationNotMatch: string # Makes the operation conditional on whether the destination object's current metageneration does not match the given value.
+  --ifSourceGenerationMatch: string # Makes the operation conditional on whether the source object's current generation matches the given value.
+  --ifSourceGenerationNotMatch: string # Makes the operation conditional on whether the source object's current generation does not match the given value.
+  --ifSourceMetagenerationMatch: string # Makes the operation conditional on whether the source object's current metageneration matches the given value.
+  --ifSourceMetagenerationNotMatch: string # Makes the operation conditional on whether the source object's current metageneration does not match the given value.
+  --projection: string@projection-completer # Set of properties to return. Defaults to noAcl, unless the object resource specifies the acl property, when it defaults to full.
+  --sourceGeneration: string # If present, selects a specific revision of the source object (as opposed to the latest version, the default).
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+  --acl: list # Access controls on the object. — item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
+  --bucket: string # The name of the bucket containing this object.
+  --cacheControl: string # Cache-Control directive for the object data. If omitted, and the object is accessible to all anonymous users, the default will be public, max-age=3600.
+  --componentCount: int # Number of underlying components that make up this object. Components are accumulated by compose operations. (format: int32)
+  --contentDisposition: string # Content-Disposition of the object data.
+  --contentEncoding: string # Content-Encoding of the object data.
+  --contentLanguage: string # Content-Language of the object data.
+  --contentType: string # Content-Type of the object data. If an object is stored without a Content-Type, it is served as application/octet-stream.
+  --crc32c: string # CRC32c checksum, as described in RFC 4960, Appendix B; encoded using base64 in big-endian byte order. For more information about using the CRC32c checksum, see Hashes and ETags: Best Practices.
+  --customTime: string # A timestamp in RFC 3339 format specified by the user for an object. (format: date-time)
+  --customerEncryption: record # Metadata of customer-supplied encryption key, if the object is encrypted by such a key. — shape: {encryptionAlgorithm?: string, keySha256?: string}
+  --etag: string # HTTP 1.1 Entity tag for the object.
+  --eventBasedHold: oneof<nothing, bool> # Whether an object is under event-based hold. Event-based hold is a way to retain objects until an event occurs, which is signified by the hold's release (i.e. this value is set to false). After being released (set to false), such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is the loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false.
+  --generation: string # The content generation of this object. Used for object versioning. (format: int64)
+  --id: string # The ID of the object, including the bucket name, object name, and generation number.
+  --kind: string # The kind of item this is. For objects, this is always storage#object. (default: storage#object)
+  --kmsKeyName: string # Not currently supported. Specifying the parameter causes the request to fail with status code 400 - Bad Request.
+  --md5Hash: string # MD5 hash of the data; encoded using base64. For more information about using the MD5 hash, see Hashes and ETags: Best Practices.
+  --mediaLink: string # Media download link.
+  --metadata: record # User-provided metadata, in key/value pairs.
+  --metageneration: string # The version of the metadata for this object at this generation. Used for preconditions and for detecting changes in metadata. A metageneration number is only meaningful in the context of a particular generation of a particular object. (format: int64)
+  --name: string # The name of the object. Required if not specified by URL parameter.
+  --owner: record # The owner of the object. This will always be the uploader of the object. — shape: {entity?: string, entityId?: string}
+  --retentionExpirationTime: string # A server-determined value that specifies the earliest time that the object's retention period expires. This value is in RFC 3339 format. Note 1: This field is not provided for objects with an active event-based hold, since retention expiration is unknown until the hold is removed. Note 2: This value can be provided even when temporary hold is set (so that the user can reason about policy without having to first unset the temporary hold). (format: date-time)
+  --selfLink: string # The link to this object.
+  --size: string # Content-Length of the data in bytes. (format: uint64)
+  --storageClass: string # Storage class of the object.
+  --temporaryHold: oneof<nothing, bool> # Whether an object is under temporary hold. While this flag is set to true, the object is protected against deletion and overwrites. A common use case of this flag is regulatory investigations where objects need to be retained while the investigation is ongoing. Note that unlike event-based hold, temporary hold does not impact retention expiration time of an object.
+  --timeCreated: string # The creation time of the object in RFC 3339 format. (format: date-time)
+  --timeDeleted: string # The deletion time of the object in RFC 3339 format. Will be returned if and only if this version of the object has been deleted. (format: date-time)
+  --timeStorageClassUpdated: string # The time at which the object's storage class was last changed. When the object is initially created, it will be set to timeCreated. (format: date-time)
+  --updated: string # The modification time of the object metadata in RFC 3339 format. Set initially to object creation time and then updated whenever any metadata of the object changes. This includes changes made by a requester, such as modifying custom metadata, as well as changes made by Cloud Storage on behalf of a requester, such as changing the storage class based on an Object Lifecycle Configuration. (format: date-time)
+]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "destinationKmsKeyName" $destinationKmsKeyName "scalar") (serialize-qp "destinationPredefinedAcl" $destinationPredefinedAcl "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifGenerationNotMatch" $ifGenerationNotMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "ifSourceGenerationMatch" $ifSourceGenerationMatch "scalar") (serialize-qp "ifSourceGenerationNotMatch" $ifSourceGenerationNotMatch "scalar") (serialize-qp "ifSourceMetagenerationMatch" $ifSourceMetagenerationMatch "scalar") (serialize-qp "ifSourceMetagenerationNotMatch" $ifSourceMetagenerationNotMatch "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "sourceGeneration" $sourceGeneration "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($sourceBucket)/o/($sourceObject)/copyTo/b/($destinationBucket)/o/($destinationObject)" $qp)
+  let body = {acl: $acl, bucket: $bucket, cacheControl: $cacheControl, componentCount: $componentCount, contentDisposition: $contentDisposition, contentEncoding: $contentEncoding, contentLanguage: $contentLanguage, contentType: $contentType, crc32c: $crc32c, customTime: $customTime, customerEncryption: $customerEncryption, etag: $etag, eventBasedHold: $eventBasedHold, generation: $generation, id: $id, kind: $kind, kmsKeyName: $kmsKeyName, md5Hash: $md5Hash, mediaLink: $mediaLink, metadata: $metadata, metageneration: $metageneration, name: $name, owner: $owner, retentionExpirationTime: $retentionExpirationTime, selfLink: $selfLink, size: $size, storageClass: $storageClass, temporaryHold: $temporaryHold, timeCreated: $timeCreated, timeDeleted: $timeDeleted, timeStorageClassUpdated: $timeStorageClassUpdated, updated: $updated} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Rewrites a source object to a destination object. Optionally overrides metadata.
+#
+# POST /b/{sourceBucket}/o/{sourceObject}/rewriteTo/b/{destinationBucket}/o/{destinationObject}
+# operationId: storage.objects.rewrite
+# --acl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
+# --customerEncryption shape: {encryptionAlgorithm?: string, keySha256?: string}
+# --owner shape: {entity?: string, entityId?: string}
+export def "b-o-rewrite-to-b-o storageobjectsrewrite" [
+  sourceBucket: string
+  sourceObject: string
+  destinationBucket: string
+  destinationObject: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --destinationKmsKeyName: string # Resource name of the Cloud KMS key, of the form projects/my-project/locations/global/keyRings/my-kr/cryptoKeys/my-key, that will be used to encrypt the object. Overrides the object metadata's kms_key_name value, if any.
+  --destinationPredefinedAcl: string@destinationPredefinedAcl-completer # Apply a predefined set of access controls to the destination object.
+  --ifGenerationMatch: string # Makes the operation conditional on whether the object's current generation matches the given value. Setting to 0 makes the operation succeed only if there are no live versions of the object.
+  --ifGenerationNotMatch: string # Makes the operation conditional on whether the object's current generation does not match the given value. If no live object exists, the precondition fails. Setting to 0 makes the operation succeed only if there is a live version of the object.
+  --ifMetagenerationMatch: string # Makes the operation conditional on whether the destination object's current metageneration matches the given value.
+  --ifMetagenerationNotMatch: string # Makes the operation conditional on whether the destination object's current metageneration does not match the given value.
+  --ifSourceGenerationMatch: string # Makes the operation conditional on whether the source object's current generation matches the given value.
+  --ifSourceGenerationNotMatch: string # Makes the operation conditional on whether the source object's current generation does not match the given value.
+  --ifSourceMetagenerationMatch: string # Makes the operation conditional on whether the source object's current metageneration matches the given value.
+  --ifSourceMetagenerationNotMatch: string # Makes the operation conditional on whether the source object's current metageneration does not match the given value.
+  --maxBytesRewrittenPerCall: string # The maximum number of bytes that will be rewritten per rewrite request. Most callers shouldn't need to specify this parameter - it is primarily in place to support testing. If specified the value must be an integral multiple of 1 MiB (1048576). Also, this only applies to requests where the source and destination span locations and/or storage classes. Finally, this value must not change across rewrite calls else you'll get an error that the rewriteToken is invalid.
+  --projection: string@projection-completer # Set of properties to return. Defaults to noAcl, unless the object resource specifies the acl property, when it defaults to full.
+  --rewriteToken: string # Include this field (from the previous rewrite response) on each rewrite request after the first one, until the rewrite response 'done' flag is true. Calls that provide a rewriteToken can omit all other request fields, but if included those fields must match the values provided in the first rewrite request.
+  --sourceGeneration: string # If present, selects a specific revision of the source object (as opposed to the latest version, the default).
+  --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
+  --acl: list # Access controls on the object. — item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
+  --bucket: string # The name of the bucket containing this object.
+  --cacheControl: string # Cache-Control directive for the object data. If omitted, and the object is accessible to all anonymous users, the default will be public, max-age=3600.
+  --componentCount: int # Number of underlying components that make up this object. Components are accumulated by compose operations. (format: int32)
+  --contentDisposition: string # Content-Disposition of the object data.
+  --contentEncoding: string # Content-Encoding of the object data.
+  --contentLanguage: string # Content-Language of the object data.
+  --contentType: string # Content-Type of the object data. If an object is stored without a Content-Type, it is served as application/octet-stream.
+  --crc32c: string # CRC32c checksum, as described in RFC 4960, Appendix B; encoded using base64 in big-endian byte order. For more information about using the CRC32c checksum, see Hashes and ETags: Best Practices.
+  --customTime: string # A timestamp in RFC 3339 format specified by the user for an object. (format: date-time)
+  --customerEncryption: record # Metadata of customer-supplied encryption key, if the object is encrypted by such a key. — shape: {encryptionAlgorithm?: string, keySha256?: string}
+  --etag: string # HTTP 1.1 Entity tag for the object.
+  --eventBasedHold: oneof<nothing, bool> # Whether an object is under event-based hold. Event-based hold is a way to retain objects until an event occurs, which is signified by the hold's release (i.e. this value is set to false). After being released (set to false), such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is the loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false.
+  --generation: string # The content generation of this object. Used for object versioning. (format: int64)
+  --id: string # The ID of the object, including the bucket name, object name, and generation number.
+  --kind: string # The kind of item this is. For objects, this is always storage#object. (default: storage#object)
+  --kmsKeyName: string # Not currently supported. Specifying the parameter causes the request to fail with status code 400 - Bad Request.
+  --md5Hash: string # MD5 hash of the data; encoded using base64. For more information about using the MD5 hash, see Hashes and ETags: Best Practices.
+  --mediaLink: string # Media download link.
+  --metadata: record # User-provided metadata, in key/value pairs.
+  --metageneration: string # The version of the metadata for this object at this generation. Used for preconditions and for detecting changes in metadata. A metageneration number is only meaningful in the context of a particular generation of a particular object. (format: int64)
+  --name: string # The name of the object. Required if not specified by URL parameter.
+  --owner: record # The owner of the object. This will always be the uploader of the object. — shape: {entity?: string, entityId?: string}
+  --retentionExpirationTime: string # A server-determined value that specifies the earliest time that the object's retention period expires. This value is in RFC 3339 format. Note 1: This field is not provided for objects with an active event-based hold, since retention expiration is unknown until the hold is removed. Note 2: This value can be provided even when temporary hold is set (so that the user can reason about policy without having to first unset the temporary hold). (format: date-time)
+  --selfLink: string # The link to this object.
+  --size: string # Content-Length of the data in bytes. (format: uint64)
+  --storageClass: string # Storage class of the object.
+  --temporaryHold: oneof<nothing, bool> # Whether an object is under temporary hold. While this flag is set to true, the object is protected against deletion and overwrites. A common use case of this flag is regulatory investigations where objects need to be retained while the investigation is ongoing. Note that unlike event-based hold, temporary hold does not impact retention expiration time of an object.
+  --timeCreated: string # The creation time of the object in RFC 3339 format. (format: date-time)
+  --timeDeleted: string # The deletion time of the object in RFC 3339 format. Will be returned if and only if this version of the object has been deleted. (format: date-time)
+  --timeStorageClassUpdated: string # The time at which the object's storage class was last changed. When the object is initially created, it will be set to timeCreated. (format: date-time)
+  --updated: string # The modification time of the object metadata in RFC 3339 format. Set initially to object creation time and then updated whenever any metadata of the object changes. This includes changes made by a requester, such as modifying custom metadata, as well as changes made by Cloud Storage on behalf of a requester, such as changing the storage class based on an Object Lifecycle Configuration. (format: date-time)
+]: any -> record<done: bool, kind: string, objectSize: string, resource: record<acl: list<record>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, rewriteToken: string, totalBytesRewritten: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "destinationKmsKeyName" $destinationKmsKeyName "scalar") (serialize-qp "destinationPredefinedAcl" $destinationPredefinedAcl "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifGenerationNotMatch" $ifGenerationNotMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "ifSourceGenerationMatch" $ifSourceGenerationMatch "scalar") (serialize-qp "ifSourceGenerationNotMatch" $ifSourceGenerationNotMatch "scalar") (serialize-qp "ifSourceMetagenerationMatch" $ifSourceMetagenerationMatch "scalar") (serialize-qp "ifSourceMetagenerationNotMatch" $ifSourceMetagenerationNotMatch "scalar") (serialize-qp "maxBytesRewrittenPerCall" $maxBytesRewrittenPerCall "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "rewriteToken" $rewriteToken "scalar") (serialize-qp "sourceGeneration" $sourceGeneration "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/b/($sourceBucket)/o/($sourceObject)/rewriteTo/b/($destinationBucket)/o/($destinationObject)" $qp)
+  let body = {acl: $acl, bucket: $bucket, cacheControl: $cacheControl, componentCount: $componentCount, contentDisposition: $contentDisposition, contentEncoding: $contentEncoding, contentLanguage: $contentLanguage, contentType: $contentType, crc32c: $crc32c, customTime: $customTime, customerEncryption: $customerEncryption, etag: $etag, eventBasedHold: $eventBasedHold, generation: $generation, id: $id, kind: $kind, kmsKeyName: $kmsKeyName, md5Hash: $md5Hash, mediaLink: $mediaLink, metadata: $metadata, metageneration: $metageneration, name: $name, owner: $owner, retentionExpirationTime: $retentionExpirationTime, selfLink: $selfLink, size: $size, storageClass: $storageClass, temporaryHold: $temporaryHold, timeCreated: $timeCreated, timeDeleted: $timeDeleted, timeStorageClassUpdated: $timeStorageClassUpdated, updated: $updated} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Stop watching resources through this channel
+#
+# POST /channels/stop
+# operationId: storage.channels.stop
+export def "channels-stop storagechannelsstop" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --address: string # The address where notifications are delivered for this channel.
+  --expiration: string # Date and time of notification channel expiration, expressed as a Unix timestamp, in milliseconds. Optional. (format: int64)
+  --id: string # A UUID or similar unique string that identifies this channel.
+  --kind: string # Identifies this as a notification channel used to watch for changes to a resource, which is "api#channel". (default: api#channel)
+  --params: record # Additional parameters controlling delivery channel behavior. Optional.
+  --payload: oneof<nothing, bool> # A Boolean value to indicate whether payload is wanted. Optional.
+  --resourceId: string # An opaque ID that identifies the resource being watched on this channel. Stable across different API versions.
+  --resourceUri: string # A version-specific identifier for the watched resource.
+  --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional.
+  --type: string # The type of delivery mechanism used for this channel.
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/channels/stop" $qp)
+  let body = {address: $address, expiration: $expiration, id: $id, kind: $kind, params: $params, payload: $payload, resourceId: $resourceId, resourceUri: $resourceUri, token: $body_token, type: $type} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieves a list of HMAC keys matching the criteria.
+#
+# GET /projects/{projectId}/hmacKeys
+# operationId: storage.projects.hmacKeys.list
+export def "projects-hmac-keys storageprojectshmacKeyslist" [
+  projectId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --maxResults: int # Maximum number of items to return in a single page of responses. The service uses this parameter or 250 items, whichever is smaller. The max number of items per page will also be limited by the number of distinct service accounts in the response. If the number of service accounts in a single response is too high, the page will truncated and a next page token will be returned.
+  --pageToken: string # A previously-returned page token representing part of the larger set of results to view.
+  --serviceAccountEmail: string # If present, only keys for the given service account are returned.
+  --showDeletedKeys: oneof<nothing, bool> # Whether or not to show keys in the DELETED state.
+  --userProject: string # The project to be billed for this request.
+]: nothing -> record<items: table<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>, kind: string, nextPageToken: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "serviceAccountEmail" $serviceAccountEmail "scalar") (serialize-qp "showDeletedKeys" $showDeletedKeys "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/projects/($projectId)/hmacKeys" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a new HMAC key for the specified service account.
+#
+# POST /projects/{projectId}/hmacKeys
+# operationId: storage.projects.hmacKeys.create
+export def "projects-hmac-keys storageprojectshmacKeyscreate" [
+  projectId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --serviceAccountEmail: string # Email address of the service account.
+  --userProject: string # The project to be billed for this request.
+]: nothing -> record<kind: string, metadata: record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>, secret: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "serviceAccountEmail" $serviceAccountEmail "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/projects/($projectId)/hmacKeys" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Deletes an HMAC key.
+#
+# DELETE /projects/{projectId}/hmacKeys/{accessId}
+# operationId: storage.projects.hmacKeys.delete
+export def "projects-hmac-keys storageprojectshmacKeysdelete" [
+  projectId: string
+  accessId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --userProject: string # The project to be billed for this request.
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/projects/($projectId)/hmacKeys/($accessId)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves an HMAC key's metadata
+#
+# GET /projects/{projectId}/hmacKeys/{accessId}
+# operationId: storage.projects.hmacKeys.get
+export def "projects-hmac-keys storageprojectshmacKeysget" [
+  projectId: string
+  accessId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --userProject: string # The project to be billed for this request.
+]: nothing -> record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/projects/($projectId)/hmacKeys/($accessId)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates the state of an HMAC key. See the HMAC Key resource descriptor for valid states.
+#
+# PUT /projects/{projectId}/hmacKeys/{accessId}
+# operationId: storage.projects.hmacKeys.update
+export def "projects-hmac-keys storageprojectshmacKeysupdate" [
+  projectId: string
+  accessId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --userProject: string # The project to be billed for this request.
+  --body-accessId: string # The ID of the HMAC Key.
+  --etag: string # HTTP 1.1 Entity tag for the HMAC key.
+  --id: string # The ID of the HMAC key, including the Project ID and the Access ID.
+  --kind: string # The kind of item this is. For HMAC Key metadata, this is always storage#hmacKeyMetadata. (default: storage#hmacKeyMetadata)
+  --body-projectId: string # Project ID owning the service account to which the key authenticates.
+  --selfLink: string # The link to this resource.
+  --serviceAccountEmail: string # The email address of the key's associated service account.
+  --state: string # The state of the key. Can be one of ACTIVE, INACTIVE, or DELETED.
+  --timeCreated: string # The creation time of the HMAC key in RFC 3339 format. (format: date-time)
+  --updated: string # The last modification time of the HMAC key metadata in RFC 3339 format. (format: date-time)
+]: any -> record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/projects/($projectId)/hmacKeys/($accessId)" $qp)
+  let body = {accessId: $body_accessId, etag: $etag, id: $id, kind: $kind, projectId: $body_projectId, selfLink: $selfLink, serviceAccountEmail: $serviceAccountEmail, state: $state, timeCreated: $timeCreated, updated: $updated} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Get the email address of this project's Google Cloud Storage service account.
+#
+# GET /projects/{projectId}/serviceAccount
+# operationId: storage.projects.serviceAccount.get
+export def "projects-service-account storageprojectsserviceAccountget" [
+  projectId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --alt: string@alt-completer # Data format for the response.
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
+  --userIp: string # Deprecated. Please use quotaUser instead.
+  --userProject: string # The project to be billed for this request.
+]: nothing -> record<email_address: string, kind: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/projects/($projectId)/serviceAccount" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}

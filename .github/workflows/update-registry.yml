@@ -1,0 +1,72 @@
+name: Update registry
+
+on:
+  schedule:
+    - cron: "0 4 * * *" # 04:00 UTC daily
+  workflow_dispatch:
+    inputs:
+      generator_ref:
+        description: "nu-http-client-generator ref (branch, tag, or SHA)."
+        required: false
+        default: "main"
+        type: string
+      jobs:
+        description: "par-each thread count for generate.nu."
+        required: false
+        default: "8"
+        type: string
+
+concurrency:
+  group: update-registry
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  update-registry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330 # leave headroom under the 360-min job cap
+    env:
+      GENERATOR_REF: ${{ github.event.inputs.generator_ref || 'main' }}
+      JOBS: ${{ github.event.inputs.jobs || '8' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Nushell
+        uses: hustcer/setup-nu@v3
+        with:
+          version: "*"
+
+      - name: Clone generator
+        run: git clone --depth=1 --branch "$GENERATOR_REF" https://github.com/lassoColombo/nu-http-client-generator.git _generator
+
+      - name: Snapshot HEAD pre-commit
+        id: presha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Populate clients.yaml
+        run: nu scripts/populate.nu
+
+      - name: Generate clients
+        # --force so upstream spec changes flow through (otherwise generate.nu
+        # skips any client whose .nu file already exists).
+        run: nu scripts/generate.nu --jobs "$JOBS" --force
+
+      - name: Template README
+        # Always render the listing, even if generate exited non-zero — pending
+        # entries (in yaml, no file on disk) get surfaced in the table.
+        if: always()
+        run: nu scripts/template.nu
+
+      - name: Commit & push
+        if: always()
+        run: |
+          nu scripts/ci.nu commit-and-push --message "chore(registry): regenerate from apis.guru"
+
+      - name: Tag datever
+        if: success()
+        run: nu scripts/ci.nu tag-datever --pre-sha "${{ steps.presha.outputs.sha }}"

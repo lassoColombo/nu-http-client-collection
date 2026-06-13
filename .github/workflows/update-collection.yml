@@ -1,0 +1,75 @@
+name: Update collection
+
+# Forker workflow: regenerate every client listed in clients.yaml against its
+# current upstream spec. Disabled on the canonical repo (which uses
+# update-registry.yml instead — that workflow owns clients.yaml and would
+# conflict).
+#
+# Enable on a fork with:
+#   gh workflow disable update-registry.yml
+#   gh workflow enable update-collection.yml
+
+on:
+  schedule:
+    - cron: "0 4 * * *" # 04:00 UTC daily
+  workflow_dispatch:
+    inputs:
+      generator_ref:
+        description: "nu-http-client-generator ref (branch, tag, or SHA)."
+        required: false
+        default: "main"
+        type: string
+      jobs:
+        description: "par-each thread count for generate.nu."
+        required: false
+        default: "8"
+        type: string
+
+concurrency:
+  group: update-collection
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  update-collection:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330 # leave headroom under the 360-min job cap
+    env:
+      GENERATOR_REF: ${{ github.event.inputs.generator_ref || 'main' }}
+      JOBS: ${{ github.event.inputs.jobs || '8' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Nushell
+        uses: hustcer/setup-nu@v3
+        with:
+          version: "*"
+
+      - name: Clone generator
+        run: git clone --depth=1 --branch "$GENERATOR_REF" https://github.com/lassoColombo/nu-http-client-generator.git _generator
+
+      - name: Snapshot HEAD pre-commit
+        id: presha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Regenerate clients
+        # --force so we pick up upstream spec changes (default skips existing files).
+        run: nu scripts/generate.nu --jobs "$JOBS" --force
+
+      - name: Template README
+        if: always()
+        run: nu scripts/template.nu
+
+      - name: Commit & push
+        if: always()
+        run: |
+          nu scripts/ci.nu commit-and-push --message "chore(collection): regenerate clients"
+
+      - name: Tag datever
+        if: success()
+        run: nu scripts/ci.nu tag-datever --pre-sha "${{ steps.presha.outputs.sha }}"

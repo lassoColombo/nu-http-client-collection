@@ -1,0 +1,1017 @@
+# Auto-generated client for KumpeApps API v5.0.0
+# Source: https://api.apis.guru/v2/specs/kumpeapps.com/5.0.0/openapi.json
+# Auth: --token flag or $env.KUMPEAPPS_API_TOKEN
+
+const BASE_URL = "https://restapi.kumpeapps.com/v5"
+const DEFAULT_AUTH = "x-auth"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o KUMPEAPPS_API_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "x-auth" => { {headers: {X-Auth: $token_val}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["https://restapi.kumpeapps.com/v5" "https://restapi.preprod.kumpeapps.com/v5"] }
+def auth-scheme-completer [] { ["x-auth"] }
+
+# Completers for enum parameters
+def transactionType-completer [] { ["Add" "Subtract"] }
+def tool-completer [] { ["register" "send" "subscribe" "unsubscribe"] }
+def section-completer [] { ["Allowance" "Allowance-New" "Chores" "Chores-New" "Chores-Reminders" "WishList"] }
+def priority-completer [] { ["active" "critical" "passive" "time-sensitive"] }
+def day-completer [] { ["Friday" "Monday" "Saturday" "Sunday" "Thursday" "Tuesday" "Wednesday" "Weekly"] }
+def day-completer-1 [] { ["Friday" "Monday" "Saturday" "Sunday" "Thursday" "Today" "Tuesday" "Wednesday" "Weekly"] }
+def whereDay-completer [] { ["Friday" "Monday" "Saturday" "Sunday" "Thursday" "Today" "Tuesday" "Wednesday" "Weekly"] }
+def link-completer [] { ["https://khome.kumpeapps.com/portal/chores-today.php" "https://khome.kumpeapps.com/portal/wish-list.php"] }
+def scope-completer [] { ["Chores" "ChoresAdmin" "WishList" "WishListAdmin"] }
+def scope2-completer [] { ["Chores" "ChoresAdmin" "WishList" "WishListAdmin"] }
+def scope3-completer [] { ["Chores" "ChoresAdmin" "WishList" "WishListAdmin"] }
+def scope4-completer [] { ["Chores" "ChoresAdmin" "WishList" "WishListAdmin"] }
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "appkey patch" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Compromise app key
+#
+# PATCH /appkey
+# DEPRECATED
+# operationId: appkey_patch
+@deprecated
+export def "appkey patch" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --app-key: string # compromised app key
+  --comments: string # Comments (like how was this compromised)
+]: nothing -> record<success: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "app_key" $app_key "scalar") (serialize-qp "comments" $comments "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/appkey" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Request app key
+#
+# POST /appkey
+# DEPRECATED
+# operationId: appkey_post
+@deprecated
+export def "appkey post" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --username: string # Username assigned to your app
+  --password: string # Password assigned to your app (format: password)
+  --supportsYubikey: oneof<nothing, bool> # App supports YubiKey OTP
+]: nothing -> record<app_key: string, success: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "supportsYubikey" $supportsYubikey "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/appkey" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Deactivate app key
+#
+# PUT /appkey
+# DEPRECATED
+# operationId: appkey_put
+@deprecated
+export def "appkey put" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --app-key: string # app key to deactivate
+]: nothing -> record<success: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "app_key" $app_key "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/appkey" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Compromise app key
+#
+# PATCH /authentication/appkey
+# operationId: auth_appkey_patch
+export def "authentication-appkey patch" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --app-key: string # compromised app key
+  --comments: string # Comments (like how was this compromised)
+]: nothing -> record<success: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "app_key" $app_key "scalar") (serialize-qp "comments" $comments "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/authentication/appkey" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Request app key
+#
+# POST /authentication/appkey
+# operationId: auth_appkey_post
+export def "authentication-appkey post" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --username: string # Username assigned to your app
+  --password: string # Password assigned to your app (format: password)
+  --supportsYubikey: oneof<nothing, bool> # App supports YubiKey OTP
+]: nothing -> record<app_key: string, success: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "supportsYubikey" $supportsYubikey "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/authentication/appkey" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Deactivate app key
+#
+# PUT /authentication/appkey
+# operationId: auth_appkey_put
+export def "authentication-appkey put" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --app-key: string # app key to deactivate
+]: nothing -> record<success: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "app_key" $app_key "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/authentication/appkey" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Request auth key for user (login user)
+#
+# GET /authentication/authkey
+# operationId: auth_authkey_get
+export def "authentication-authkey get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --username: string # Authenticated username
+  --password: string # Authenticated password (format: password)
+  --otp: string # YubiKey OTP (if configured for user) (format: password)
+  --deviceName: string # User's device name
+  --identifierForVendor: string # identifierForVendor for User's Device (if app is iOS)
+]: nothing -> record<auth_key: string, success: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "otp" $otp "scalar") (serialize-qp "deviceName" $deviceName "scalar") (serialize-qp "identifierForVendor" $identifierForVendor "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/authentication/authkey" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Compromise auth key
+#
+# PATCH /authentication/authkey
+# operationId: auth_authkey_patch
+export def "authentication-authkey patch" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --auth-key: string # auth key to mark as compromised (format: password)
+  --comments: string # Comments (like how was this compromised)
+]: nothing -> record<success: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "auth_key" $auth_key "scalar") (serialize-qp "comments" $comments "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/authentication/authkey" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Request auth key for user (login user)
+#
+# POST /authentication/authkey
+# operationId: auth_authkey_post
+export def "authentication-authkey post" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --username: string # Authenticated username
+  --password: string # Authenticated password (format: password)
+  --otp: string # YubiKey OTP (if configured for user) (format: password)
+]: nothing -> record<auth_key: string, success: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "otp" $otp "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/authentication/authkey" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Deactivate auth key (logout)
+#
+# PUT /authentication/authkey
+# operationId: auth_authkey_put
+export def "authentication-authkey put" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --auth-key: string # auth key to logout (format: password)
+]: nothing -> record<success: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "auth_key" $auth_key "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/authentication/authkey" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Verifies YubiKey OTP for authenticated user
+#
+# GET /authentication/verifyotp
+# operationId: auth_verifyotp_get
+export def "authentication-verifyotp get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --otp: string # YubiKey OTP code
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "otp" $otp "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/authentication/verifyotp" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Request auth key for user (login user)
+#
+# GET /authkey
+# DEPRECATED
+# operationId: authkey_get
+@deprecated
+export def "authkey get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --username: string # Authenticated username
+  --password: string # Authenticated password (format: password)
+  --otp: string # YubiKey OTP (if configured for user) (format: password)
+]: nothing -> record<auth_key: string, success: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "otp" $otp "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/authkey" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Compromise auth key
+#
+# PATCH /authkey
+# DEPRECATED
+# operationId: authkey_patch
+@deprecated
+export def "authkey patch" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --auth-key: string # auth key to mark as compromised (format: password)
+  --comments: string # Comments (like how was this compromised)
+]: nothing -> record<success: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "auth_key" $auth_key "scalar") (serialize-qp "comments" $comments "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/authkey" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Request auth key for user (login user)
+#
+# POST /authkey
+# DEPRECATED
+# operationId: authkey_post
+@deprecated
+export def "authkey post" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --username: string # Authenticated username
+  --password: string # Authenticated password (format: password)
+  --otp: string # YubiKey OTP (if configured for user) (format: password)
+]: nothing -> record<auth_key: string, success: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "otp" $otp "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/authkey" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Deactivate auth key (logout)
+#
+# PUT /authkey
+# DEPRECATED
+# operationId: authkey_put
+@deprecated
+export def "authkey put" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --auth-key: string # auth key to logout (format: password)
+]: nothing -> record<success: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "auth_key" $auth_key "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/authkey" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# returns allowance balance and allowance transactions
+#
+# GET /kkid/allowance
+# operationId: kkid_allowance_get
+export def "kkid-allowance get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --kidUserId: int # userID of the kid
+  --transactionDays: int # number of days you wish to search allowance transactions (default is 90 days)
+]: nothing -> record<allowanceTransaction: table<amount: int, date: string, transactionDescription: string, transactionId: int, transactionType: string, userId: int>, balance: int, id: int, lastUpdated: string, success: int> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "kidUserId" $kidUserId "scalar") (serialize-qp "transactionDays" $transactionDays "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/kkid/allowance" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# adds new allowance transaction to kidUserID
+#
+# POST /kkid/allowance
+# operationId: kkid_allowance_post
+export def "kkid-allowance post" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --kidUserId: int # userID of the kid
+  --amount: float # amount you wish to Add/Subtract (subtract value should be a negative value)
+  --description: string # Description (reason) of allowance transaction
+  --transactionType: string@transactionType-completer # Transaction Type (Add/Subtract)
+]: nothing -> record<message: string, success: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "kidUserId" $kidUserId "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "transactionType" $transactionType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/kkid/allowance" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# subscribes/unsubscribes/registers for apns push notifications
+#
+# POST /kkid/apns
+# operationId: kkid_apns_post
+export def "kkid-apns post" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --kidUserId: int # userID of the kid
+  --tool: string@tool-completer # tool you wish to talk to
+  --qp-token: string # device APNS token (required for register)
+  --devicename: string # Name of device to associate to token (required for register)
+  --title: string # title of APNS message (required for send)
+  --message: string # APNS message body (required for send)
+  --badge: int # Number for badge icon (optional for send)
+  --sound: string # Name of sound file to play for send notification (optional for send)
+  --section: string@section-completer # Notification section name (required for send/subscribe/unsubscribe)
+  --priority: string@priority-completer # Notification section name (optional for send, default is active)
+]: nothing -> record<message: string, success: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "kidUserId" $kidUserId "scalar") (serialize-qp "tool" $tool "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devicename" $devicename "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "badge" $badge "scalar") (serialize-qp "sound" $sound "scalar") (serialize-qp "section" $section "scalar") (serialize-qp "priority" $priority "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/kkid/apns" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# deletes chore for given chore id
+#
+# DELETE /kkid/chorelist
+# operationId: kkid_chorelist_delete
+export def "kkid-chorelist delete" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --idChoreList: int # id of the chore you wish to delete
+]: nothing -> record<message: string, success: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "idChoreList" $idChoreList "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/kkid/chorelist" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# returns list of chores for given user
+#
+# GET /kkid/chorelist
+# operationId: kkid_chorelist_get
+export def "kkid-chorelist get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --kidUsername: string # Username of kid you wish to search
+  --day: string@day-completer # Day of week for chores (Weekly for weekly chores)
+  --status: string # Status of Chore to search
+  --blockDash: oneof<nothing, bool> # Filter results by blockDash parameter
+  --optional: oneof<nothing, bool> # Filter results by optional parameter
+  --canSteal: oneof<nothing, bool> # Filter results by canSteal parameter
+  --includeCalendar: oneof<nothing, bool> # include calendar notations (default is false)
+]: nothing -> record<chore: table<aiIcon: string, altitude: int, blockDash: bool, choreDescription: string, choreName: string, choreNumber: int, day: string, extraAllowance: int, idChoreList: int, isCalendar: bool, kid: string, latitude: int, longitude: int, nfcTag: string, notes: string, oneTime: bool, optional: bool, reassignable: bool, reassigned: bool, requireObjectDetection: string, startDate: string, status: string, stolen: bool, stolenBy: string, updated: string, updatedBy: string>, success: int> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "kidUsername" $kidUsername "scalar") (serialize-qp "day" $day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "blockDash" $blockDash "scalar") (serialize-qp "optional" $optional "scalar") (serialize-qp "canSteal" $canSteal "scalar") (serialize-qp "includeCalendar" $includeCalendar "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/kkid/chorelist" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# adds chore for given user
+#
+# POST /kkid/chorelist
+# operationId: kkid_chorelist_post
+export def "kkid-chorelist post" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --kidUsername: string # username of kid to assign the chore to.
+  --day: string@day-completer-1 # day of week (Monday, Tuesday....) for the chore. For weekly chores put Weekly or leave blank
+  --nfcTag: string # text field of nfc tag required to check off chore
+  --status: string # status of chore (default is todo)
+  --choreName: string # name of chore
+  --choreDescription: string # optional chore description
+  --choreNumber: int # number priority of chore (default is 5)
+  --blockDash: oneof<nothing, bool> # block dash option on this chore
+  --oneTime: oneof<nothing, bool> # mark as one time chore (does not repeat each week)
+  --extraAllowance: int # ammount of allowance added at end of week for completing this chore
+  --optional: oneof<nothing, bool> # mark as optional chore
+  --reassignable: oneof<nothing, bool> # mark as reassignable (default is true)
+  --canSteal: oneof<nothing, bool> # mark as sibling can steal chore
+  --startDate: string # date (yyyy-mm-dd) that you wish the chore to start showing up. (default is today)
+  --notes: string # notes added to chore (visable only on reports, kids do not see this note, this is mostly just for the developer)
+  --requireObjectDetection: oneof<nothing, bool> # require use of camera to detect object detection tag order to check off chore
+  --objectDetectionTag: string # tag for object detection to search for (required if requireObjectDetection is true)
+  --updatedByAutomation: oneof<nothing, bool> # true if chore updated via API from an Automation System
+  --aiIcon: string # Notes if AI Icons should be used (n for no, y for yes, e for yes- error)
+  --isCalendar: oneof<nothing, bool> # True if this is a calendar note instead of a chore.
+]: nothing -> record<message: string, success: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "kidUsername" $kidUsername "scalar") (serialize-qp "day" $day "scalar") (serialize-qp "nfcTag" $nfcTag "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "choreName" $choreName "scalar") (serialize-qp "choreDescription" $choreDescription "scalar") (serialize-qp "choreNumber" $choreNumber "scalar") (serialize-qp "blockDash" $blockDash "scalar") (serialize-qp "oneTime" $oneTime "scalar") (serialize-qp "extraAllowance" $extraAllowance "scalar") (serialize-qp "optional" $optional "scalar") (serialize-qp "reassignable" $reassignable "scalar") (serialize-qp "canSteal" $canSteal "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "notes" $notes "scalar") (serialize-qp "requireObjectDetection" $requireObjectDetection "scalar") (serialize-qp "objectDetectionTag" $objectDetectionTag "scalar") (serialize-qp "updatedByAutomation" $updatedByAutomation "scalar") (serialize-qp "aiIcon" $aiIcon "scalar") (serialize-qp "isCalendar" $isCalendar "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/kkid/chorelist" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# updates chore for given chore id
+#
+# PUT /kkid/chorelist
+# operationId: kkid_chorelist_put
+export def "kkid-chorelist put" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --idChoreList: int # id number of chore you wish to update
+  --status: string # new status of chore
+  --stolen: oneof<nothing, bool> # mark chore as stolen by sibling
+  --stolenBy: string # username of sibling that stole the chore (required if stolen is true)
+  --nfcTag: string # text field of NFC tag that is required to be scanned to check off this chore (normally null)
+  --notes: string # notes field for chore
+  --latitude: int # GPS latitude of where the chore was marked
+  --longitude: int # GPS longitude of where the chore was marked
+  --altitude: int # GPS altitude of where the chore was marked
+  --updatedByAutomation: oneof<nothing, bool> # true if updated via API by automation system
+  --whereDay: string@whereDay-completer # Where day equals...
+  --whereStatus: string # Where status equals...
+  --whereName: string # Where chore name equals...
+]: nothing -> record<message: string, success: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "idChoreList" $idChoreList "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "stolen" $stolen "scalar") (serialize-qp "stolenBy" $stolenBy "scalar") (serialize-qp "nfcTag" $nfcTag "scalar") (serialize-qp "notes" $notes "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "altitude" $altitude "scalar") (serialize-qp "updatedByAutomation" $updatedByAutomation "scalar") (serialize-qp "whereDay" $whereDay "scalar") (serialize-qp "whereStatus" $whereStatus "scalar") (serialize-qp "whereName" $whereName "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/kkid/chorelist" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# adds new master user account
+#
+# POST /kkid/masteruser
+# operationId: kkid_masteruser_post
+export def "kkid-masteruser post" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --username: string # username of user to create
+  --password: string # password of user to create (format: password)
+  --email: string # email address of user to create
+  --firstName: string # First Name of user to create
+  --lastName: string # Last Name of user to create
+]: nothing -> record<added: string, aff_added: string, aff_id: string, aff_payout_type: string, avatar: string, city: string, comment: string, country: string, disable_lock_until: string, email: string, i_agree: string, is_affiliate: string, is_locked: string, lang: string, last_login: string, login: string, name_f: string, name_l: string, pass: string, pass_dattm: string, phone: string, pin: string, plain_password: string, remember_key: string, remote_addr: string, require_consent: string, reseller_id: string, saved_form_id: string, state: string, status: string, street: string, street2: string, subusers_parent_id: string, tax_id: string, unsubscribed: string, user_agent: string, user_id: int, zip: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "firstName" $firstName "scalar") (serialize-qp "lastName" $lastName "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/kkid/masteruser" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Create Share Link
+#
+# GET /kkid/share
+# operationId: kkid_share_get
+export def "kkid-share get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --linkUserId: string # User ID that the link should be authenticated to
+  --link: string@link-completer # Link to share
+  --scope: string@scope-completer # Authentication scope for link
+  --scope2: string@scope2-completer # Authentication scope for link
+  --scope3: string@scope3-completer # Authentication scope for link
+  --scope4: string@scope4-completer # Authentication scope for link
+]: nothing -> record<auth_link: string, success: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "linkUserId" $linkUserId "scalar") (serialize-qp "link" $link "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "scope2" $scope2 "scalar") (serialize-qp "scope3" $scope3 "scalar") (serialize-qp "scope4" $scope4 "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/kkid/share" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets user info
+#
+# GET /kkid/user
+# operationId: kkid_user_get
+export def "kkid-user get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --enableBool: oneof<nothing, bool> # Use bool values instead of Int 0/1
+]: nothing -> record<success: bool, user: table<email: string, emoji: string, enableAllowance: bool, enableBehaviorChart: bool, enableChores: bool, enableNoAds: bool, enableObjectDetection: bool, enableTmdb: bool, firstName: string, homeId: int, isActive: bool, isAdmin: bool, isBanned: bool, isChild: bool, isDisabled: bool, isLocked: bool, isMaster: bool, lastName: string, masterId: int, pushAllowance: bool, pushAllowanceNew: bool, pushChores: bool, pushChoresNew: bool, pushChoresReminders: bool, tmdbKey: string, userId: int, username: string, weeklyAllowance: int>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "enableBool" $enableBool "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/kkid/user" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# deletes user
+#
+# DELETE /kkid/userlist
+# operationId: kkid_userlist_delete
+export def "kkid-userlist delete" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --userID: int # userID of the user you wish to delete
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "userID" $userID "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/kkid/userlist" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# returns list of users
+#
+# GET /kkid/userlist
+# operationId: kkid_userlist_get
+export def "kkid-userlist get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --isChild: oneof<nothing, bool> # Filter Search by isChild flag
+  --isActive: oneof<nothing, bool> # Filter Search by isActive flag
+  --isAdmin: oneof<nothing, bool> # Filter Search by isAdmin flag
+  --enableAllowance: oneof<nothing, bool> # Filter Search by enableAllowance flag
+  --enableChores: oneof<nothing, bool> # Filter Search by enableChores flag
+  --userID: int # userID of user to search
+  --username: string # Username of user to search
+  --email: string # Email address of user to search
+]: nothing -> record<success: bool, user: table<email: string, emoji: string, enableAllowance: bool, enableBehaviorChart: bool, enableChores: bool, enableNoAds: bool, enableObjectDetection: bool, enableTmdb: bool, firstName: string, homeId: int, isActive: bool, isAdmin: bool, isBanned: bool, isChild: bool, isDisabled: bool, isLocked: bool, isMaster: bool, lastName: string, masterId: int, pushAllowance: bool, pushAllowanceNew: bool, pushChores: bool, pushChoresNew: bool, pushChoresReminders: bool, tmdbKey: string, userId: int, username: string, weeklyAllowance: int>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "isChild" $isChild "scalar") (serialize-qp "isActive" $isActive "scalar") (serialize-qp "isAdmin" $isAdmin "scalar") (serialize-qp "enableAllowance" $enableAllowance "scalar") (serialize-qp "enableChores" $enableChores "scalar") (serialize-qp "userID" $userID "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/kkid/userlist" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# adds new child user
+#
+# POST /kkid/userlist
+# operationId: kkid_userlist_post
+export def "kkid-userlist post" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --username: string # username of user to create
+  --password: string # password of user to create (format: password)
+  --email: string # email address of user to create
+  --firstName: string # First Name of user to create
+  --lastName: string # Last Name of user to create
+]: nothing -> record<added: string, aff_added: string, aff_id: string, aff_payout_type: string, avatar: string, city: string, comment: string, country: string, disable_lock_until: string, email: string, i_agree: string, is_affiliate: string, is_locked: string, lang: string, last_login: string, login: string, name_f: string, name_l: string, pass: string, pass_dattm: string, phone: string, pin: string, plain_password: string, remember_key: string, remote_addr: string, require_consent: string, reseller_id: string, saved_form_id: string, state: string, status: string, street: string, street2: string, subusers_parent_id: string, tax_id: string, unsubscribed: string, user_agent: string, user_id: int, zip: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "firstName" $firstName "scalar") (serialize-qp "lastName" $lastName "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/kkid/userlist" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# updates user
+#
+# PUT /kkid/userlist
+# operationId: kkid_userlist_put
+export def "kkid-userlist put" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --userID: int # userID of the user you wish to update
+  --username: string # username of user to create
+  --email: string # email address of user to create
+  --firstName: string # First Name of user to create
+  --lastName: string # Last Name of user to create
+  --emoji: string # emoji character for user
+  --tmdbKey: string # User's TMdB Session Key
+  --enableWishList: oneof<nothing, bool> # set status of Wish List module enabled
+  --enableChores: oneof<nothing, bool> # set status of chores module enabled
+  --enableAllowance: oneof<nothing, bool> # set status of allowance module enabled
+  --enableAdmin: oneof<nothing, bool> # set status of isAdmin
+  --enableTmdb: oneof<nothing, bool> # set status of enableTmdb (movie and tv search)
+  --enableObjectDetection: oneof<nothing, bool> # set status of enableObjectDetection
+]: nothing -> record<added: string, aff_added: string, aff_id: string, aff_payout_type: string, avatar: string, city: string, comment: string, country: string, disable_lock_until: string, email: string, i_agree: string, is_affiliate: string, is_locked: string, lang: string, last_login: string, login: string, name_f: string, name_l: string, pass: string, pass_dattm: string, phone: string, pin: string, plain_password: string, remember_key: string, remote_addr: string, require_consent: string, reseller_id: string, saved_form_id: string, state: string, status: string, street: string, street2: string, subusers_parent_id: string, tax_id: string, unsubscribed: string, user_agent: string, user_id: int, zip: string> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "userID" $userID "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "firstName" $firstName "scalar") (serialize-qp "lastName" $lastName "scalar") (serialize-qp "emoji" $emoji "scalar") (serialize-qp "tmdbKey" $tmdbKey "scalar") (serialize-qp "enableWishList" $enableWishList "scalar") (serialize-qp "enableChores" $enableChores "scalar") (serialize-qp "enableAllowance" $enableAllowance "scalar") (serialize-qp "enableAdmin" $enableAdmin "scalar") (serialize-qp "enableTmdb" $enableTmdb "scalar") (serialize-qp "enableObjectDetection" $enableObjectDetection "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/kkid/userlist" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Delete item from wishlist
+#
+# DELETE /kkid/wishlist
+# operationId: kkid_wishlist_delete
+export def "kkid-wishlist delete" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --wishId: int # ID of wishlist item to delete
+]: nothing -> record<message: string, success: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "wishId" $wishId "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/kkid/wishlist" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get list of wishlist items
+#
+# GET /kkid/wishlist
+# operationId: kkid_wishlist_get
+export def "kkid-wishlist get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --kidUserId: int # userID of the kid
+]: nothing -> record<success: bool, wish: table<description: string, id: int, link: string, master_id: int, priority: int, title: string, user_id: int>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "kidUserId" $kidUserId "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/kkid/wishlist" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Add item to kid's wishlist
+#
+# POST /kkid/wishlist
+# operationId: kkid_wishlist_post
+export def "kkid-wishlist post" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --kidUserId: int # userID of the kid
+  --title: string # Item title
+  --description: string # Item Description
+  --priority: int # Item Priority
+  --link: string # URL Link to item
+]: nothing -> record<message: string, success: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "kidUserId" $kidUserId "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "priority" $priority "scalar") (serialize-qp "link" $link "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/kkid/wishlist" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Update item on kid's wishlist
+#
+# PUT /kkid/wishlist
+# operationId: kkid_wishlist_put
+export def "kkid-wishlist put" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --wishId: int # Wish list item ID to update
+  --title: string # Item title
+  --description: string # Item Description
+  --priority: int # Item Priority
+  --link: string # URL Link to item
+]: nothing -> record<message: string, success: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "wishId" $wishId "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "priority" $priority "scalar") (serialize-qp "link" $link "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/kkid/wishlist" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
