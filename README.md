@@ -21,6 +21,8 @@ This repository also acts as a public registry of HTTP clients for the community
 
 The only supported registry, as of now, is [apis.guru](https://apis.guru/).
 
+Skim [here](#the-collection) the list of available clients.
+
 ## Forking for your own collection
 
 1. Fork and clone.
