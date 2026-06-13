@@ -18,7 +18,7 @@ def "main commit-and-push" [
     --message: string = "chore: regenerate clients"
     --user-name: string = "github-actions[bot]"
     --user-email: string = "41898282+github-actions[bot]@users.noreply.github.com"
-    --paths: list<string> = [clients/ clients.yaml README.md]
+    --paths: list<string> = [clients/ clients.yaml CLIENTS.md README.md]
 ] {
     ^git config user.name $user_name
     ^git config user.email $user_email
