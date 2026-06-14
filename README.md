@@ -123,4 +123,8 @@ You can drive them yourself — from a host cron, a self-hosted runner, a Buildk
 
 Entries removed from `clients.yaml` are NOT deleted from `clients/` on disk — they're marked **Dismissed** in [CLIENTS.md](CLIENTS.md) instead and must be manually deleted.
 
-If you'd rather run this on your own schedule, copy the steps out of `.github/workflows/update-collection.yml` and wire them however you like. The scripts themselves are plain `nu` invocations — nothing GitHub-specific leaks into them — and `ci.nu` accepts `--user-name` / `--user-email` flags if you want to commit as something other than `github-actions[bot]`.
+---
+
+## Contributing
+
+Issues and PRs are welcome. For generator behavior or output shape, open them against [nu-http-client-generator](https://github.com/lassoColombo/nu-http-client-generator) instead.
