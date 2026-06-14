@@ -6,22 +6,22 @@ Your collection of Nushell HTTP clients, automatically generated from API specif
 
 ## Purpose(s)
 
-#### 1 - Your personal collection
+#### 1 - A community registry
 
-This repository lets you maintain your own collection of HTTP clients and keep it up to date as upstream APIs evolve.
+This repository acts as a public registry of HTTP clients for the community to use as it pleases. It mirrors public API registries and generates a Nushell client for every spec they expose.
+
+The only supported registry, as of now, is [apis.guru](https://apis.guru/).
+
+Skim [CLIENTS.md](CLIENTS.md) for the full list of available clients.
+
+#### 2 - Your personal collection
+
+This repository lets you maintain your own polished collection of HTTP clients and keep it up to date as upstream APIs evolve.
 
 The idea is simple:
 - You define a list of wanted clients in `clients.yaml`: where to get the specification, what to generate and how.
 - A GitHub action regenerates the collection every night into the `clients/` directory.
 - You use the clients in your day to day workflow, in your scripts or wherever you like.
-
-#### 2 - A community registry
-
-This repository also acts as a public registry of HTTP clients for the community to use as it pleases. It mirrors public API registries and generates a Nushell client for every spec they expose.
-
-The only supported registry, as of now, is [apis.guru](https://apis.guru/).
-
-Skim [CLIENTS.md](CLIENTS.md) for the full list of available clients.
 
 ## Forking for your own collection
 
@@ -71,7 +71,7 @@ Flags are simply passed through to the generator for that specific client. See t
 
 ### Using the workflow
 
-`update-collection.yml` runs every day at 04:00 UTC. It regenerates every client listed in `clients.yaml` against the current upstream spec, commits the result, and tags `v<UTC-date>` - so any change in an upstream API flows into your collection overnight and you can always roll back to a known-good day.
+`update-collection.yml` runs every day at 00:00 UTC. It regenerates every client listed in `clients.yaml` against the current upstream spec, commits the result, and tags `v<UTC-date>` - so any change in an upstream API flows into your collection overnight and you can always roll back to a known-good day.
 
 It commits whatever it managed to produce, even if some clients failed to generate (those entries show up as **Pending** in [CLIENTS.md](CLIENTS.md)). Entries removed from `clients.yaml` are NOT deleted from `clients/` on disk - they're marked **Dismissed** there instead and must be manually deleted.
 
