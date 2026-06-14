@@ -2,6 +2,10 @@
 
 Your collection of Nushell HTTP clients, automatically generated from API specifications.
 
+<!-- STATS:START -->
+**2,508** clients · **122,906** operations · **4.0M** lines of Nu
+<!-- STATS:END -->
+
 ---
 
 ## Purpose(s)
@@ -52,7 +56,6 @@ Clients.yaml is a list of entries, where each entry has the following shape:
 ```yaml
 clients:
   - name: my-api               # output file: clients/my-api.nu
-    type: openapi              # or `graphql`
     source: https://example.com/openapi.json
     flags:                     # optional - passed through to the generator
       default-base-url: https://api.example.com
