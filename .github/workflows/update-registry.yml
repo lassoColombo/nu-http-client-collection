@@ -54,6 +54,10 @@ jobs:
       - name: Generate clients
         # --force so upstream spec changes flow through (otherwise generate.nu
         # skips any client whose .nu file already exists).
+        # continue-on-error: partial-failure exit (1) from generate.nu is
+        # expected on flaky upstream specs — surface it as a red step but
+        # don't poison the job, so Commit & push and Tag datever still run.
+        continue-on-error: true
         run: nu scripts/generate.nu --jobs "$JOBS" --force
 
       - name: Template README
