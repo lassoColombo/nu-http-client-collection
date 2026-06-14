@@ -58,7 +58,7 @@ This may copy some extra helpers and completers you don't need. You can optional
 2. Swap which workflow runs nightly.
     ```nu
     gh workflow disable update-registry.yml  # disables the workflow that mirrors apis.guru
-    gh workflow enable update-collection.yml # enables the workflow that regenerates your collection
+    gh workflow enable update-collection.yml # optional, enables the workflow that regenerates your collection (see below)
     ```
 3. Edit clients.yaml defining your own entries.
 4. Clone the generator alongside this repo.
