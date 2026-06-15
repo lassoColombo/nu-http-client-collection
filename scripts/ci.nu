@@ -30,7 +30,19 @@ def "main commit-and-push" [
         return
     }
 
-    ^git commit -m $message
+    let clients = (
+        ^git diff --cached --name-only --diff-filter=AM -- 'clients/*.nu'
+        | lines
+        | each { path basename | str replace -r '\.nu$' '' }
+        | sort
+    )
+    let full_message = if ($clients | is-empty) {
+        $message
+    } else {
+        $"($message)\n\nUpdated clients:\n" + ($clients | each { |c| $"- ($c)" } | str join "\n")
+    }
+
+    ^git commit -m $full_message
     ^git push
 }
 
