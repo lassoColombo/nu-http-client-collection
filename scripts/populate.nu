@@ -24,7 +24,7 @@ def main [
             if $ver == null { return null }
             let url = ($ver | get -o swaggerUrl | default ($ver | get -o openapiUrl))
             if $url == null { return null }
-            { name: (slug $row.key), type: "openapi", source: $url }
+            { name: (slug $row.key), source: $url }
         }
         | compact
         | sort-by name

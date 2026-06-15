@@ -130,14 +130,11 @@ def generate-one [
     generator_path: string
     generator_name: string
 ] {
-    let required = ["name" "type" "source"]
+    let required = ["name" "source"]
     for key in $required {
         if ($client | get -o $key) == null {
             error make { msg: $"client entry missing required key '($key)': ($client | to nuon)" }
         }
-    }
-    if not ($client.type in ["openapi" "graphql"]) {
-        error make { msg: $"unsupported type '($client.type)' for client '($client.name)' — must be 'openapi' or 'graphql'" }
     }
 
     let out_path = ($out_dir | path join $"($client.name).nu")
@@ -146,7 +143,7 @@ def generate-one [
     let out_lit = ($out_path | to nuon)
     let gen_lit = ($generator_path | to nuon)
 
-    let cmd = $"use ($gen_lit); ($generator_name) ($client.type) ($source_lit) -o ($out_lit) ($flags_str)"
+    let cmd = $"use ($gen_lit); ($generator_name) ($source_lit) -o ($out_lit) ($flags_str)"
     nu -c $cmd
 }
 
