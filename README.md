@@ -7,25 +7,24 @@ Your collection of Nushell HTTP clients, automatically generated from API specif
 <!-- STATS:END -->
 
 ---
-<!-- mtoc-start -->
 
-* [Purpose(s)](#purposes)
-  * [1 - A community registry](#1---a-community-registry)
-    * [2 - Your personal collection](#2---your-personal-collection)
-* [1 - Using a client from the registry](#1---using-a-client-from-the-registry)
-  * [Manually trimming down a client](#manually-trimming-down-a-client)
-* [2 - Forking for your own collection](#2---forking-for-your-own-collection)
-  * [Editing clients.yaml](#editing-clientsyaml)
-  * [Regenerating the collection](#regenerating-the-collection)
-  * [The bundled GitHub action](#the-bundled-github-action)
-* [Contributing](#contributing)
+1. [nu-http-client-collection](#nu-http-client-collection)
+   1. [Purpose(s)](#purpose(s))
+         1. [A community registry](#a-community-registry)
+         2. [Your personal collection](#your-personal-collection)
+   2. [1 - Using a client from the registry](#1---using-a-client-from-the-registry)
+      1. [Manually trimming down a client](#manually-trimming-down-a-client)
+   3. [2 - Forking for your own collection](#2---forking-for-your-own-collection)
+      1. [Editing clients.yaml](#editing-clients.yaml)
+      2. [Regenerating the collection](#regenerating-the-collection)
+      3. [The bundled GitHub action](#the-bundled-github-action)
+   4. [Contributing](#contributing)
 
-<!-- mtoc-end -->
 ---
 
 ## Purpose(s)
 
-#### 1 - A community registry
+#### A community registry
 
 This repository acts as a public registry of HTTP clients for the community to use as it pleases. It mirrors public API registries and generates a Nushell client for every spec they expose.
 
@@ -33,7 +32,7 @@ The only supported registry, as of now, is [apis.guru](https://apis.guru/).
 
 Skim [CLIENTS.md](CLIENTS.md) for the full list of available clients.
 
-#### 2 - Your personal collection
+#### Your personal collection
 
 This repository lets you maintain your own polished collection of HTTP clients and keep it up to date as upstream APIs evolve.
 
