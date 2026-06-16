@@ -46,7 +46,7 @@ The idea is simple:
 ## 1 - Using a client from the registry
 
 Of course you are free to browse this registry and to grab any client as you please.  
-This repository uses the [nu-http-client-generator](https://github.com/lassoColombo/nu-http-client-generator) to generate the clients. The generator generates (🙃) regular nushell modules you can simply `use`:
+This repository uses the [nu-http-client-generator](https://github.com/lassoColombo/nu-http-client-generator) to generate the clients. The generator generates 🙃 regular nushell modules you can simply `use`:
 ```nu
 use petstore.nu
 petstore pet-find-by-status findPetsByStatus --status available | where status == "available"
