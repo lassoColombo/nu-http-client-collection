@@ -110,7 +110,7 @@ export def "projects sourcerepoprojectsreposdelete" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -120,7 +120,7 @@ export def "projects sourcerepoprojectsreposdelete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -145,7 +145,7 @@ export def "projects sourcerepoprojectsreposget" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -155,7 +155,7 @@ export def "projects sourcerepoprojectsreposget" [
 ]: nothing -> record<mirrorConfig: record<deployKeyId: string, url: string, webhookId: string>, name: string, pubsubConfigs: record, size: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -181,7 +181,7 @@ export def "projects sourcerepoprojectsrepospatch" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -194,7 +194,7 @@ export def "projects sourcerepoprojectsrepospatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($name)" $qp)
   let body = {repo: $repo, updateMask: $updateMask} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -221,7 +221,7 @@ export def "config sourcerepoprojectsgetConfig" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -231,7 +231,7 @@ export def "config sourcerepoprojectsgetConfig" [
 ]: nothing -> record<enablePrivateKeyCheck: bool, name: string, pubsubConfigs: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($name)/config" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -257,7 +257,7 @@ export def "config sourcerepoprojectsupdateConfig" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -270,7 +270,7 @@ export def "config sourcerepoprojectsupdateConfig" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($name)/config" $qp)
   let body = {projectConfig: $projectConfig, updateMask: $updateMask} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -297,7 +297,7 @@ export def "repos sourcerepoprojectsreposlist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -309,7 +309,7 @@ export def "repos sourcerepoprojectsreposlist" [
 ]: nothing -> record<nextPageToken: string, repos: table<mirrorConfig: record, name: string, pubsubConfigs: record, size: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($name)/repos" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -334,7 +334,7 @@ export def "projects sourcerepoprojectsrepossync" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -346,7 +346,7 @@ export def "projects sourcerepoprojectsrepossync" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($name):sync" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -373,7 +373,7 @@ export def "repos sourcerepoprojectsreposcreate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -389,7 +389,7 @@ export def "repos sourcerepoprojectsreposcreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($parent)/repos" $qp)
   let body = {mirrorConfig: $mirrorConfig, name: $name, pubsubConfigs: $pubsubConfigs, size: $size, url: $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -416,7 +416,7 @@ export def "projects sourcerepoprojectsreposgetIamPolicy" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -427,7 +427,7 @@ export def "projects sourcerepoprojectsreposgetIamPolicy" [
 ]: nothing -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "options.requestedPolicyVersion" $optionsrequestedPolicyVersion "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "options.requestedPolicyVersion" $optionsrequestedPolicyVersion "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($resource):getIamPolicy" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -453,7 +453,7 @@ export def "projects sourcerepoprojectsrepossetIamPolicy" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -466,7 +466,7 @@ export def "projects sourcerepoprojectsrepossetIamPolicy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($resource):setIamPolicy" $qp)
   let body = {policy: $policy, updateMask: $updateMask} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -493,7 +493,7 @@ export def "projects sourcerepoprojectsrepostestIamPermissions" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -505,7 +505,7 @@ export def "projects sourcerepoprojectsrepostestIamPermissions" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($resource):testIamPermissions" $qp)
   let body = {permissions: $permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }

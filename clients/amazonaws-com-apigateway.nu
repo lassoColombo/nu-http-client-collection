@@ -361,7 +361,7 @@ export def "restapis-deployments CreateDeployment" [
   --description: string # The description for the Deployment resource to create.
   --cacheClusterEnabled: oneof<nothing, bool> # Enables a cache cluster for the Stage resource specified in the input.
   --cacheClusterSize: string@cacheClusterSize-completer # Returns the size of the CacheCluster.
-  --body-variables: record # A map that defines the stage variables for the Stage resource that is associated with the new deployment. Variable names can have alphanumeric and underscore characters, and the values must match <code>[A-Za-z0-9-._~:/?#&amp;=,]+</code>.
+  --variables: record # A map that defines the stage variables for the Stage resource that is associated with the new deployment. Variable names can have alphanumeric and underscore characters, and the values must match <code>[A-Za-z0-9-._~:/?#&amp;=,]+</code>.
   --canarySettings: record # The input configuration for a canary deployment. — shape: {percentTraffic?: any, stageVariableOverrides?: any, useStageCache?: any}
   --tracingEnabled: oneof<nothing, bool> # Specifies whether active tracing with X-ray is enabled for the Stage.
 ]: any -> record<id: record, description: record, createdDate: record, apiSummary: record> {
@@ -369,7 +369,7 @@ export def "restapis-deployments CreateDeployment" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapis/($restapi_id)/deployments")
-  let body = {stageName: $stageName, stageDescription: $stageDescription, description: $description, cacheClusterEnabled: $cacheClusterEnabled, cacheClusterSize: $cacheClusterSize, variables: $body_variables, canarySettings: $canarySettings, tracingEnabled: $tracingEnabled} | compact
+  let body = {stageName: $stageName, stageDescription: $stageDescription, description: $description, cacheClusterEnabled: $cacheClusterEnabled, cacheClusterSize: $cacheClusterSize, variables: $variables, canarySettings: $canarySettings, tracingEnabled: $tracingEnabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -976,7 +976,7 @@ export def "restapis-stages CreateStage" [
   --description: string # The description of the Stage resource.
   --cacheClusterEnabled: oneof<nothing, bool> # Whether cache clustering is enabled for the stage.
   --cacheClusterSize: string@cacheClusterSize-completer # Returns the size of the CacheCluster.
-  --body-variables: record # A map that defines the stage variables for the new Stage resource. Variable names can have alphanumeric and underscore characters, and the values must match <code>[A-Za-z0-9-._~:/?#&amp;=,]+</code>.
+  --variables: record # A map that defines the stage variables for the new Stage resource. Variable names can have alphanumeric and underscore characters, and the values must match <code>[A-Za-z0-9-._~:/?#&amp;=,]+</code>.
   --documentationVersion: string # The version of the associated API documentation.
   --canarySettings: record # Configuration settings of a canary deployment. — shape: {percentTraffic?: any, deploymentId?: any, stageVariableOverrides?: any, useStageCache?: any}
   --tracingEnabled: oneof<nothing, bool> # Specifies whether active tracing with X-ray is enabled for the Stage.
@@ -986,7 +986,7 @@ export def "restapis-stages CreateStage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapis/($restapi_id)/stages")
-  let body = {stageName: $stageName, deploymentId: $deploymentId, description: $description, cacheClusterEnabled: $cacheClusterEnabled, cacheClusterSize: $cacheClusterSize, variables: $body_variables, documentationVersion: $documentationVersion, canarySettings: $canarySettings, tracingEnabled: $tracingEnabled, tags: $tags} | compact
+  let body = {stageName: $stageName, deploymentId: $deploymentId, description: $description, cacheClusterEnabled: $cacheClusterEnabled, cacheClusterSize: $cacheClusterSize, variables: $variables, documentationVersion: $documentationVersion, canarySettings: $canarySettings, tracingEnabled: $tracingEnabled, tags: $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

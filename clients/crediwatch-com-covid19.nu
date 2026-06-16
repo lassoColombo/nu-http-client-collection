@@ -101,11 +101,11 @@ export def "status-call get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string
+  --query: string
 ]: nothing -> record<data: record<answered_by: string, error: string, option_selected: string, phone_number: string, previously_verified_at: string, progress: string, token: string>, meta: record<job_id: string, job_time: int, query: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/status/call" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -125,11 +125,11 @@ export def "status-sku get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string
+  --query: string
 ]: nothing -> record<data: record<answered_by: string, error: string, option_selected: string, phone_number: string, previously_verified_at: string, progress: string, token: string>, meta: record<job_id: string, job_time: int, query: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/status/sku" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -149,13 +149,13 @@ export def "verify-name get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string
+  --query: string
   --state: string
   --city: string
 ]: nothing -> record<data: table<business_name: string, city: string, department_code_and_type: list, entity_type: string, is_gstn_verified: bool, nature_of_business: list, pincode: int, registration_date: string, registration_type: string, state: string>, meta: record<job_id: string, job_time: int, query: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/verify/name" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -175,12 +175,12 @@ export def "verify-phone get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string
+  --query: string
   --locking-period: string # default: 24
 ]: nothing -> record<data: record<answered_by: string, error: string, option_selected: string, phone_number: string, previously_verified_at: string, progress: string, token: string>, meta: record<job_id: string, job_time: int, query: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "locking_period" $locking_period "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "locking_period" $locking_period "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/verify/phone" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -200,12 +200,12 @@ export def "verify-sku get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string
+  --query: string
   --locking-period: string # default: 24
 ]: nothing -> record<data: record<answered_by: string, error: string, option_selected: string, phone_number: string, previously_verified_at: string, progress: string, token: string>, meta: record<job_id: string, job_time: int, query: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "locking_period" $locking_period "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "locking_period" $locking_period "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/verify/sku" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

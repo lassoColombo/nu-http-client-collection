@@ -154,7 +154,7 @@ export def "documents-versions GetDocumentVersion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # A comma-separated list of values. Specify "SOURCE" to include a URL for the source document.
+  --fields: string # A comma-separated list of values. Specify "SOURCE" to include a URL for the source document.
   --includeCustomMetadata: oneof<nothing, bool> # Set this to TRUE to include custom metadata in the response.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
@@ -167,7 +167,7 @@ export def "documents-versions GetDocumentVersion" [
 ]: nothing -> record<Metadata: record<Id: record, Name: record, ContentType: record, Size: record, Signature: record, Status: record, CreatedTimestamp: record, ModifiedTimestamp: record, ContentCreatedTimestamp: record, ContentModifiedTimestamp: record, CreatorId: record, Thumbnail: record, Source: record>, CustomMetadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "includeCustomMetadata" $includeCustomMetadata "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "includeCustomMetadata" $includeCustomMetadata "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v1/documents/($DocumentId)/versions/($VersionId)" $qp)
   let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "Authentication": $Authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -754,13 +754,13 @@ export def "users DescribeUsers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --organizationId: string # The ID of the organization.
   --userIds: string # The IDs of the users.
-  --qp-query: string # <p>A query to filter users by user name. Remember the following about the <code>Userids</code> and <code>Query</code> parameters:</p> <ul> <li> <p>If you don't use either parameter, the API returns a paginated list of all users on the site.</p> </li> <li> <p>If you use both parameters, the API ignores the <code>Query</code> parameter.</p> </li> <li> <p>The <code>Userid</code> parameter only returns user names that match a corresponding user ID.</p> </li> <li> <p>The <code>Query</code> parameter runs a "prefix" search for users by the <code>GivenName</code>, <code>SurName</code>, or <code>UserName</code> fields included in a <a href="https://docs.aws.amazon.com/workdocs/latest/APIReference/API_CreateUser.html">CreateUser</a> API call. For example, querying on <code>Ma</code> returns Márcia Oliveira, María García, and Mateo Jackson. If you use multiple characters, the API only returns data that matches all characters. For example, querying on <code>Ma J</code> only returns Mateo Jackson.</p> </li> </ul> (format: password)
+  --query: string # <p>A query to filter users by user name. Remember the following about the <code>Userids</code> and <code>Query</code> parameters:</p> <ul> <li> <p>If you don't use either parameter, the API returns a paginated list of all users on the site.</p> </li> <li> <p>If you use both parameters, the API ignores the <code>Query</code> parameter.</p> </li> <li> <p>The <code>Userid</code> parameter only returns user names that match a corresponding user ID.</p> </li> <li> <p>The <code>Query</code> parameter runs a "prefix" search for users by the <code>GivenName</code>, <code>SurName</code>, or <code>UserName</code> fields included in a <a href="https://docs.aws.amazon.com/workdocs/latest/APIReference/API_CreateUser.html">CreateUser</a> API call. For example, querying on <code>Ma</code> returns Márcia Oliveira, María García, and Mateo Jackson. If you use multiple characters, the API only returns data that matches all characters. For example, querying on <code>Ma J</code> only returns Mateo Jackson.</p> </li> </ul> (format: password)
   --include: string@include-completer # The state of the users. Specify "ALL" to include inactive users.
   --order: string@order-completer # The order for the results.
   --qp-sort: string@sort-completer # The sorting criteria.
   --marker: string # The marker for the next set of results. (You received this marker from a previous call.)
   --limit: int # The maximum number of items to return.
-  --qp-fields: string # A comma-separated list of values. Specify "STORAGE_METADATA" to include the user storage quota and utilization information.
+  --fields: string # A comma-separated list of values. Specify "STORAGE_METADATA" to include the user storage quota and utilization information.
   --Limit: string # Pagination limit
   --Marker: string # Pagination token
   --X-Amz-Content-Sha256: string
@@ -774,7 +774,7 @@ export def "users DescribeUsers" [
 ]: nothing -> record<Users: record, TotalNumberOfUsers: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "organizationId" $organizationId "scalar") (serialize-qp "userIds" $userIds "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "Limit" $Limit "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "organizationId" $organizationId "scalar") (serialize-qp "userIds" $userIds "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "Limit" $Limit "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users" $qp)
   let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "Authentication": $Authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1353,7 +1353,7 @@ export def "documents-versions DescribeDocumentVersions" [
   --marker: string # The marker for the next set of results. (You received this marker from a previous call.)
   --limit: int # The maximum number of versions to return with this call.
   --include: string # A comma-separated list of values. Specify "INITIALIZED" to include incomplete versions.
-  --qp-fields: string # Specify "SOURCE" to include initialized versions and a URL for the source document.
+  --fields: string # Specify "SOURCE" to include initialized versions and a URL for the source document.
   --Limit: string # Pagination limit
   --Marker: string # Pagination token
   --X-Amz-Content-Sha256: string
@@ -1367,7 +1367,7 @@ export def "documents-versions DescribeDocumentVersions" [
 ]: nothing -> record<DocumentVersions: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "Limit" $Limit "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "Limit" $Limit "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v1/documents/($DocumentId)/versions" $qp)
   let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "Authentication": $Authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1499,7 +1499,7 @@ export def "documents-path GetDocumentPath" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of levels in the hierarchy to return.
-  --qp-fields: string # A comma-separated list of values. Specify <code>NAME</code> to include the names of the parent folders.
+  --fields: string # A comma-separated list of values. Specify <code>NAME</code> to include the names of the parent folders.
   --marker: string # This value is not supported.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
@@ -1512,7 +1512,7 @@ export def "documents-path GetDocumentPath" [
 ]: nothing -> record<Path: record<Components: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v1/documents/($DocumentId)/path" $qp)
   let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "Authentication": $Authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1536,7 +1536,7 @@ export def "folders-path GetFolderPath" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of levels in the hierarchy to return.
-  --qp-fields: string # A comma-separated list of values. Specify "NAME" to include the names of the parent folders.
+  --fields: string # A comma-separated list of values. Specify "NAME" to include the names of the parent folders.
   --marker: string # This value is not supported.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
@@ -1549,7 +1549,7 @@ export def "folders-path GetFolderPath" [
 ]: nothing -> record<Path: record<Components: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v1/folders/($FolderId)/path" $qp)
   let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "Authentication": $Authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

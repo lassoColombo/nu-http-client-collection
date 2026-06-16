@@ -303,7 +303,7 @@ export def "screendata GetScreenData" [
   workbookId: string # The ID of the workbook that contains the screen.
   appId: string # The ID of the app that contains the screen.
   screenId: string # The ID of the screen.
-  --body-variables: record #  Variables are optional and are needed only if the screen requires them to render correctly. Variables are specified as a map where the key is the name of the variable as defined on the screen. The value is an object which currently has only one property, rawValue, which holds the value of the variable to be passed to the screen. 
+  --variables: record #  Variables are optional and are needed only if the screen requires them to render correctly. Variables are specified as a map where the key is the name of the variable as defined on the screen. The value is an object which currently has only one property, rawValue, which holds the value of the variable to be passed to the screen. 
   --maxResults: int # <p> The number of results to be returned on a single page. Specify a number between 1 and 100. The maximum value is 100. </p> <p> This parameter is optional. If you don't specify this parameter, the default page size is 100. </p>
   --nextToken: string # <p> This parameter is optional. If a nextToken is not specified, the API returns the first page of data. </p> <p> Pagination tokens expire after 1 hour. If you use a token that was returned more than an hour back, the API will throw ValidationException. </p>
 ]: any -> record<results: record, workbookCursor: record, nextToken: record> {
@@ -311,7 +311,7 @@ export def "screendata GetScreenData" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/screendata")
-  let body = {workbookId: $workbookId, appId: $appId, screenId: $screenId, variables: $body_variables, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {workbookId: $workbookId, appId: $appId, screenId: $screenId, variables: $variables, maxResults: $maxResults, nextToken: $nextToken} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -344,7 +344,7 @@ export def "workbooks-apps-screens-automations InvokeScreenAutomation" [
   --X-Amz-Security-Token: string
   --X-Amz-Signature: string
   --X-Amz-SignedHeaders: string
-  --body-variables: record #  Variables are specified as a map where the key is the name of the variable as defined on the screen. The value is an object which currently has only one property, rawValue, which holds the value of the variable to be passed to the screen. Any variables defined in a screen are required to be passed in the call. 
+  --variables: record #  Variables are specified as a map where the key is the name of the variable as defined on the screen. The value is an object which currently has only one property, rawValue, which holds the value of the variable to be passed to the screen. Any variables defined in a screen are required to be passed in the call. 
   --rowId: string #  The row ID for the automation if the automation is defined inside a block with source or list. 
   --clientRequestToken: string # <p> The request token for performing the automation action. Request tokens help to identify duplicate requests. If a call times out or fails due to a transient error like a failed network connection, you can retry the call with the same request token. The service ensures that if the first call using that request token is successfully performed, the second call will return the response of the previous call rather than performing the action again. </p> <p> Note that request tokens are valid only for a few minutes. You cannot use request tokens to dedupe requests spanning hours or days. </p>
 ]: any -> record<workbookCursor: record> {
@@ -352,7 +352,7 @@ export def "workbooks-apps-screens-automations InvokeScreenAutomation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workbooks/($workbookId)/apps/($appId)/screens/($screenId)/automations/($automationId)")
-  let body = {variables: $body_variables, rowId: $rowId, clientRequestToken: $clientRequestToken} | compact
+  let body = {variables: $variables, rowId: $rowId, clientRequestToken: $clientRequestToken} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

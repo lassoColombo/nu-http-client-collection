@@ -115,7 +115,7 @@ export def "v1beta metastoreprojectslocationsservicesbackupsdelete" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -126,7 +126,7 @@ export def "v1beta metastoreprojectslocationsservicesbackupsdelete" [
 ]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "requestId" $requestId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "requestId" $requestId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -151,7 +151,7 @@ export def "v1beta metastoreprojectslocationsservicesmetadataImportsget" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -161,7 +161,7 @@ export def "v1beta metastoreprojectslocationsservicesmetadataImportsget" [
 ]: nothing -> record<createTime: string, databaseDump: record<databaseType: string, gcsUri: string, sourceDatabase: string, type: string>, description: string, endTime: string, name: string, state: string, updateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -187,7 +187,7 @@ export def "v1beta metastoreprojectslocationsservicesmetadataImportspatch" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -203,7 +203,7 @@ export def "v1beta metastoreprojectslocationsservicesmetadataImportspatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "requestId" $requestId "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "requestId" $requestId "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta/($name)" $qp)
   let body = {databaseDump: $databaseDump, description: $description, name: $body_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -230,7 +230,7 @@ export def "v1beta-locations metastoreprojectslocationslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -243,7 +243,7 @@ export def "v1beta-locations metastoreprojectslocationslist" [
 ]: nothing -> record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta/($name)/locations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -268,7 +268,7 @@ export def "v1beta-operations metastoreprojectslocationsoperationslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -281,7 +281,7 @@ export def "v1beta-operations metastoreprojectslocationsoperationslist" [
 ]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta/($name)/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -306,7 +306,7 @@ export def "v1beta metastoreprojectslocationsoperationscancel" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -318,7 +318,7 @@ export def "v1beta metastoreprojectslocationsoperationscancel" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta/($name):cancel" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -344,7 +344,7 @@ export def "v1beta-backups metastoreprojectslocationsservicesbackupslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -358,7 +358,7 @@ export def "v1beta-backups metastoreprojectslocationsservicesbackupslist" [
 ]: nothing -> record<backups: table<createTime: string, description: string, endTime: string, name: string, restoringServices: list, serviceRevision: record, state: string>, nextPageToken: string, unreachable: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta/($parent)/backups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -384,7 +384,7 @@ export def "v1beta-backups metastoreprojectslocationsservicesbackupscreate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -400,7 +400,7 @@ export def "v1beta-backups metastoreprojectslocationsservicesbackupscreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "backupId" $backupId "scalar") (serialize-qp "requestId" $requestId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "backupId" $backupId "scalar") (serialize-qp "requestId" $requestId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta/($parent)/backups" $qp)
   let body = {description: $description, name: $name, serviceRevision: $serviceRevision} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -427,7 +427,7 @@ export def "v1beta-federations metastoreprojectslocationsfederationslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -441,7 +441,7 @@ export def "v1beta-federations metastoreprojectslocationsfederationslist" [
 ]: nothing -> record<federations: table<backendMetastores: record, createTime: string, endpointUri: string, labels: record, name: string, state: string, stateMessage: string, uid: string, updateTime: string, version: string>, nextPageToken: string, unreachable: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta/($parent)/federations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -466,7 +466,7 @@ export def "v1beta-federations metastoreprojectslocationsfederationscreate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -483,7 +483,7 @@ export def "v1beta-federations metastoreprojectslocationsfederationscreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "federationId" $federationId "scalar") (serialize-qp "requestId" $requestId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "federationId" $federationId "scalar") (serialize-qp "requestId" $requestId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta/($parent)/federations" $qp)
   let body = {backendMetastores: $backendMetastores, labels: $labels, name: $name, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -510,7 +510,7 @@ export def "v1beta-metadata-imports metastoreprojectslocationsservicesmetadataIm
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -524,7 +524,7 @@ export def "v1beta-metadata-imports metastoreprojectslocationsservicesmetadataIm
 ]: nothing -> record<metadataImports: table<createTime: string, databaseDump: record, description: string, endTime: string, name: string, state: string, updateTime: string>, nextPageToken: string, unreachable: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta/($parent)/metadataImports" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -550,7 +550,7 @@ export def "v1beta-metadata-imports metastoreprojectslocationsservicesmetadataIm
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -566,7 +566,7 @@ export def "v1beta-metadata-imports metastoreprojectslocationsservicesmetadataIm
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "metadataImportId" $metadataImportId "scalar") (serialize-qp "requestId" $requestId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "metadataImportId" $metadataImportId "scalar") (serialize-qp "requestId" $requestId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta/($parent)/metadataImports" $qp)
   let body = {databaseDump: $databaseDump, description: $description, name: $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -593,7 +593,7 @@ export def "v1beta-services metastoreprojectslocationsserviceslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -607,7 +607,7 @@ export def "v1beta-services metastoreprojectslocationsserviceslist" [
 ]: nothing -> record<nextPageToken: string, services: table<artifactGcsUri: string, createTime: string, databaseType: string, encryptionConfig: record, endpointUri: string, hiveMetastoreConfig: record, labels: record, maintenanceWindow: record, metadataIntegration: record, metadataManagementActivity: record, name: string, network: string, networkConfig: record, port: int, releaseChannel: string, scalingConfig: record, state: string, stateMessage: string, telemetryConfig: record, tier: string, uid: string, updateTime: string>, unreachable: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta/($parent)/services" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -639,7 +639,7 @@ export def "v1beta-services metastoreprojectslocationsservicescreate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -667,7 +667,7 @@ export def "v1beta-services metastoreprojectslocationsservicescreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "requestId" $requestId "scalar") (serialize-qp "serviceId" $serviceId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "requestId" $requestId "scalar") (serialize-qp "serviceId" $serviceId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta/($parent)/services" $qp)
   let body = {databaseType: $databaseType, encryptionConfig: $encryptionConfig, hiveMetastoreConfig: $hiveMetastoreConfig, labels: $labels, maintenanceWindow: $maintenanceWindow, metadataIntegration: $metadataIntegration, metadataManagementActivity: $metadataManagementActivity, name: $name, network: $network, networkConfig: $networkConfig, port: $port, releaseChannel: $releaseChannel, scalingConfig: $scalingConfig, telemetryConfig: $telemetryConfig, tier: $tier} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -694,7 +694,7 @@ export def "v1beta metastoreprojectslocationsservicesdatabasestablesgetIamPolicy
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -705,7 +705,7 @@ export def "v1beta metastoreprojectslocationsservicesdatabasestablesgetIamPolicy
 ]: nothing -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "options.requestedPolicyVersion" $optionsrequestedPolicyVersion "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "options.requestedPolicyVersion" $optionsrequestedPolicyVersion "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta/($resource):getIamPolicy" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -730,7 +730,7 @@ export def "v1beta metastoreprojectslocationsservicesremoveIamPolicy" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -742,7 +742,7 @@ export def "v1beta metastoreprojectslocationsservicesremoveIamPolicy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta/($resource):removeIamPolicy" $qp)
   let body = {asynchronous: $asynchronous} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -770,7 +770,7 @@ export def "v1beta metastoreprojectslocationsservicesdatabasestablessetIamPolicy
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -783,7 +783,7 @@ export def "v1beta metastoreprojectslocationsservicesdatabasestablessetIamPolicy
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta/($resource):setIamPolicy" $qp)
   let body = {policy: $policy, updateMask: $updateMask} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -810,7 +810,7 @@ export def "v1beta metastoreprojectslocationsservicesdatabasestablestestIamPermi
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -822,7 +822,7 @@ export def "v1beta metastoreprojectslocationsservicesdatabasestablestestIamPermi
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta/($resource):testIamPermissions" $qp)
   let body = {permissions: $permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -849,7 +849,7 @@ export def "v1beta metastoreprojectslocationsservicesalterLocation" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -862,7 +862,7 @@ export def "v1beta metastoreprojectslocationsservicesalterLocation" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta/($service):alterLocation" $qp)
   let body = {locationUri: $locationUri, resourceName: $resourceName} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -889,7 +889,7 @@ export def "v1beta metastoreprojectslocationsservicesexportMetadata" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -903,7 +903,7 @@ export def "v1beta metastoreprojectslocationsservicesexportMetadata" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta/($service):exportMetadata" $qp)
   let body = {databaseDumpType: $databaseDumpType, destinationGcsFolder: $destinationGcsFolder, requestId: $requestId} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -930,7 +930,7 @@ export def "v1beta metastoreprojectslocationsservicesmoveTableToDatabase" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -944,7 +944,7 @@ export def "v1beta metastoreprojectslocationsservicesmoveTableToDatabase" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta/($service):moveTableToDatabase" $qp)
   let body = {dbName: $dbName, destinationDbName: $destinationDbName, tableName: $tableName} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -971,21 +971,21 @@ export def "v1beta metastoreprojectslocationsservicesqueryMetadata" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-query: string # Required. A read-only SQL query to execute against the metadata database. The query cannot change or mutate the data.
+  --query: string # Required. A read-only SQL query to execute against the metadata database. The query cannot change or mutate the data.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta/($service):queryMetadata" $qp)
-  let body = {query: $body_query} | compact
+  let body = {query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1010,7 +1010,7 @@ export def "v1beta metastoreprojectslocationsservicesrestore" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1024,7 +1024,7 @@ export def "v1beta metastoreprojectslocationsservicesrestore" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta/($service):restore" $qp)
   let body = {backup: $backup, requestId: $requestId, restoreType: $restoreType} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }

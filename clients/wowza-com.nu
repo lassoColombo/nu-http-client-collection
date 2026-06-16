@@ -2500,11 +2500,11 @@ export def "transcoders-uptimes-metrics-current showUptimeMetricsCurrent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # A comma-separated list of fields to return.
+  --fields: string # A comma-separated list of fields to return.
 ]: nothing -> record<current: record<audio_codec: record<status: string, text: string, units: string, value: string>, bits_in_rate: record<status: string, text: string, units: string, value: float>, bits_out_rate: record<status: string, text: string, units: string, value: float>, bytes_in_rate: record<status: string, text: string, units: string, value: float>, bytes_out_rate: record<status: string, text: string, units: string, value: float>, configured_bytes_out_rate: record<status: string, text: string, units: string, value: int>, connected: record<status: string, text: string, units: string, value: string>, cpu: record<status: string, text: string, units: string, value: int>, frame_rate: record<status: string, text: string, units: string, value: int>, frame_size: record<status: string, text: string, units: string, value: string>, gpu_decoder_usage: record<status: string, text: string, units: string, value: int>, gpu_driver_version: record<status: string, text: string, units: string, value: string>, gpu_encoder_usage: record<status: string, text: string, units: string, value: int>, gpu_memory_usage: record<status: string, text: string, units: string, value: int>, gpu_usage: record<status: string, text: string, units: string, value: int>, height: record<status: string, text: string, units: string, value: int>, keyframe_interval: record<status: string, text: string, units: string, value: int>, stream_target_status_OUTPUTIDX_STREAMTARGETIDX: record<status: string, text: string, units: string, value: string>, unique_views: record<status: string, text: string, units: string, value: int>, video_codec: record<status: string, text: string, units: string, value: string>, width: record<status: string, text: string, units: string, value: int>>, limits: record<fields: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/transcoders/($transcoder_id)/uptimes/($id)/metrics/current" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2526,13 +2526,13 @@ export def "transcoders-uptimes-metrics-historic showUptimeMetricsHistoric" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # A comma-separated list of fields to return.
+  --fields: string # A comma-separated list of fields to return.
   --qp-from: string # The start of the range of time used to aggregate the metrics. Express the value by using the ISO 8601 standard of <strong>YYYY-MM-DDTHH:MM:SSZ</strong> where <strong>HH</strong> is a 24-hour clock in UTC.
   --qp-to: string # The end of the range of time used to aggregate the metrics. Express the value by using the ISO 8601 standard of <strong>YYYY-MM-DDTHH:MM:SSZ</strong> where <strong>HH</strong> is a 24-hour clock in UTC.
 ]: nothing -> record<historic: table<audio_codec: record, bits_in_rate: record, bits_out_rate: record, cpu_idle: record, created_at: string, frame_rate: record, height: record, keyframe_interval: record, video_codec: record, width: record>, limits: record<fields: string, from: string, to: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/transcoders/($transcoder_id)/uptimes/($id)/metrics/historic" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

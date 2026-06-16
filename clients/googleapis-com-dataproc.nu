@@ -113,7 +113,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclusterslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -126,7 +126,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclusterslist" [
 ]: nothing -> record<clusters: table<clusterName: string, clusterUuid: string, config: record, labels: record, metrics: record, projectId: string, status: record, statusHistory: list, virtualClusterConfig: record>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/projects/($projectId)/regions/($region)/clusters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -155,7 +155,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclusterscreate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -175,7 +175,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclusterscreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "actionOnFailedPrimaryWorkers" $actionOnFailedPrimaryWorkers "scalar") (serialize-qp "requestId" $requestId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "actionOnFailedPrimaryWorkers" $actionOnFailedPrimaryWorkers "scalar") (serialize-qp "requestId" $requestId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/projects/($projectId)/regions/($region)/clusters" $qp)
   let body = {clusterName: $clusterName, config: $config, labels: $labels, metrics: $metrics, projectId: $body_projectId, status: $status, virtualClusterConfig: $virtualClusterConfig} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -204,7 +204,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclustersdelete" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -216,7 +216,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclustersdelete" [
 ]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clusterUuid" $clusterUuid "scalar") (serialize-qp "requestId" $requestId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clusterUuid" $clusterUuid "scalar") (serialize-qp "requestId" $requestId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/projects/($projectId)/regions/($region)/clusters/($clusterName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -243,7 +243,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclustersget" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -253,7 +253,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclustersget" [
 ]: nothing -> record<clusterName: string, clusterUuid: string, config: record<autoscalingConfig: record<policyUri: string>, auxiliaryNodeGroups: list<record>, configBucket: string, dataprocMetricConfig: record<metrics: list>, encryptionConfig: record<gcePdKmsKeyName: string, kmsKey: string>, endpointConfig: record<enableHttpPortAccess: bool, httpPorts: record>, gceClusterConfig: record<confidentialInstanceConfig: record, internalIpOnly: bool, metadata: record, networkUri: string, nodeGroupAffinity: record, privateIpv6GoogleAccess: string, reservationAffinity: record, serviceAccount: string, serviceAccountScopes: list, shieldedInstanceConfig: record, subnetworkUri: string, tags: list, zoneUri: string>, gkeClusterConfig: record<gkeClusterTarget: string, namespacedGkeDeploymentTarget: record, nodePoolTarget: list>, initializationActions: list<record>, lifecycleConfig: record<autoDeleteTime: string, autoDeleteTtl: string, idleDeleteTtl: string, idleStartTime: string>, masterConfig: record<accelerators: list, diskConfig: record, imageUri: string, instanceNames: list, instanceReferences: list, isPreemptible: bool, machineTypeUri: string, managedGroupConfig: record, minCpuPlatform: string, numInstances: int, preemptibility: string>, metastoreConfig: record<dataprocMetastoreService: string>, secondaryWorkerConfig: record<accelerators: list, diskConfig: record, imageUri: string, instanceNames: list, instanceReferences: list, isPreemptible: bool, machineTypeUri: string, managedGroupConfig: record, minCpuPlatform: string, numInstances: int, preemptibility: string>, securityConfig: record<identityConfig: record, kerberosConfig: record>, softwareConfig: record<imageVersion: string, optionalComponents: list, properties: record>, tempBucket: string, workerConfig: record<accelerators: list, diskConfig: record, imageUri: string, instanceNames: list, instanceReferences: list, isPreemptible: bool, machineTypeUri: string, managedGroupConfig: record, minCpuPlatform: string, numInstances: int, preemptibility: string>>, labels: record, metrics: record<hdfsMetrics: record, yarnMetrics: record>, projectId: string, status: record<detail: string, state: string, stateStartTime: string, substate: string>, statusHistory: table<detail: string, state: string, stateStartTime: string, substate: string>, virtualClusterConfig: record<auxiliaryServicesConfig: record<metastoreConfig: record, sparkHistoryServerConfig: record>, kubernetesClusterConfig: record<gkeClusterConfig: record, kubernetesNamespace: string, kubernetesSoftwareConfig: record>, stagingBucket: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/projects/($projectId)/regions/($region)/clusters/($clusterName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -283,7 +283,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclusterspatch" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -304,7 +304,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclusterspatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "gracefulDecommissionTimeout" $gracefulDecommissionTimeout "scalar") (serialize-qp "requestId" $requestId "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "gracefulDecommissionTimeout" $gracefulDecommissionTimeout "scalar") (serialize-qp "requestId" $requestId "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/projects/($projectId)/regions/($region)/clusters/($clusterName)" $qp)
   let body = {clusterName: $body_clusterName, config: $config, labels: $labels, metrics: $metrics, projectId: $body_projectId, status: $status, virtualClusterConfig: $virtualClusterConfig} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -334,7 +334,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclustersdiagnose" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -350,7 +350,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclustersdiagnose" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/projects/($projectId)/regions/($region)/clusters/($clusterName):diagnose" $qp)
   let body = {diagnosisInterval: $diagnosisInterval, job: $job, jobs: $jobs, yarnApplicationId: $yarnApplicationId, yarnApplicationIds: $yarnApplicationIds} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -380,7 +380,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclustersrepair" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -396,7 +396,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclustersrepair" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/projects/($projectId)/regions/($region)/clusters/($clusterName):repair" $qp)
   let body = {clusterUuid: $clusterUuid, gracefulDecommissionTimeout: $gracefulDecommissionTimeout, nodePools: $nodePools, parentOperationId: $parentOperationId, requestId: $requestId} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -425,7 +425,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclustersstart" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -438,7 +438,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclustersstart" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/projects/($projectId)/regions/($region)/clusters/($clusterName):start" $qp)
   let body = {clusterUuid: $clusterUuid, requestId: $requestId} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -467,7 +467,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclustersstop" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -480,7 +480,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclustersstop" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/projects/($projectId)/regions/($region)/clusters/($clusterName):stop" $qp)
   let body = {clusterUuid: $clusterUuid, requestId: $requestId} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -508,7 +508,7 @@ export def "projects-regions-jobs dataprocprojectsregionsjobslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -523,7 +523,7 @@ export def "projects-regions-jobs dataprocprojectsregionsjobslist" [
 ]: nothing -> record<jobs: table<done: bool, driverControlFilesUri: string, driverOutputResourceUri: string, driverSchedulingConfig: record, hadoopJob: record, hiveJob: record, jobUuid: string, labels: record, pigJob: record, placement: record, prestoJob: record, pysparkJob: record, reference: record, scheduling: record, sparkJob: record, sparkRJob: record, sparkSqlJob: record, status: record, statusHistory: list, trinoJob: record, yarnApplications: list>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clusterName" $clusterName "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "jobStateMatcher" $jobStateMatcher "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clusterName" $clusterName "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "jobStateMatcher" $jobStateMatcher "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/projects/($projectId)/regions/($region)/jobs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -550,7 +550,7 @@ export def "projects-regions-jobs dataprocprojectsregionsjobsdelete" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -560,7 +560,7 @@ export def "projects-regions-jobs dataprocprojectsregionsjobsdelete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/projects/($projectId)/regions/($region)/jobs/($jobId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -587,7 +587,7 @@ export def "projects-regions-jobs dataprocprojectsregionsjobsget" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -597,7 +597,7 @@ export def "projects-regions-jobs dataprocprojectsregionsjobsget" [
 ]: nothing -> record<done: bool, driverControlFilesUri: string, driverOutputResourceUri: string, driverSchedulingConfig: record<memoryMb: int, vcores: int>, hadoopJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, hiveJob: record<continueOnFailure: bool, jarFileUris: list<string>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, jobUuid: string, labels: record, pigJob: record<continueOnFailure: bool, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, placement: record<clusterLabels: record, clusterName: string, clusterUuid: string>, prestoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, pysparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainPythonFileUri: string, properties: record, pythonFileUris: list<string>>, reference: record<jobId: string, projectId: string>, scheduling: record<maxFailuresPerHour: int, maxFailuresTotal: int>, sparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, sparkRJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainRFileUri: string, properties: record>, sparkSqlJob: record<jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, status: record<details: string, state: string, stateStartTime: string, substate: string>, statusHistory: table<details: string, state: string, stateStartTime: string, substate: string>, trinoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, yarnApplications: table<name: string, progress: float, state: string, trackingUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/projects/($projectId)/regions/($region)/jobs/($jobId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -638,7 +638,7 @@ export def "projects-regions-jobs dataprocprojectsregionsjobspatch" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -665,7 +665,7 @@ export def "projects-regions-jobs dataprocprojectsregionsjobspatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/projects/($projectId)/regions/($region)/jobs/($jobId)" $qp)
   let body = {driverSchedulingConfig: $driverSchedulingConfig, hadoopJob: $hadoopJob, hiveJob: $hiveJob, labels: $labels, pigJob: $pigJob, placement: $placement, prestoJob: $prestoJob, pysparkJob: $pysparkJob, reference: $reference, scheduling: $scheduling, sparkJob: $sparkJob, sparkRJob: $sparkRJob, sparkSqlJob: $sparkSqlJob, status: $status, trinoJob: $trinoJob} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -694,7 +694,7 @@ export def "projects-regions-jobs dataprocprojectsregionsjobscancel" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -706,7 +706,7 @@ export def "projects-regions-jobs dataprocprojectsregionsjobscancel" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/projects/($projectId)/regions/($region)/jobs/($jobId):cancel" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -734,7 +734,7 @@ export def "projects-regions-jobs-submit dataprocprojectsregionsjobssubmit" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -747,7 +747,7 @@ export def "projects-regions-jobs-submit dataprocprojectsregionsjobssubmit" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/projects/($projectId)/regions/($region)/jobs:submit" $qp)
   let body = {job: $job, requestId: $requestId} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -776,7 +776,7 @@ export def "projects-regions-jobs-submit-as-operation dataprocprojectsregionsjob
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -789,7 +789,7 @@ export def "projects-regions-jobs-submit-as-operation dataprocprojectsregionsjob
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/projects/($projectId)/regions/($region)/jobs:submitAsOperation" $qp)
   let body = {job: $job, requestId: $requestId} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -816,7 +816,7 @@ export def "projects dataprocprojectsregionsworkflowTemplatesdelete" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -827,7 +827,7 @@ export def "projects dataprocprojectsregionsworkflowTemplatesdelete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -852,7 +852,7 @@ export def "projects dataprocprojectsregionsworkflowTemplatesget" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -865,7 +865,7 @@ export def "projects dataprocprojectsregionsworkflowTemplatesget" [
 ]: nothing -> record<createTime: string, dagTimeout: string, id: string, jobs: table<hadoopJob: record, hiveJob: record, labels: record, pigJob: record, prerequisiteStepIds: list, prestoJob: record, pysparkJob: record, scheduling: record, sparkJob: record, sparkRJob: record, sparkSqlJob: record, stepId: string, trinoJob: record>, labels: record, name: string, parameters: table<description: string, fields: list, name: string, validation: record>, placement: record<clusterSelector: record<clusterLabels: record, zone: string>, managedCluster: record<clusterName: string, config: record, labels: record>>, updateTime: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -893,7 +893,7 @@ export def "projects dataprocprojectsregionsworkflowTemplatesupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -911,7 +911,7 @@ export def "projects dataprocprojectsregionsworkflowTemplatesupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($name)" $qp)
   let body = {dagTimeout: $dagTimeout, id: $id, jobs: $jobs, labels: $labels, parameters: $parameters, placement: $placement, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -938,7 +938,7 @@ export def "projects dataprocprojectsregionsoperationscancel" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -948,7 +948,7 @@ export def "projects dataprocprojectsregionsoperationscancel" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($name):cancel" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -973,7 +973,7 @@ export def "projects dataprocprojectsregionsworkflowTemplatesinstantiate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -987,7 +987,7 @@ export def "projects dataprocprojectsregionsworkflowTemplatesinstantiate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($name):instantiate" $qp)
   let body = {parameters: $parameters, requestId: $requestId, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1014,7 +1014,7 @@ export def "projects dataprocprojectsregionsclustersnodeGroupsresize" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1028,7 +1028,7 @@ export def "projects dataprocprojectsregionsclustersnodeGroupsresize" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($name):resize" $qp)
   let body = {gracefulDecommissionTimeout: $gracefulDecommissionTimeout, requestId: $requestId, size: $size} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1055,7 +1055,7 @@ export def "autoscaling-policies dataprocprojectsregionsautoscalingPolicieslist"
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1067,7 +1067,7 @@ export def "autoscaling-policies dataprocprojectsregionsautoscalingPolicieslist"
 ]: nothing -> record<nextPageToken: string, policies: table<basicAlgorithm: record, id: string, labels: record, name: string, secondaryWorkerConfig: record, workerConfig: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($parent)/autoscalingPolicies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1095,7 +1095,7 @@ export def "autoscaling-policies dataprocprojectsregionsautoscalingPoliciescreat
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1111,7 +1111,7 @@ export def "autoscaling-policies dataprocprojectsregionsautoscalingPoliciescreat
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($parent)/autoscalingPolicies" $qp)
   let body = {basicAlgorithm: $basicAlgorithm, id: $id, labels: $labels, secondaryWorkerConfig: $secondaryWorkerConfig, workerConfig: $workerConfig} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1138,7 +1138,7 @@ export def "batches dataprocprojectslocationsbatcheslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1152,7 +1152,7 @@ export def "batches dataprocprojectslocationsbatcheslist" [
 ]: nothing -> record<batches: table<createTime: string, creator: string, environmentConfig: record, labels: record, name: string, operation: string, pysparkBatch: record, runtimeConfig: record, runtimeInfo: record, sparkBatch: record, sparkRBatch: record, sparkSqlBatch: record, state: string, stateHistory: list, stateMessage: string, stateTime: string, uuid: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($parent)/batches" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1184,7 +1184,7 @@ export def "batches dataprocprojectslocationsbatchescreate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1205,7 +1205,7 @@ export def "batches dataprocprojectslocationsbatchescreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "batchId" $batchId "scalar") (serialize-qp "requestId" $requestId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "batchId" $batchId "scalar") (serialize-qp "requestId" $requestId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($parent)/batches" $qp)
   let body = {environmentConfig: $environmentConfig, labels: $labels, pysparkBatch: $pysparkBatch, runtimeConfig: $runtimeConfig, runtimeInfo: $runtimeInfo, sparkBatch: $sparkBatch, sparkRBatch: $sparkRBatch, sparkSqlBatch: $sparkSqlBatch} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1233,7 +1233,7 @@ export def "node-groups dataprocprojectsregionsclustersnodeGroupscreate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1250,7 +1250,7 @@ export def "node-groups dataprocprojectsregionsclustersnodeGroupscreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "nodeGroupId" $nodeGroupId "scalar") (serialize-qp "requestId" $requestId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "nodeGroupId" $nodeGroupId "scalar") (serialize-qp "requestId" $requestId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($parent)/nodeGroups" $qp)
   let body = {labels: $labels, name: $name, nodeGroupConfig: $nodeGroupConfig, roles: $roles} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1277,7 +1277,7 @@ export def "workflow-templates dataprocprojectsregionsworkflowTemplateslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1289,7 +1289,7 @@ export def "workflow-templates dataprocprojectsregionsworkflowTemplateslist" [
 ]: nothing -> record<nextPageToken: string, templates: table<createTime: string, dagTimeout: string, id: string, jobs: list, labels: record, name: string, parameters: list, placement: record, updateTime: string, version: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($parent)/workflowTemplates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1317,7 +1317,7 @@ export def "workflow-templates dataprocprojectsregionsworkflowTemplatescreate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1335,7 +1335,7 @@ export def "workflow-templates dataprocprojectsregionsworkflowTemplatescreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($parent)/workflowTemplates" $qp)
   let body = {dagTimeout: $dagTimeout, id: $id, jobs: $jobs, labels: $labels, parameters: $parameters, placement: $placement, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1365,7 +1365,7 @@ export def "workflow-templates-instantiate-inline dataprocprojectsregionsworkflo
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1384,7 +1384,7 @@ export def "workflow-templates-instantiate-inline dataprocprojectsregionsworkflo
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "requestId" $requestId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "requestId" $requestId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($parent)/workflowTemplates:instantiateInline" $qp)
   let body = {dagTimeout: $dagTimeout, id: $id, jobs: $jobs, labels: $labels, parameters: $parameters, placement: $placement, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1413,7 +1413,7 @@ export def "projects dataprocprojectsregionsclustersinjectCredentials" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1426,7 +1426,7 @@ export def "projects dataprocprojectsregionsclustersinjectCredentials" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($project)/($region)/($cluster):injectCredentials" $qp)
   let body = {clusterUuid: $clusterUuid, credentialsCiphertext: $credentialsCiphertext} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1454,7 +1454,7 @@ export def "projects dataprocprojectsregionsworkflowTemplatesgetIamPolicy" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1466,7 +1466,7 @@ export def "projects dataprocprojectsregionsworkflowTemplatesgetIamPolicy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($resource):getIamPolicy" $qp)
   let body = {options: $options} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1494,7 +1494,7 @@ export def "projects dataprocprojectsregionsworkflowTemplatessetIamPolicy" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1506,7 +1506,7 @@ export def "projects dataprocprojectsregionsworkflowTemplatessetIamPolicy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($resource):setIamPolicy" $qp)
   let body = {policy: $policy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1533,7 +1533,7 @@ export def "projects dataprocprojectsregionsworkflowTemplatestestIamPermissions"
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1545,7 +1545,7 @@ export def "projects dataprocprojectsregionsworkflowTemplatestestIamPermissions"
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/($resource):testIamPermissions" $qp)
   let body = {permissions: $permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }

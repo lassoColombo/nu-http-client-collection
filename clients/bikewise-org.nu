@@ -110,11 +110,11 @@ export def "incidents GET--version-incidents---format-" [
   --incident-type: string@incident-type-completer # <p>Only incidents of specific type</p>
   --proximity: string # <p>Center of location for proximity search</p>
   --proximity-square: int # <p>Size of the proximity search</p>  (format: int32, default: 100)
-  --qp-query: string # <p>Full text search of incidents</p>
+  --query: string # <p>Full text search of incidents</p>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "occurred_before" $occurred_before "scalar") (serialize-qp "occurred_after" $occurred_after "scalar") (serialize-qp "incident_type" $incident_type "scalar") (serialize-qp "proximity" $proximity "scalar") (serialize-qp "proximity_square" $proximity_square "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "occurred_before" $occurred_before "scalar") (serialize-qp "occurred_after" $occurred_after "scalar") (serialize-qp "incident_type" $incident_type "scalar") (serialize-qp "proximity" $proximity "scalar") (serialize-qp "proximity_square" $proximity_square "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/incidents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -161,13 +161,13 @@ export def "locations GET--version-locations---format-" [
   --incident-type: string@incident-type-completer # <p>Only incidents of specific type</p>
   --proximity: string # <p>Center of location for proximity search</p>
   --proximity-square: int # <p>Size of the proximity search</p>  (format: int32, default: 100)
-  --qp-query: string # <p>Full text search of incidents</p>
+  --query: string # <p>Full text search of incidents</p>
   --limit: int # <p>Max number of results to return. Defaults to 100</p>  (format: int32)
   --all: oneof<nothing, bool> # <p>Give ‘em all to me. Will ignore limit</p>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "occurred_before" $occurred_before "scalar") (serialize-qp "occurred_after" $occurred_after "scalar") (serialize-qp "incident_type" $incident_type "scalar") (serialize-qp "proximity" $proximity "scalar") (serialize-qp "proximity_square" $proximity_square "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "all" $all "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "occurred_before" $occurred_before "scalar") (serialize-qp "occurred_after" $occurred_after "scalar") (serialize-qp "incident_type" $incident_type "scalar") (serialize-qp "proximity" $proximity "scalar") (serialize-qp "proximity_square" $proximity_square "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "all" $all "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/locations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -192,13 +192,13 @@ export def "locations-markers GET--version-locations-markers---format-" [
   --incident-type: string@incident-type-completer # <p>Only incidents of specific type</p>
   --proximity: string # <p>Center of location for proximity search</p>
   --proximity-square: int # <p>Size of the proximity search</p>  (format: int32, default: 100)
-  --qp-query: string # <p>Full text search of incidents</p>
+  --query: string # <p>Full text search of incidents</p>
   --limit: int # <p>Max number of results to return. Defaults to 100</p>  (format: int32)
   --all: oneof<nothing, bool> # <p>Give ‘em all to me. Will ignore limit</p>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "occurred_before" $occurred_before "scalar") (serialize-qp "occurred_after" $occurred_after "scalar") (serialize-qp "incident_type" $incident_type "scalar") (serialize-qp "proximity" $proximity "scalar") (serialize-qp "proximity_square" $proximity_square "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "all" $all "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "occurred_before" $occurred_before "scalar") (serialize-qp "occurred_after" $occurred_after "scalar") (serialize-qp "incident_type" $incident_type "scalar") (serialize-qp "proximity" $proximity "scalar") (serialize-qp "proximity_square" $proximity_square "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "all" $all "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/locations/markers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

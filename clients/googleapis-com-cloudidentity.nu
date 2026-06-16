@@ -115,7 +115,7 @@ export def "v1beta1-devices cloudidentitydeviceslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -131,7 +131,7 @@ export def "v1beta1-devices cloudidentitydeviceslist" [
 ]: nothing -> record<devices: table<androidSpecificAttributes: record, assetTag: string, basebandVersion: string, bootloaderVersion: string, brand: string, buildNumber: string, clientTypes: list, compromisedState: string, createTime: string, deviceId: string, deviceType: string, enabledDeveloperOptions: bool, enabledUsbDebugging: bool, encryptionState: string, endpointVerificationSpecificAttributes: record, hostname: string, imei: string, kernelVersion: string, lastSyncTime: string, managementState: string, manufacturer: string, meid: string, model: string, name: string, networkOperator: string, osVersion: string, otherAccounts: list, ownerType: string, releaseVersion: string, securityPatchTime: string, serialNumber: string, wifiMacAddresses: list>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "customer" $customer "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "customer" $customer "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta1/devices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -156,7 +156,7 @@ export def "v1beta1-devices cloudidentitydevicescreate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -169,7 +169,7 @@ export def "v1beta1-devices cloudidentitydevicescreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta1/devices" $qp)
   let body = {customer: $customer, device: $device} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -195,7 +195,7 @@ export def "v1beta1-groups cloudidentitygroupslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -209,7 +209,7 @@ export def "v1beta1-groups cloudidentitygroupslist" [
 ]: nothing -> record<groups: table<additionalGroupKeys: list, createTime: string, description: string, displayName: string, dynamicGroupMetadata: record, groupKey: record, labels: record, name: string, parent: string, posixGroups: list, updateTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "parent" $parent "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "parent" $parent "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta1/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -237,7 +237,7 @@ export def "v1beta1-groups cloudidentitygroupscreate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -256,7 +256,7 @@ export def "v1beta1-groups cloudidentitygroupscreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "initialGroupConfig" $initialGroupConfig "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "initialGroupConfig" $initialGroupConfig "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta1/groups" $qp)
   let body = {description: $description, displayName: $displayName, dynamicGroupMetadata: $dynamicGroupMetadata, groupKey: $groupKey, labels: $labels, parent: $parent, posixGroups: $posixGroups} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -282,7 +282,7 @@ export def "v1beta1-groups-lookup cloudidentitygroupslookup" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -294,7 +294,7 @@ export def "v1beta1-groups-lookup cloudidentitygroupslookup" [
 ]: nothing -> record<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "groupKey.id" $groupKeyid "scalar") (serialize-qp "groupKey.namespace" $groupKeynamespace "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "groupKey.id" $groupKeyid "scalar") (serialize-qp "groupKey.namespace" $groupKeynamespace "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta1/groups:lookup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -318,7 +318,7 @@ export def "v1beta1-groups-search cloudidentitygroupssearch" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -328,12 +328,12 @@ export def "v1beta1-groups-search cloudidentitygroupssearch" [
   --orderBy: string # The ordering of groups for the display name or email in the search groups response. The syntax for this field can be found at https://cloud.google.com/apis/design/design_patterns#sorting_order. Example: Sort by the ascending name: order_by="display_name" Sort by the descending group key email: order_by="group_key desc"
   --pageSize: int # The maximum number of results to return. Note that the number of results returned may be less than this value even if there are more available results. To fetch all results, clients must continue calling this method repeatedly until the response no longer contains a `next_page_token`. If unspecified, defaults to 200 for `GroupView.BASIC` and to 50 for `GroupView.FULL`. Must not be greater than 1000 for `GroupView.BASIC` or 500 for `GroupView.FULL`.
   --pageToken: string # The `next_page_token` value returned from a previous search request, if any.
-  --qp-query: string # Required. The search query. * Must be specified in [Common Expression Language](https://opensource.google/projects/cel). * Must contain equality operators on the parent, e.g. `parent == 'customers/{customer_id}'`. The `customer_id` must begin with "C" (for example, 'C046psxkn'). [Find your customer ID.] (https://support.google.com/cloudidentity/answer/10070793) * Can contain optional inclusion operators on `labels` such as `'cloudidentity.googleapis.com/groups.discussion_forum' in labels`). * Can contain an optional equality operator on `domain_name`. e.g. `domain_name == 'abc.com'` * Can contain optional `startsWith/contains/equality` operators on `group_key`, e.g. `group_key.startsWith('dev')`, `group_key.contains('dev'), group_key == 'dev@abc.com'` * Can contain optional `startsWith/contains/equality` operators on `display_name`, such as `display_name.startsWith('dev')` , `display_name.contains('dev')`, `display_name == 'dev'`
+  --query: string # Required. The search query. * Must be specified in [Common Expression Language](https://opensource.google/projects/cel). * Must contain equality operators on the parent, e.g. `parent == 'customers/{customer_id}'`. The `customer_id` must begin with "C" (for example, 'C046psxkn'). [Find your customer ID.] (https://support.google.com/cloudidentity/answer/10070793) * Can contain optional inclusion operators on `labels` such as `'cloudidentity.googleapis.com/groups.discussion_forum' in labels`). * Can contain an optional equality operator on `domain_name`. e.g. `domain_name == 'abc.com'` * Can contain optional `startsWith/contains/equality` operators on `group_key`, e.g. `group_key.startsWith('dev')`, `group_key.contains('dev'), group_key == 'dev@abc.com'` * Can contain optional `startsWith/contains/equality` operators on `display_name`, such as `display_name.startsWith('dev')` , `display_name.contains('dev')`, `display_name == 'dev'`
   --view: string@view-completer-2 # The level of detail to be returned. If unspecified, defaults to `View.BASIC`.
 ]: nothing -> record<groups: table<additionalGroupKeys: list, createTime: string, description: string, displayName: string, dynamicGroupMetadata: record, groupKey: record, labels: record, name: string, parent: string, posixGroups: list, updateTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta1/groups:search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -357,7 +357,7 @@ export def "v1beta1-inbound-saml-sso-profiles cloudidentityinboundSamlSsoProfile
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -370,7 +370,7 @@ export def "v1beta1-inbound-saml-sso-profiles cloudidentityinboundSamlSsoProfile
 ]: nothing -> record<inboundSamlSsoProfiles: table<customer: string, displayName: string, idpConfig: record, name: string, spConfig: record>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta1/inboundSamlSsoProfiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -395,7 +395,7 @@ export def "v1beta1-inbound-saml-sso-profiles cloudidentityinboundSamlSsoProfile
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -410,7 +410,7 @@ export def "v1beta1-inbound-saml-sso-profiles cloudidentityinboundSamlSsoProfile
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta1/inboundSamlSsoProfiles" $qp)
   let body = {customer: $customer, displayName: $displayName, idpConfig: $idpConfig, spConfig: $spConfig} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -436,7 +436,7 @@ export def "v1beta1-inbound-sso-assignments cloudidentityinboundSsoAssignmentsli
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -449,7 +449,7 @@ export def "v1beta1-inbound-sso-assignments cloudidentityinboundSsoAssignmentsli
 ]: nothing -> record<inboundSsoAssignments: table<customer: string, name: string, rank: int, samlSsoInfo: record, signInBehavior: record, ssoMode: string, targetGroup: string, targetOrgUnit: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta1/inboundSsoAssignments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -475,7 +475,7 @@ export def "v1beta1-inbound-sso-assignments cloudidentityinboundSsoAssignmentscr
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -493,7 +493,7 @@ export def "v1beta1-inbound-sso-assignments cloudidentityinboundSsoAssignmentscr
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta1/inboundSsoAssignments" $qp)
   let body = {customer: $customer, rank: $rank, samlSsoInfo: $samlSsoInfo, signInBehavior: $signInBehavior, ssoMode: $ssoMode, targetGroup: $targetGroup, targetOrgUnit: $targetOrgUnit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -520,7 +520,7 @@ export def "v1beta1 cloudidentityinboundSsoAssignmentsdelete" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -531,7 +531,7 @@ export def "v1beta1 cloudidentityinboundSsoAssignmentsdelete" [
 ]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "customer" $customer "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "customer" $customer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -556,7 +556,7 @@ export def "v1beta1 cloudidentityinboundSsoAssignmentsget" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -567,7 +567,7 @@ export def "v1beta1 cloudidentityinboundSsoAssignmentsget" [
 ]: nothing -> record<customer: string, name: string, rank: int, samlSsoInfo: record<inboundSamlSsoProfile: string>, signInBehavior: record<redirectCondition: string>, ssoMode: string, targetGroup: string, targetOrgUnit: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "readMask" $readMask "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "readMask" $readMask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -594,7 +594,7 @@ export def "v1beta1 cloudidentityinboundSsoAssignmentspatch" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -613,7 +613,7 @@ export def "v1beta1 cloudidentityinboundSsoAssignmentspatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($name)" $qp)
   let body = {customer: $customer, rank: $rank, samlSsoInfo: $samlSsoInfo, signInBehavior: $signInBehavior, ssoMode: $ssoMode, targetGroup: $targetGroup, targetOrgUnit: $targetOrgUnit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -640,7 +640,7 @@ export def "v1beta1 cloudidentitydevicesdeviceUsersapprove" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -652,7 +652,7 @@ export def "v1beta1 cloudidentitydevicesdeviceUsersapprove" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($name):approve" $qp)
   let body = {customer: $customer} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -679,7 +679,7 @@ export def "v1beta1 cloudidentitydevicesdeviceUsersblock" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -691,7 +691,7 @@ export def "v1beta1 cloudidentitydevicesdeviceUsersblock" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($name):block" $qp)
   let body = {customer: $customer} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -718,7 +718,7 @@ export def "v1beta1 cloudidentitycustomersuserinvitationscancel" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -730,7 +730,7 @@ export def "v1beta1 cloudidentitycustomersuserinvitationscancel" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($name):cancel" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -756,7 +756,7 @@ export def "v1beta1 cloudidentitydevicesdeviceUserscancelWipe" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -768,7 +768,7 @@ export def "v1beta1 cloudidentitydevicesdeviceUserscancelWipe" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($name):cancelWipe" $qp)
   let body = {customer: $customer} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -795,7 +795,7 @@ export def "v1beta1 cloudidentitycustomersuserinvitationsisInvitableUser" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -805,7 +805,7 @@ export def "v1beta1 cloudidentitycustomersuserinvitationsisInvitableUser" [
 ]: nothing -> record<isInvitableUser: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($name):isInvitableUser" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -832,7 +832,7 @@ export def "v1beta1 cloudidentitygroupsmembershipsmodifyMembershipRoles" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -846,7 +846,7 @@ export def "v1beta1 cloudidentitygroupsmembershipsmodifyMembershipRoles" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($name):modifyMembershipRoles" $qp)
   let body = {addRoles: $addRoles, removeRoles: $removeRoles, updateRolesParams: $updateRolesParams} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -873,7 +873,7 @@ export def "v1beta1 cloudidentityorgUnitsmembershipsmove" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -886,7 +886,7 @@ export def "v1beta1 cloudidentityorgUnitsmembershipsmove" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($name):move" $qp)
   let body = {customer: $customer, destinationOrgUnit: $destinationOrgUnit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -913,7 +913,7 @@ export def "v1beta1 cloudidentitycustomersuserinvitationssend" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -925,7 +925,7 @@ export def "v1beta1 cloudidentitycustomersuserinvitationssend" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($name):send" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -951,7 +951,7 @@ export def "v1beta1 cloudidentitydevicesdeviceUserswipe" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -963,7 +963,7 @@ export def "v1beta1 cloudidentitydevicesdeviceUserswipe" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($name):wipe" $qp)
   let body = {customer: $customer} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -990,7 +990,7 @@ export def "v1beta1-device-users cloudidentitydevicesdeviceUserslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1005,7 +1005,7 @@ export def "v1beta1-device-users cloudidentitydevicesdeviceUserslist" [
 ]: nothing -> record<deviceUsers: table<compromisedState: string, createTime: string, firstSyncTime: string, languageCode: string, lastSyncTime: string, managementState: string, name: string, passwordState: string, userAgent: string, userEmail: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "customer" $customer "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "customer" $customer "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/deviceUsers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1030,7 +1030,7 @@ export def "v1beta1-idp-credentials cloudidentityinboundSamlSsoProfilesidpCreden
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1042,7 +1042,7 @@ export def "v1beta1-idp-credentials cloudidentityinboundSamlSsoProfilesidpCreden
 ]: nothing -> record<idpCredentials: table<dsaKeyInfo: record, name: string, rsaKeyInfo: record, updateTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/idpCredentials" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1067,7 +1067,7 @@ export def "v1beta1-idp-credentials-add cloudidentityinboundSamlSsoProfilesidpCr
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1079,7 +1079,7 @@ export def "v1beta1-idp-credentials-add cloudidentityinboundSamlSsoProfilesidpCr
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/idpCredentials:add" $qp)
   let body = {pemData: $pemData} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1106,7 +1106,7 @@ export def "v1beta1-memberships cloudidentityorgUnitsmembershipslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1120,7 +1120,7 @@ export def "v1beta1-memberships cloudidentityorgUnitsmembershipslist" [
 ]: nothing -> record<nextPageToken: string, orgMemberships: table<member: string, memberUri: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "customer" $customer "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "customer" $customer "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/memberships" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1148,7 +1148,7 @@ export def "v1beta1-memberships cloudidentitygroupsmembershipscreate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1162,7 +1162,7 @@ export def "v1beta1-memberships cloudidentitygroupsmembershipscreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/memberships" $qp)
   let body = {memberKey: $memberKey, preferredMemberKey: $preferredMemberKey, roles: $roles} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1189,18 +1189,18 @@ export def "v1beta1-memberships-check-transitive-membership cloudidentitygroupsm
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-query: string # Required. A CEL expression that MUST include member specification. This is a `required` field. Certain groups are uniquely identified by both a 'member_key_id' and a 'member_key_namespace', which requires an additional query input: 'member_key_namespace'. Example query: `member_key_id == 'member_key_id_value'`
+  --query: string # Required. A CEL expression that MUST include member specification. This is a `required` field. Certain groups are uniquely identified by both a 'member_key_id' and a 'member_key_namespace', which requires an additional query input: 'member_key_namespace'. Example query: `member_key_id == 'member_key_id_value'`
 ]: nothing -> record<hasMembership: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/memberships:checkTransitiveMembership" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1225,18 +1225,18 @@ export def "v1beta1-memberships-get-membership-graph cloudidentitygroupsmembersh
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-query: string # Required. A CEL expression that MUST include member specification AND label(s). Certain groups are uniquely identified by both a 'member_key_id' and a 'member_key_namespace', which requires an additional query input: 'member_key_namespace'. Example query: `member_key_id == 'member_key_id_value' && in labels`
+  --query: string # Required. A CEL expression that MUST include member specification AND label(s). Certain groups are uniquely identified by both a 'member_key_id' and a 'member_key_namespace', which requires an additional query input: 'member_key_namespace'. Example query: `member_key_id == 'member_key_id_value' && in labels`
 ]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/memberships:getMembershipGraph" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1261,7 +1261,7 @@ export def "v1beta1-memberships-lookup cloudidentitygroupsmembershipslookup" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1273,7 +1273,7 @@ export def "v1beta1-memberships-lookup cloudidentitygroupsmembershipslookup" [
 ]: nothing -> record<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "memberKey.id" $memberKeyid "scalar") (serialize-qp "memberKey.namespace" $memberKeynamespace "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "memberKey.id" $memberKeyid "scalar") (serialize-qp "memberKey.namespace" $memberKeynamespace "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/memberships:lookup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1298,7 +1298,7 @@ export def "v1beta1-memberships-search-direct-groups cloudidentitygroupsmembersh
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1308,11 +1308,11 @@ export def "v1beta1-memberships-search-direct-groups cloudidentitygroupsmembersh
   --orderBy: string # The ordering of membership relation for the display name or email in the response. The syntax for this field can be found at https://cloud.google.com/apis/design/design_patterns#sorting_order. Example: Sort by the ascending display name: order_by="group_name" or order_by="group_name asc". Sort by the descending display name: order_by="group_name desc". Sort by the ascending group key: order_by="group_key" or order_by="group_key asc". Sort by the descending group key: order_by="group_key desc".
   --pageSize: int # The default page size is 200 (max 1000).
   --pageToken: string # The next_page_token value returned from a previous list request, if any
-  --qp-query: string # Required. A CEL expression that MUST include member specification AND label(s). Users can search on label attributes of groups. CONTAINS match ('in') is supported on labels. Identity-mapped groups are uniquely identified by both a `member_key_id` and a `member_key_namespace`, which requires an additional query input: `member_key_namespace`. Example query: `member_key_id == 'member_key_id_value' && 'label_value' in labels`
+  --query: string # Required. A CEL expression that MUST include member specification AND label(s). Users can search on label attributes of groups. CONTAINS match ('in') is supported on labels. Identity-mapped groups are uniquely identified by both a `member_key_id` and a `member_key_namespace`, which requires an additional query input: `member_key_namespace`. Example query: `member_key_id == 'member_key_id_value' && 'label_value' in labels`
 ]: nothing -> record<memberships: table<description: string, displayName: string, group: string, groupKey: record, labels: record, membership: string, roles: list>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/memberships:searchDirectGroups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1337,7 +1337,7 @@ export def "v1beta1-memberships-search-transitive-groups cloudidentitygroupsmemb
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1346,11 +1346,11 @@ export def "v1beta1-memberships-search-transitive-groups cloudidentitygroupsmemb
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --pageSize: int # The default page size is 200 (max 1000).
   --pageToken: string # The next_page_token value returned from a previous list request, if any.
-  --qp-query: string # Required. A CEL expression that MUST include member specification AND label(s). This is a `required` field. Users can search on label attributes of groups. CONTAINS match ('in') is supported on labels. Identity-mapped groups are uniquely identified by both a `member_key_id` and a `member_key_namespace`, which requires an additional query input: `member_key_namespace`. Example query: `member_key_id == 'member_key_id_value' && in labels` Query may optionally contain equality operators on the parent of the group restricting the search within a particular customer, e.g. `parent == 'customers/{customer_id}'`. The `customer_id` must begin with "C" (for example, 'C046psxkn'). This filtering is only supported for Admins with groups read permissons on the input customer. Example query: `member_key_id == 'member_key_id_value' && in labels && parent == 'customers/C046psxkn'`
+  --query: string # Required. A CEL expression that MUST include member specification AND label(s). This is a `required` field. Users can search on label attributes of groups. CONTAINS match ('in') is supported on labels. Identity-mapped groups are uniquely identified by both a `member_key_id` and a `member_key_namespace`, which requires an additional query input: `member_key_namespace`. Example query: `member_key_id == 'member_key_id_value' && in labels` Query may optionally contain equality operators on the parent of the group restricting the search within a particular customer, e.g. `parent == 'customers/{customer_id}'`. The `customer_id` must begin with "C" (for example, 'C046psxkn'). This filtering is only supported for Admins with groups read permissons on the input customer. Example query: `member_key_id == 'member_key_id_value' && in labels && parent == 'customers/C046psxkn'`
 ]: nothing -> record<memberships: table<displayName: string, group: string, groupKey: record, labels: record, relationType: string, roles: list>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/memberships:searchTransitiveGroups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1375,7 +1375,7 @@ export def "v1beta1-memberships-search-transitive-memberships cloudidentitygroup
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1387,7 +1387,7 @@ export def "v1beta1-memberships-search-transitive-memberships cloudidentitygroup
 ]: nothing -> record<memberships: table<member: string, preferredMemberKey: list, relationType: string, roles: list>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/memberships:searchTransitiveMemberships" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1412,7 +1412,7 @@ export def "v1beta1-userinvitations cloudidentitycustomersuserinvitationslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1426,7 +1426,7 @@ export def "v1beta1-userinvitations cloudidentitycustomersuserinvitationslist" [
 ]: nothing -> record<nextPageToken: string, userInvitations: table<mailsSentCount: string, name: string, state: string, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/userinvitations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1451,7 +1451,7 @@ export def "v1beta1 cloudidentitydevicesdeviceUserslookup" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1466,7 +1466,7 @@ export def "v1beta1 cloudidentitydevicesdeviceUserslookup" [
 ]: nothing -> record<customer: string, names: list<string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "androidId" $androidId "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "rawResourceId" $rawResourceId "scalar") (serialize-qp "userId" $userId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "androidId" $androidId "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "rawResourceId" $rawResourceId "scalar") (serialize-qp "userId" $userId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent):lookup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

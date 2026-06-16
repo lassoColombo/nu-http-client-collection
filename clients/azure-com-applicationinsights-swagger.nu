@@ -262,13 +262,13 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-components
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The Analytics query. Learn more about the [Analytics query syntax](https://azure.microsoft.com/documentation/articles/app-insights-analytics-reference/)
+  --query: string # The Analytics query. Learn more about the [Analytics query syntax](https://azure.microsoft.com/documentation/articles/app-insights-analytics-reference/)
   --timespan: string # Optional. The timespan over which to query data. This is an ISO8601 time period value.  This timespan is applied in addition to any that are specified in the query expression.
   --apiVersion: string # Client API version.
 ]: nothing -> record<tables: table<columns: list, name: string, rows: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "apiVersion" $apiVersion "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "apiVersion" $apiVersion "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Insights/components/($applicationName)/query" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

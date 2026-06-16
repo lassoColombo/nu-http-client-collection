@@ -210,7 +210,7 @@ export def "heartbeats Create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --application: string # Optional string to identify which application logged this message. You can use this if you have multiple applications and services logging to the same log. If not set, the application name "Heartbeats" will be set on all log messages generated from this heartbeat.
   --reason: string # If result is "Degraded" or "Unhealthy" you can use this property to specify why.
-  --body-result: string # The result of this heartbeat. Can be "Healthy, "Degraded", or "Unhealthy". Defaults to "Healthy"
+  --result: string # The result of this heartbeat. Can be "Healthy, "Degraded", or "Unhealthy". Defaults to "Healthy"
   --took: int # Optional long for specifying how many milliseconds it took to execute the task resulting in this heartbeat. This can be used to get a better overview of how long a scheduled task or service is running or to figure out if the grace period should be increased. (format: int64)
   --version: string # Optional string to identify which version of your application logged this message. If not specified, any errors, warnings, or information messages will get the newest version number created through deployment tracking as with normal log messages.
 ]: any -> any {
@@ -218,7 +218,7 @@ export def "heartbeats Create" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/heartbeats/($logId)/($id)")
-  let body = {application: $application, reason: $reason, result: $body_result, took: $took, version: $version} | compact
+  let body = {application: $application, reason: $reason, result: $result, took: $took, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -384,14 +384,14 @@ export def "messages DeleteAll" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-from: string # Search from this date. (format: date-time)
-  --body-query: string # Lucene query.
+  --query: string # Lucene query.
   --body-to: string # Search to this date. (format: date-time)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/messages/($logId)")
-  let body = {from: $body_from, query: $body_query, to: $body_to} | compact
+  let body = {from: $body_from, query: $query, to: $body_to} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -415,14 +415,14 @@ export def "messages GetAll" [
   --accept: string@accept-completer # Response content type
   --pageIndex: int # The page number of the result. (format: int32, default: 0)
   --pageSize: int # The number of messages to load (max 100) or 15 if not set. (format: int32, default: 15)
-  --qp-query: string # A full-text or Lucene query to limit the messages by.
+  --query: string # A full-text or Lucene query to limit the messages by.
   --qp-from: string # A start date and time to search from (not included). (format: date-time)
   --qp-to: string # An end date and time to search to (not included). (format: date-time)
   --includeHeaders: oneof<nothing, bool> # Include headers like server variables and cookies in the result (slower). (default: false)
 ]: nothing -> record<messages: table<application: string, breadcrumbs: list, category: string, code: string, cookies: list, correlationId: string, data: list, dateTime: string, detail: string, form: list, hostname: string, id: string, method: string, queryString: list, serverVariables: list, severity: string, source: string, statusCode: int, title: string, titleTemplate: string, type: string, url: string, user: string, version: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageIndex" $pageIndex "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "includeHeaders" $includeHeaders "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pageIndex" $pageIndex "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "includeHeaders" $includeHeaders "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v3/messages/($logId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -527,14 +527,14 @@ export def "messages-fix FixAll" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-from: string # Search from this date. (format: date-time)
-  --body-query: string # Lucene query.
+  --query: string # Lucene query.
   --body-to: string # Search to this date. (format: date-time)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/messages/($logId)/_fix")
-  let body = {from: $body_from, query: $body_query, to: $body_to} | compact
+  let body = {from: $body_from, query: $query, to: $body_to} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

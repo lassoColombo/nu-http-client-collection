@@ -137,7 +137,7 @@ export def "youtube-abuse-reports youtubeabuseReportsinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -153,7 +153,7 @@ export def "youtube-abuse-reports youtubeabuseReportsinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/abuseReports" $qp)
   let body = {abuseTypes: $abuseTypes, description: $description, relatedEntities: $relatedEntities, subject: $subject} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -179,7 +179,7 @@ export def "youtube-activities youtubeactivitieslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -198,7 +198,7 @@ export def "youtube-activities youtubeactivitieslist" [
 ]: nothing -> record<etag: string, eventId: string, items: table<contentDetails: record, etag: string, id: string, kind: string, snippet: record>, kind: string, nextPageToken: string, pageInfo: record<resultsPerPage: int, totalResults: int>, prevPageToken: string, tokenPagination: record, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "channelId" $channelId "scalar") (serialize-qp "home" $home "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "mine" $mine "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "publishedAfter" $publishedAfter "scalar") (serialize-qp "publishedBefore" $publishedBefore "scalar") (serialize-qp "regionCode" $regionCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "channelId" $channelId "scalar") (serialize-qp "home" $home "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "mine" $mine "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "publishedAfter" $publishedAfter "scalar") (serialize-qp "publishedBefore" $publishedBefore "scalar") (serialize-qp "regionCode" $regionCode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/activities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -222,7 +222,7 @@ export def "youtube-captions youtubecaptionsdelete" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -235,7 +235,7 @@ export def "youtube-captions youtubecaptionsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "onBehalfOf" $onBehalfOf "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "onBehalfOf" $onBehalfOf "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/captions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -259,7 +259,7 @@ export def "youtube-captions youtubecaptionslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -274,7 +274,7 @@ export def "youtube-captions youtubecaptionslist" [
 ]: nothing -> record<etag: string, eventId: string, items: table<etag: string, id: string, kind: string, snippet: record>, kind: string, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "videoId" $videoId "scalar") (serialize-qp "id" $id "multi") (serialize-qp "onBehalfOf" $onBehalfOf "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "videoId" $videoId "scalar") (serialize-qp "id" $id "multi") (serialize-qp "onBehalfOf" $onBehalfOf "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/captions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -298,7 +298,7 @@ export def "youtube-captions youtubecaptionsinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -314,7 +314,7 @@ export def "youtube-captions youtubecaptionsinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOf" $onBehalfOf "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "sync" $sync "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOf" $onBehalfOf "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "sync" $sync "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/captions" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -339,7 +339,7 @@ export def "youtube-captions youtubecaptionsupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -355,7 +355,7 @@ export def "youtube-captions youtubecaptionsupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOf" $onBehalfOf "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "sync" $sync "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOf" $onBehalfOf "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "sync" $sync "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/captions" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -381,7 +381,7 @@ export def "youtube-captions youtubecaptionsdownload" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -395,7 +395,7 @@ export def "youtube-captions youtubecaptionsdownload" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "onBehalfOf" $onBehalfOf "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "tfmt" $tfmt "scalar") (serialize-qp "tlang" $tlang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "onBehalfOf" $onBehalfOf "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "tfmt" $tfmt "scalar") (serialize-qp "tlang" $tlang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/youtube/v3/captions/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -419,7 +419,7 @@ export def "youtube-channel-banners-insert youtubechannelBannersinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -434,7 +434,7 @@ export def "youtube-channel-banners-insert youtubechannelBannersinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "channelId" $channelId "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "channelId" $channelId "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/channelBanners/insert" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -459,7 +459,7 @@ export def "youtube-channel-sections youtubechannelSectionsdelete" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -471,7 +471,7 @@ export def "youtube-channel-sections youtubechannelSectionsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/channelSections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -495,7 +495,7 @@ export def "youtube-channel-sections youtubechannelSectionslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -511,7 +511,7 @@ export def "youtube-channel-sections youtubechannelSectionslist" [
 ]: nothing -> record<etag: string, eventId: string, items: table<contentDetails: record, etag: string, id: string, kind: string, localizations: record, snippet: record, targeting: record>, kind: string, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "channelId" $channelId "scalar") (serialize-qp "hl" $hl "scalar") (serialize-qp "id" $id "multi") (serialize-qp "mine" $mine "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "channelId" $channelId "scalar") (serialize-qp "hl" $hl "scalar") (serialize-qp "id" $id "multi") (serialize-qp "mine" $mine "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/channelSections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -538,7 +538,7 @@ export def "youtube-channel-sections youtubechannelSectionsinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -559,7 +559,7 @@ export def "youtube-channel-sections youtubechannelSectionsinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/channelSections" $qp)
   let body = {contentDetails: $contentDetails, etag: $etag, id: $id, kind: $kind, localizations: $localizations, snippet: $snippet, targeting: $targeting} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -588,7 +588,7 @@ export def "youtube-channel-sections youtubechannelSectionsupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -608,7 +608,7 @@ export def "youtube-channel-sections youtubechannelSectionsupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/channelSections" $qp)
   let body = {contentDetails: $contentDetails, etag: $etag, id: $id, kind: $kind, localizations: $localizations, snippet: $snippet, targeting: $targeting} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -634,7 +634,7 @@ export def "youtube-channels youtubechannelslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -655,7 +655,7 @@ export def "youtube-channels youtubechannelslist" [
 ]: nothing -> record<etag: string, eventId: string, items: table<auditDetails: record, brandingSettings: record, contentDetails: record, contentOwnerDetails: record, conversionPings: record, etag: string, id: string, kind: string, localizations: record, snippet: record, statistics: record, status: record, topicDetails: record>, kind: string, nextPageToken: string, pageInfo: record<resultsPerPage: int, totalResults: int>, prevPageToken: string, tokenPagination: record, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "categoryId" $categoryId "scalar") (serialize-qp "forUsername" $forUsername "scalar") (serialize-qp "hl" $hl "scalar") (serialize-qp "id" $id "multi") (serialize-qp "managedByMe" $managedByMe "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "mine" $mine "scalar") (serialize-qp "mySubscribers" $mySubscribers "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "categoryId" $categoryId "scalar") (serialize-qp "forUsername" $forUsername "scalar") (serialize-qp "hl" $hl "scalar") (serialize-qp "id" $id "multi") (serialize-qp "managedByMe" $managedByMe "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "mine" $mine "scalar") (serialize-qp "mySubscribers" $mySubscribers "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/channels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -688,7 +688,7 @@ export def "youtube-channels youtubechannelsupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -714,7 +714,7 @@ export def "youtube-channels youtubechannelsupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/channels" $qp)
   let body = {auditDetails: $auditDetails, brandingSettings: $brandingSettings, contentDetails: $contentDetails, contentOwnerDetails: $contentOwnerDetails, conversionPings: $conversionPings, etag: $etag, id: $id, kind: $kind, localizations: $localizations, snippet: $snippet, statistics: $statistics, status: $status, topicDetails: $topicDetails} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -740,7 +740,7 @@ export def "youtube-comment-threads youtubecommentThreadslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -761,7 +761,7 @@ export def "youtube-comment-threads youtubecommentThreadslist" [
 ]: nothing -> record<etag: string, eventId: string, items: table<etag: string, id: string, kind: string, replies: record, snippet: record>, kind: string, nextPageToken: string, pageInfo: record<resultsPerPage: int, totalResults: int>, tokenPagination: record, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "allThreadsRelatedToChannelId" $allThreadsRelatedToChannelId "scalar") (serialize-qp "channelId" $channelId "scalar") (serialize-qp "id" $id "multi") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "moderationStatus" $moderationStatus "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "searchTerms" $searchTerms "scalar") (serialize-qp "textFormat" $textFormat "scalar") (serialize-qp "videoId" $videoId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "allThreadsRelatedToChannelId" $allThreadsRelatedToChannelId "scalar") (serialize-qp "channelId" $channelId "scalar") (serialize-qp "id" $id "multi") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "moderationStatus" $moderationStatus "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "searchTerms" $searchTerms "scalar") (serialize-qp "textFormat" $textFormat "scalar") (serialize-qp "videoId" $videoId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/commentThreads" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -787,7 +787,7 @@ export def "youtube-comment-threads youtubecommentThreadsinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -804,7 +804,7 @@ export def "youtube-comment-threads youtubecommentThreadsinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/commentThreads" $qp)
   let body = {etag: $etag, id: $id, kind: $kind, replies: $replies, snippet: $snippet} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -832,7 +832,7 @@ export def "youtube-comment-threads youtubeyoutubev3updateCommentThreads" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -849,7 +849,7 @@ export def "youtube-comment-threads youtubeyoutubev3updateCommentThreads" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/commentThreads" $qp)
   let body = {etag: $etag, id: $id, kind: $kind, replies: $replies, snippet: $snippet} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -875,7 +875,7 @@ export def "youtube-comments youtubecommentsdelete" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -886,7 +886,7 @@ export def "youtube-comments youtubecommentsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/comments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -910,7 +910,7 @@ export def "youtube-comments youtubecommentslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -926,7 +926,7 @@ export def "youtube-comments youtubecommentslist" [
 ]: nothing -> record<etag: string, eventId: string, items: table<etag: string, id: string, kind: string, snippet: record>, kind: string, nextPageToken: string, pageInfo: record<resultsPerPage: int, totalResults: int>, tokenPagination: record, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "id" $id "multi") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "parentId" $parentId "scalar") (serialize-qp "textFormat" $textFormat "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "id" $id "multi") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "parentId" $parentId "scalar") (serialize-qp "textFormat" $textFormat "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/comments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -951,7 +951,7 @@ export def "youtube-comments youtubecommentsinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -967,7 +967,7 @@ export def "youtube-comments youtubecommentsinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/comments" $qp)
   let body = {etag: $etag, id: $id, kind: $kind, snippet: $snippet} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -994,7 +994,7 @@ export def "youtube-comments youtubecommentsupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1010,7 +1010,7 @@ export def "youtube-comments youtubecommentsupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/comments" $qp)
   let body = {etag: $etag, id: $id, kind: $kind, snippet: $snippet} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1036,7 +1036,7 @@ export def "youtube-comments-mark-as-spam youtubecommentsmarkAsSpam" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1047,7 +1047,7 @@ export def "youtube-comments-mark-as-spam youtubecommentsmarkAsSpam" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/comments/markAsSpam" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1071,7 +1071,7 @@ export def "youtube-comments-set-moderation-status youtubecommentssetModerationS
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1084,7 +1084,7 @@ export def "youtube-comments-set-moderation-status youtubecommentssetModerationS
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "multi") (serialize-qp "moderationStatus" $moderationStatus "scalar") (serialize-qp "banAuthor" $banAuthor "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "multi") (serialize-qp "moderationStatus" $moderationStatus "scalar") (serialize-qp "banAuthor" $banAuthor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/comments/setModerationStatus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1108,7 +1108,7 @@ export def "youtube-i18n-languages youtubei18nLanguageslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1120,7 +1120,7 @@ export def "youtube-i18n-languages youtubei18nLanguageslist" [
 ]: nothing -> record<etag: string, eventId: string, items: table<etag: string, id: string, kind: string, snippet: record>, kind: string, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "hl" $hl "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "hl" $hl "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/i18nLanguages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1144,7 +1144,7 @@ export def "youtube-i18n-regions youtubei18nRegionslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1156,7 +1156,7 @@ export def "youtube-i18n-regions youtubei18nRegionslist" [
 ]: nothing -> record<etag: string, eventId: string, items: table<etag: string, id: string, kind: string, snippet: record>, kind: string, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "hl" $hl "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "hl" $hl "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/i18nRegions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1180,7 +1180,7 @@ export def "youtube-live-broadcasts youtubeliveBroadcastsdelete" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1193,7 +1193,7 @@ export def "youtube-live-broadcasts youtubeliveBroadcastsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveBroadcasts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1217,7 +1217,7 @@ export def "youtube-live-broadcasts youtubeliveBroadcastslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1236,7 +1236,7 @@ export def "youtube-live-broadcasts youtubeliveBroadcastslist" [
 ]: nothing -> record<etag: string, eventId: string, items: table<contentDetails: record, etag: string, id: string, kind: string, snippet: record, statistics: record, status: record>, kind: string, nextPageToken: string, pageInfo: record<resultsPerPage: int, totalResults: int>, prevPageToken: string, tokenPagination: record, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "broadcastStatus" $broadcastStatus "scalar") (serialize-qp "broadcastType" $broadcastType "scalar") (serialize-qp "id" $id "multi") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "mine" $mine "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "broadcastStatus" $broadcastStatus "scalar") (serialize-qp "broadcastType" $broadcastType "scalar") (serialize-qp "id" $id "multi") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "mine" $mine "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveBroadcasts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1264,7 +1264,7 @@ export def "youtube-live-broadcasts youtubeliveBroadcastsinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1285,7 +1285,7 @@ export def "youtube-live-broadcasts youtubeliveBroadcastsinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveBroadcasts" $qp)
   let body = {contentDetails: $contentDetails, etag: $etag, id: $id, kind: $kind, snippet: $snippet, statistics: $statistics, status: $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1315,7 +1315,7 @@ export def "youtube-live-broadcasts youtubeliveBroadcastsupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1336,7 +1336,7 @@ export def "youtube-live-broadcasts youtubeliveBroadcastsupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveBroadcasts" $qp)
   let body = {contentDetails: $contentDetails, etag: $etag, id: $id, kind: $kind, snippet: $snippet, statistics: $statistics, status: $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1362,7 +1362,7 @@ export def "youtube-live-broadcasts-bind youtubeliveBroadcastsbind" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1377,7 +1377,7 @@ export def "youtube-live-broadcasts-bind youtubeliveBroadcastsbind" [
 ]: nothing -> record<contentDetails: record<boundStreamId: string, boundStreamLastUpdateTimeMs: string, closedCaptionsType: string, enableAutoStart: bool, enableAutoStop: bool, enableClosedCaptions: bool, enableContentEncryption: bool, enableDvr: bool, enableEmbed: bool, enableLowLatency: bool, latencyPreference: string, mesh: string, monitorStream: record<broadcastStreamDelayMs: int, embedHtml: string, enableMonitorStream: bool>, projection: string, recordFromStart: bool, startWithSlate: bool, stereoLayout: string>, etag: string, id: string, kind: string, snippet: record<actualEndTime: string, actualStartTime: string, channelId: string, description: string, isDefaultBroadcast: bool, liveChatId: string, publishedAt: string, scheduledEndTime: string, scheduledStartTime: string, thumbnails: record<high: record, maxres: record, medium: record, standard: record>, title: string>, statistics: record<concurrentViewers: string>, status: record<lifeCycleStatus: string, liveBroadcastPriority: string, madeForKids: bool, privacyStatus: string, recordingStatus: string, selfDeclaredMadeForKids: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar") (serialize-qp "streamId" $streamId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar") (serialize-qp "streamId" $streamId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveBroadcasts/bind" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1401,7 +1401,7 @@ export def "youtube-live-broadcasts-cuepoint youtubeliveBroadcastsinsertCuepoint
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1422,7 +1422,7 @@ export def "youtube-live-broadcasts-cuepoint youtubeliveBroadcastsinsertCuepoint
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveBroadcasts/cuepoint" $qp)
   let body = {cueType: $cueType, durationSecs: $durationSecs, etag: $etag, id: $id, insertionOffsetTimeMs: $insertionOffsetTimeMs, walltimeMs: $walltimeMs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1448,7 +1448,7 @@ export def "youtube-live-broadcasts-transition youtubeliveBroadcaststransition" 
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1463,7 +1463,7 @@ export def "youtube-live-broadcasts-transition youtubeliveBroadcaststransition" 
 ]: nothing -> record<contentDetails: record<boundStreamId: string, boundStreamLastUpdateTimeMs: string, closedCaptionsType: string, enableAutoStart: bool, enableAutoStop: bool, enableClosedCaptions: bool, enableContentEncryption: bool, enableDvr: bool, enableEmbed: bool, enableLowLatency: bool, latencyPreference: string, mesh: string, monitorStream: record<broadcastStreamDelayMs: int, embedHtml: string, enableMonitorStream: bool>, projection: string, recordFromStart: bool, startWithSlate: bool, stereoLayout: string>, etag: string, id: string, kind: string, snippet: record<actualEndTime: string, actualStartTime: string, channelId: string, description: string, isDefaultBroadcast: bool, liveChatId: string, publishedAt: string, scheduledEndTime: string, scheduledStartTime: string, thumbnails: record<high: record, maxres: record, medium: record, standard: record>, title: string>, statistics: record<concurrentViewers: string>, status: record<lifeCycleStatus: string, liveBroadcastPriority: string, madeForKids: bool, privacyStatus: string, recordingStatus: string, selfDeclaredMadeForKids: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "broadcastStatus" $broadcastStatus "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "broadcastStatus" $broadcastStatus "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveBroadcasts/transition" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1487,7 +1487,7 @@ export def "youtube-live-chat-bans youtubeliveChatBansdelete" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1498,7 +1498,7 @@ export def "youtube-live-chat-bans youtubeliveChatBansdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveChat/bans" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1523,7 +1523,7 @@ export def "youtube-live-chat-bans youtubeliveChatBansinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1539,7 +1539,7 @@ export def "youtube-live-chat-bans youtubeliveChatBansinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveChat/bans" $qp)
   let body = {etag: $etag, id: $id, kind: $kind, snippet: $snippet} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1565,7 +1565,7 @@ export def "youtube-live-chat-messages youtubeliveChatMessagesdelete" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1576,7 +1576,7 @@ export def "youtube-live-chat-messages youtubeliveChatMessagesdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveChat/messages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1600,7 +1600,7 @@ export def "youtube-live-chat-messages youtubeliveChatMessageslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1616,7 +1616,7 @@ export def "youtube-live-chat-messages youtubeliveChatMessageslist" [
 ]: nothing -> record<etag: string, eventId: string, items: table<authorDetails: record, etag: string, id: string, kind: string, snippet: record>, kind: string, nextPageToken: string, offlineAt: string, pageInfo: record<resultsPerPage: int, totalResults: int>, pollingIntervalMillis: int, tokenPagination: record, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "liveChatId" $liveChatId "scalar") (serialize-qp "part" $part "multi") (serialize-qp "hl" $hl "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "profileImageSize" $profileImageSize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "liveChatId" $liveChatId "scalar") (serialize-qp "part" $part "multi") (serialize-qp "hl" $hl "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "profileImageSize" $profileImageSize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveChat/messages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1642,7 +1642,7 @@ export def "youtube-live-chat-messages youtubeliveChatMessagesinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1659,7 +1659,7 @@ export def "youtube-live-chat-messages youtubeliveChatMessagesinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveChat/messages" $qp)
   let body = {authorDetails: $authorDetails, etag: $etag, id: $id, kind: $kind, snippet: $snippet} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1685,7 +1685,7 @@ export def "youtube-live-chat-moderators youtubeliveChatModeratorsdelete" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1696,7 +1696,7 @@ export def "youtube-live-chat-moderators youtubeliveChatModeratorsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveChat/moderators" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1720,7 +1720,7 @@ export def "youtube-live-chat-moderators youtubeliveChatModeratorslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1734,7 +1734,7 @@ export def "youtube-live-chat-moderators youtubeliveChatModeratorslist" [
 ]: nothing -> record<etag: string, eventId: string, items: table<etag: string, id: string, kind: string, snippet: record>, kind: string, nextPageToken: string, pageInfo: record<resultsPerPage: int, totalResults: int>, prevPageToken: string, tokenPagination: record, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "liveChatId" $liveChatId "scalar") (serialize-qp "part" $part "multi") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "liveChatId" $liveChatId "scalar") (serialize-qp "part" $part "multi") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveChat/moderators" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1759,7 +1759,7 @@ export def "youtube-live-chat-moderators youtubeliveChatModeratorsinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1775,7 +1775,7 @@ export def "youtube-live-chat-moderators youtubeliveChatModeratorsinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveChat/moderators" $qp)
   let body = {etag: $etag, id: $id, kind: $kind, snippet: $snippet} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1801,7 +1801,7 @@ export def "youtube-live-streams youtubeliveStreamsdelete" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1814,7 +1814,7 @@ export def "youtube-live-streams youtubeliveStreamsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveStreams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1838,7 +1838,7 @@ export def "youtube-live-streams youtubeliveStreamslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1855,7 +1855,7 @@ export def "youtube-live-streams youtubeliveStreamslist" [
 ]: nothing -> record<etag: string, eventId: string, items: table<cdn: record, contentDetails: record, etag: string, id: string, kind: string, snippet: record, status: record>, kind: string, nextPageToken: string, pageInfo: record<resultsPerPage: int, totalResults: int>, prevPageToken: string, tokenPagination: record, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "id" $id "multi") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "mine" $mine "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "id" $id "multi") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "mine" $mine "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveStreams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1883,7 +1883,7 @@ export def "youtube-live-streams youtubeliveStreamsinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1904,7 +1904,7 @@ export def "youtube-live-streams youtubeliveStreamsinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveStreams" $qp)
   let body = {cdn: $cdn, contentDetails: $contentDetails, etag: $etag, id: $id, kind: $kind, snippet: $snippet, status: $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1934,7 +1934,7 @@ export def "youtube-live-streams youtubeliveStreamsupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1955,7 +1955,7 @@ export def "youtube-live-streams youtubeliveStreamsupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveStreams" $qp)
   let body = {cdn: $cdn, contentDetails: $contentDetails, etag: $etag, id: $id, kind: $kind, snippet: $snippet, status: $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1981,7 +1981,7 @@ export def "youtube-members youtubememberslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1997,7 +1997,7 @@ export def "youtube-members youtubememberslist" [
 ]: nothing -> record<etag: string, eventId: string, items: table<etag: string, kind: string, snippet: record>, kind: string, nextPageToken: string, pageInfo: record<resultsPerPage: int, totalResults: int>, tokenPagination: record, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "filterByMemberChannelId" $filterByMemberChannelId "scalar") (serialize-qp "hasAccessToLevel" $hasAccessToLevel "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "mode" $mode "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "filterByMemberChannelId" $filterByMemberChannelId "scalar") (serialize-qp "hasAccessToLevel" $hasAccessToLevel "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "mode" $mode "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/members" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2021,7 +2021,7 @@ export def "youtube-memberships-levels youtubemembershipsLevelslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2032,7 +2032,7 @@ export def "youtube-memberships-levels youtubemembershipsLevelslist" [
 ]: nothing -> record<etag: string, eventId: string, items: table<etag: string, id: string, kind: string, snippet: record>, kind: string, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/membershipsLevels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2056,7 +2056,7 @@ export def "youtube-playlist-items youtubeplaylistItemsdelete" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2068,7 +2068,7 @@ export def "youtube-playlist-items youtubeplaylistItemsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/playlistItems" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2092,7 +2092,7 @@ export def "youtube-playlist-items youtubeplaylistItemslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2109,7 +2109,7 @@ export def "youtube-playlist-items youtubeplaylistItemslist" [
 ]: nothing -> record<etag: string, eventId: string, items: table<contentDetails: record, etag: string, id: string, kind: string, snippet: record, status: record>, kind: string, nextPageToken: string, pageInfo: record<resultsPerPage: int, totalResults: int>, prevPageToken: string, tokenPagination: record, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "id" $id "multi") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "playlistId" $playlistId "scalar") (serialize-qp "videoId" $videoId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "id" $id "multi") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "playlistId" $playlistId "scalar") (serialize-qp "videoId" $videoId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/playlistItems" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2136,7 +2136,7 @@ export def "youtube-playlist-items youtubeplaylistItemsinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2155,7 +2155,7 @@ export def "youtube-playlist-items youtubeplaylistItemsinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/playlistItems" $qp)
   let body = {contentDetails: $contentDetails, etag: $etag, id: $id, kind: $kind, snippet: $snippet, status: $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2184,7 +2184,7 @@ export def "youtube-playlist-items youtubeplaylistItemsupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2203,7 +2203,7 @@ export def "youtube-playlist-items youtubeplaylistItemsupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/playlistItems" $qp)
   let body = {contentDetails: $contentDetails, etag: $etag, id: $id, kind: $kind, snippet: $snippet, status: $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2229,7 +2229,7 @@ export def "youtube-playlists youtubeplaylistsdelete" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2241,7 +2241,7 @@ export def "youtube-playlists youtubeplaylistsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/playlists" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2265,7 +2265,7 @@ export def "youtube-playlists youtubeplaylistslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2284,7 +2284,7 @@ export def "youtube-playlists youtubeplaylistslist" [
 ]: nothing -> record<etag: string, eventId: string, items: table<contentDetails: record, etag: string, id: string, kind: string, localizations: record, player: record, snippet: record, status: record>, kind: string, nextPageToken: string, pageInfo: record<resultsPerPage: int, totalResults: int>, prevPageToken: string, tokenPagination: record, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "channelId" $channelId "scalar") (serialize-qp "hl" $hl "scalar") (serialize-qp "id" $id "multi") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "mine" $mine "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "channelId" $channelId "scalar") (serialize-qp "hl" $hl "scalar") (serialize-qp "id" $id "multi") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "mine" $mine "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/playlists" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2312,7 +2312,7 @@ export def "youtube-playlists youtubeplaylistsinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2334,7 +2334,7 @@ export def "youtube-playlists youtubeplaylistsinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/playlists" $qp)
   let body = {contentDetails: $contentDetails, etag: $etag, id: $id, kind: $kind, localizations: $localizations, player: $player, snippet: $snippet, status: $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2364,7 +2364,7 @@ export def "youtube-playlists youtubeplaylistsupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2385,7 +2385,7 @@ export def "youtube-playlists youtubeplaylistsupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/playlists" $qp)
   let body = {contentDetails: $contentDetails, etag: $etag, id: $id, kind: $kind, localizations: $localizations, player: $player, snippet: $snippet, status: $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2411,7 +2411,7 @@ export def "youtube-search youtubesearchlist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2452,7 +2452,7 @@ export def "youtube-search youtubesearchlist" [
 ]: nothing -> record<etag: string, eventId: string, items: table<etag: string, id: record, kind: string, snippet: record>, kind: string, nextPageToken: string, pageInfo: record<resultsPerPage: int, totalResults: int>, prevPageToken: string, regionCode: string, tokenPagination: record, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "channelId" $channelId "scalar") (serialize-qp "channelType" $channelType "scalar") (serialize-qp "eventType" $eventType "scalar") (serialize-qp "forContentOwner" $forContentOwner "scalar") (serialize-qp "forDeveloper" $forDeveloper "scalar") (serialize-qp "forMine" $forMine "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "locationRadius" $locationRadius "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "publishedAfter" $publishedAfter "scalar") (serialize-qp "publishedBefore" $publishedBefore "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "regionCode" $regionCode "scalar") (serialize-qp "relatedToVideoId" $relatedToVideoId "scalar") (serialize-qp "relevanceLanguage" $relevanceLanguage "scalar") (serialize-qp "safeSearch" $safeSearch "scalar") (serialize-qp "topicId" $topicId "scalar") (serialize-qp "type" $type "multi") (serialize-qp "videoCaption" $videoCaption "scalar") (serialize-qp "videoCategoryId" $videoCategoryId "scalar") (serialize-qp "videoDefinition" $videoDefinition "scalar") (serialize-qp "videoDimension" $videoDimension "scalar") (serialize-qp "videoDuration" $videoDuration "scalar") (serialize-qp "videoEmbeddable" $videoEmbeddable "scalar") (serialize-qp "videoLicense" $videoLicense "scalar") (serialize-qp "videoSyndicated" $videoSyndicated "scalar") (serialize-qp "videoType" $videoType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "channelId" $channelId "scalar") (serialize-qp "channelType" $channelType "scalar") (serialize-qp "eventType" $eventType "scalar") (serialize-qp "forContentOwner" $forContentOwner "scalar") (serialize-qp "forDeveloper" $forDeveloper "scalar") (serialize-qp "forMine" $forMine "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "locationRadius" $locationRadius "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "publishedAfter" $publishedAfter "scalar") (serialize-qp "publishedBefore" $publishedBefore "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "regionCode" $regionCode "scalar") (serialize-qp "relatedToVideoId" $relatedToVideoId "scalar") (serialize-qp "relevanceLanguage" $relevanceLanguage "scalar") (serialize-qp "safeSearch" $safeSearch "scalar") (serialize-qp "topicId" $topicId "scalar") (serialize-qp "type" $type "multi") (serialize-qp "videoCaption" $videoCaption "scalar") (serialize-qp "videoCategoryId" $videoCategoryId "scalar") (serialize-qp "videoDefinition" $videoDefinition "scalar") (serialize-qp "videoDimension" $videoDimension "scalar") (serialize-qp "videoDuration" $videoDuration "scalar") (serialize-qp "videoEmbeddable" $videoEmbeddable "scalar") (serialize-qp "videoLicense" $videoLicense "scalar") (serialize-qp "videoSyndicated" $videoSyndicated "scalar") (serialize-qp "videoType" $videoType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2476,7 +2476,7 @@ export def "youtube-subscriptions youtubesubscriptionsdelete" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2487,7 +2487,7 @@ export def "youtube-subscriptions youtubesubscriptionsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/subscriptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2511,7 +2511,7 @@ export def "youtube-subscriptions youtubesubscriptionslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2533,7 +2533,7 @@ export def "youtube-subscriptions youtubesubscriptionslist" [
 ]: nothing -> record<etag: string, eventId: string, items: table<contentDetails: record, etag: string, id: string, kind: string, snippet: record, subscriberSnippet: record>, kind: string, nextPageToken: string, pageInfo: record<resultsPerPage: int, totalResults: int>, prevPageToken: string, tokenPagination: record, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "channelId" $channelId "scalar") (serialize-qp "forChannelId" $forChannelId "scalar") (serialize-qp "id" $id "multi") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "mine" $mine "scalar") (serialize-qp "myRecentSubscribers" $myRecentSubscribers "scalar") (serialize-qp "mySubscribers" $mySubscribers "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "channelId" $channelId "scalar") (serialize-qp "forChannelId" $forChannelId "scalar") (serialize-qp "id" $id "multi") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "mine" $mine "scalar") (serialize-qp "myRecentSubscribers" $myRecentSubscribers "scalar") (serialize-qp "mySubscribers" $mySubscribers "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/subscriptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2560,7 +2560,7 @@ export def "youtube-subscriptions youtubesubscriptionsinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2578,7 +2578,7 @@ export def "youtube-subscriptions youtubesubscriptionsinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/subscriptions" $qp)
   let body = {contentDetails: $contentDetails, etag: $etag, id: $id, kind: $kind, snippet: $snippet, subscriberSnippet: $subscriberSnippet} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2604,7 +2604,7 @@ export def "youtube-super-chat-events youtubesuperChatEventslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2618,7 +2618,7 @@ export def "youtube-super-chat-events youtubesuperChatEventslist" [
 ]: nothing -> record<etag: string, eventId: string, items: table<etag: string, id: string, kind: string, snippet: record>, kind: string, nextPageToken: string, pageInfo: record<resultsPerPage: int, totalResults: int>, tokenPagination: record, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "hl" $hl "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "hl" $hl "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/superChatEvents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2642,7 +2642,7 @@ export def "youtube-tests youtubetestsinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2659,7 +2659,7 @@ export def "youtube-tests youtubetestsinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "externalChannelId" $externalChannelId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "externalChannelId" $externalChannelId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/tests" $qp)
   let body = {featuredPart: $featuredPart, gaia: $gaia, id: $id, snippet: $snippet} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2685,7 +2685,7 @@ export def "youtube-third-party-links youtubethirdPartyLinksdelete" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2699,7 +2699,7 @@ export def "youtube-third-party-links youtubethirdPartyLinksdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "linkingToken" $linkingToken "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "externalChannelId" $externalChannelId "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "linkingToken" $linkingToken "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "externalChannelId" $externalChannelId "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/thirdPartyLinks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2723,7 +2723,7 @@ export def "youtube-third-party-links youtubethirdPartyLinkslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2737,7 +2737,7 @@ export def "youtube-third-party-links youtubethirdPartyLinkslist" [
 ]: nothing -> record<etag: string, items: table<etag: string, kind: string, linkingToken: string, snippet: record, status: record>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "externalChannelId" $externalChannelId "scalar") (serialize-qp "linkingToken" $linkingToken "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "externalChannelId" $externalChannelId "scalar") (serialize-qp "linkingToken" $linkingToken "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/thirdPartyLinks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2763,7 +2763,7 @@ export def "youtube-third-party-links youtubethirdPartyLinksinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2781,7 +2781,7 @@ export def "youtube-third-party-links youtubethirdPartyLinksinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "externalChannelId" $externalChannelId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "externalChannelId" $externalChannelId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/thirdPartyLinks" $qp)
   let body = {etag: $etag, kind: $kind, linkingToken: $linkingToken, snippet: $snippet, status: $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2809,7 +2809,7 @@ export def "youtube-third-party-links youtubethirdPartyLinksupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2827,7 +2827,7 @@ export def "youtube-third-party-links youtubethirdPartyLinksupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "externalChannelId" $externalChannelId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "externalChannelId" $externalChannelId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/thirdPartyLinks" $qp)
   let body = {etag: $etag, kind: $kind, linkingToken: $linkingToken, snippet: $snippet, status: $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2853,7 +2853,7 @@ export def "youtube-thumbnails-set youtubethumbnailsset" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2865,7 +2865,7 @@ export def "youtube-thumbnails-set youtubethumbnailsset" [
 ]: nothing -> record<etag: string, eventId: string, items: table<high: record, maxres: record, medium: record, standard: record>, kind: string, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "videoId" $videoId "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "videoId" $videoId "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/thumbnails/set" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2889,7 +2889,7 @@ export def "youtube-video-abuse-report-reasons youtubevideoAbuseReportReasonslis
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2901,7 +2901,7 @@ export def "youtube-video-abuse-report-reasons youtubevideoAbuseReportReasonslis
 ]: nothing -> record<etag: string, eventId: string, items: table<etag: string, id: string, kind: string, snippet: record>, kind: string, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "hl" $hl "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "hl" $hl "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/videoAbuseReportReasons" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2925,7 +2925,7 @@ export def "youtube-video-categories youtubevideoCategorieslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2939,7 +2939,7 @@ export def "youtube-video-categories youtubevideoCategorieslist" [
 ]: nothing -> record<etag: string, eventId: string, items: table<etag: string, id: string, kind: string, snippet: record>, kind: string, nextPageToken: string, pageInfo: record<resultsPerPage: int, totalResults: int>, prevPageToken: string, tokenPagination: record, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "hl" $hl "scalar") (serialize-qp "id" $id "multi") (serialize-qp "regionCode" $regionCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "hl" $hl "scalar") (serialize-qp "id" $id "multi") (serialize-qp "regionCode" $regionCode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/videoCategories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2963,7 +2963,7 @@ export def "youtube-videos youtubevideosdelete" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2975,7 +2975,7 @@ export def "youtube-videos youtubevideosdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/videos" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2999,7 +2999,7 @@ export def "youtube-videos youtubevideoslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3022,7 +3022,7 @@ export def "youtube-videos youtubevideoslist" [
 ]: nothing -> record<etag: string, eventId: string, items: table<ageGating: record, contentDetails: record, etag: string, fileDetails: record, id: string, kind: string, liveStreamingDetails: record, localizations: record, monetizationDetails: record, player: record, processingDetails: record, projectDetails: record, recordingDetails: record, snippet: record, statistics: record, status: record, suggestions: record, topicDetails: record>, kind: string, nextPageToken: string, pageInfo: record<resultsPerPage: int, totalResults: int>, prevPageToken: string, tokenPagination: record, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "chart" $chart "scalar") (serialize-qp "hl" $hl "scalar") (serialize-qp "id" $id "multi") (serialize-qp "locale" $locale "scalar") (serialize-qp "maxHeight" $maxHeight "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "maxWidth" $maxWidth "scalar") (serialize-qp "myRating" $myRating "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "regionCode" $regionCode "scalar") (serialize-qp "videoCategoryId" $videoCategoryId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "chart" $chart "scalar") (serialize-qp "hl" $hl "scalar") (serialize-qp "id" $id "multi") (serialize-qp "locale" $locale "scalar") (serialize-qp "maxHeight" $maxHeight "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "maxWidth" $maxWidth "scalar") (serialize-qp "myRating" $myRating "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "regionCode" $regionCode "scalar") (serialize-qp "videoCategoryId" $videoCategoryId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/videos" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3046,7 +3046,7 @@ export def "youtube-videos youtubevideosinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3064,7 +3064,7 @@ export def "youtube-videos youtubevideosinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "autoLevels" $autoLevels "scalar") (serialize-qp "notifySubscribers" $notifySubscribers "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar") (serialize-qp "stabilize" $stabilize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "autoLevels" $autoLevels "scalar") (serialize-qp "notifySubscribers" $notifySubscribers "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $onBehalfOfContentOwnerChannel "scalar") (serialize-qp "stabilize" $stabilize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/videos" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -3102,7 +3102,7 @@ export def "youtube-videos youtubevideosupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3133,7 +3133,7 @@ export def "youtube-videos youtubevideosupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/videos" $qp)
   let body = {ageGating: $ageGating, contentDetails: $contentDetails, etag: $etag, fileDetails: $fileDetails, id: $id, kind: $kind, liveStreamingDetails: $liveStreamingDetails, localizations: $localizations, monetizationDetails: $monetizationDetails, player: $player, processingDetails: $processingDetails, projectDetails: $projectDetails, recordingDetails: $recordingDetails, snippet: $snippet, statistics: $statistics, status: $status, suggestions: $suggestions, topicDetails: $topicDetails} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -3159,7 +3159,7 @@ export def "youtube-videos-get-rating youtubevideosgetRating" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3171,7 +3171,7 @@ export def "youtube-videos-get-rating youtubevideosgetRating" [
 ]: nothing -> record<etag: string, eventId: string, items: table<rating: string, videoId: string>, kind: string, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "multi") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/videos/getRating" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3195,7 +3195,7 @@ export def "youtube-videos-rate youtubevideosrate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3207,7 +3207,7 @@ export def "youtube-videos-rate youtubevideosrate" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "rating" $rating "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "rating" $rating "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/videos/rate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3231,7 +3231,7 @@ export def "youtube-videos-report-abuse youtubevideosreportAbuse" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3248,7 +3248,7 @@ export def "youtube-videos-report-abuse youtubevideosreportAbuse" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/videos/reportAbuse" $qp)
   let body = {comments: $comments, language: $language, reasonId: $reasonId, secondaryReasonId: $secondaryReasonId, videoId: $videoId} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -3274,7 +3274,7 @@ export def "youtube-watermarks-set youtubewatermarksset" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3288,7 +3288,7 @@ export def "youtube-watermarks-set youtubewatermarksset" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "channelId" $channelId "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "channelId" $channelId "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/watermarks/set" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -3313,7 +3313,7 @@ export def "youtube-watermarks-unset youtubewatermarksunset" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3325,7 +3325,7 @@ export def "youtube-watermarks-unset youtubewatermarksunset" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "channelId" $channelId "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "channelId" $channelId "scalar") (serialize-qp "onBehalfOfContentOwner" $onBehalfOfContentOwner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/watermarks/unset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

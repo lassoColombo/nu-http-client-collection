@@ -821,12 +821,12 @@ export def "recipe-autocomplete AutoComplete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string
+  --query: string
   --limit: int # format: int32
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipe/autocomplete" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -847,12 +847,12 @@ export def "recipe-autocomplete-all AutoCompleteAllRecipes" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # The query.
+  --query: string # The query.
   --limit: int # The limit. (format: int32)
 ]: nothing -> table<ImageURL: string, QualityScore: int, RecipeID: int, Servings: float, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipe/autocomplete/all" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -873,12 +873,12 @@ export def "recipe-autocomplete-mine AutoCompleteMyRecipes" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # The query.
+  --query: string # The query.
   --limit: int # The limit. (format: int32)
 ]: nothing -> table<ImageURL: string, QualityScore: int, RecipeID: int, Servings: float, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipe/autocomplete/mine" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

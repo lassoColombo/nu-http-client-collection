@@ -103,12 +103,12 @@ export def "autocomplete-suggestions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search term. It can contain any character.
+  --query: string # Search term. It can contain any character.
   --locale: string # Indicates the target language as a BCP 47 language code. The Intelligent Search must have indexed the account in the target language. (nullable, e.g. en-US)
 ]: nothing -> record<searches: table<attributes: list, count: float, term: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/autocomplete_suggestions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -128,12 +128,12 @@ export def "banners get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search term. It can contain any character.
+  --query: string # Search term. It can contain any character.
   --locale: string # Indicates the target language as a BCP 47 language code. The Intelligent Search must have indexed the account in the target language. (nullable, e.g. en-US)
 ]: nothing -> record<banners: table<area: string, html: string, id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/banners/($facets)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -152,12 +152,12 @@ export def "correction-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search term. It can contain any character.
+  --query: string # Search term. It can contain any character.
   --locale: string # Indicates the target language as a BCP 47 language code. The Intelligent Search must have indexed the account in the target language. (nullable, e.g. en-US)
 ]: nothing -> record<correction: record<correction: bool, highlighted: string, misspelled: bool, text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/correction_search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -177,13 +177,13 @@ export def "facets get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search term. It can contain any character.
+  --query: string # Search term. It can contain any character.
   --locale: string # Indicates the target language as a BCP 47 language code. The Intelligent Search must have indexed the account in the target language. (nullable, e.g. en-US)
   --hideUnavailableItems: oneof<nothing, bool> # Whether the result should hide unavailable items (`true`), or not (`false`) (default: false)
 ]: nothing -> record<breadcrumb: table<href: string, name: string>, facets: table<hidden: bool, name: string, quantity: float, type: string, values: list>, queryArgs: record<query: string, selectedFacets: list<record>>, sampling: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "hideUnavailableItems" $hideUnavailableItems "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "hideUnavailableItems" $hideUnavailableItems "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/facets/($facets)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -203,7 +203,7 @@ export def "product-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search term. It can contain any character.
+  --query: string # Search term. It can contain any character.
   --simulationBehavior: string@simulationBehavior-completer # Defines the simulation behavior.   * `default` - Calls the simulation for every single seller.  * `skip` - Never calls the simulation.  * `only1P` - Only calls the simulation for first party sellers. (nullable, default: default)
   --count: float # Number of products per page. (nullable, default: 24)
   --page: float # Current search page. (nullable, default: 1)
@@ -213,7 +213,7 @@ export def "product-search get" [
 ]: nothing -> record<correction: record<misspelled: bool>, fuzzy: string, operator: string, products: list<record>, recordsFiltered: float, translated: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "simulationBehavior" $simulationBehavior "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "hideUnavailableItems" $hideUnavailableItems "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "simulationBehavior" $simulationBehavior "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "hideUnavailableItems" $hideUnavailableItems "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/product_search/($facets)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -232,12 +232,12 @@ export def "search-suggestions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search term. It can contain any character.
+  --query: string # Search term. It can contain any character.
   --locale: string # Indicates the target language as a BCP 47 language code. The Intelligent Search must have indexed the account in the target language. (nullable, e.g. en-US)
 ]: nothing -> record<searches: table<count: float, term: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search_suggestions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -645,7 +645,7 @@ export def "adminconversationssearch search" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-ids: string # Comma separated string of team IDs, signifying the workspaces to search through.
-  --qp-query: string # Name of the the channel to query by.
+  --query: string # Name of the the channel to query by.
   --limit: int # Maximum number of items to be returned. Must be between 1 - 20 both inclusive. Default is 10.
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page.
   --search-channel-types: string # The type of channel to include or exclude in the search. For example `private` will search private channels, while `private_exclude` will exclude them. For a full list of types, check the [Types section](#types).
@@ -655,7 +655,7 @@ export def "adminconversationssearch search" [
 ]: nothing -> record<channels: table<accepted_user: string, created: int, creator: string, id: string, is_archived: bool, is_channel: bool, is_frozen: bool, is_general: bool, is_member: bool, is_moved: int, is_mpim: bool, is_non_threadable: bool, is_org_shared: bool, is_pending_ext_shared: bool, is_private: bool, is_read_only: bool, is_shared: bool, is_thread_only: bool, last_read: string, latest: list, members: list, name: string, name_normalized: string, num_members: int, pending_shared: list, previous_names: list, priority: float, purpose: record, topic: record, unlinked: int, unread_count: int, unread_count_display: int>, next_cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "team_ids" $team_ids "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "search_channel_types" $search_channel_types "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sort_dir" $sort_dir "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "team_ids" $team_ids "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "search_channel_types" $search_channel_types "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sort_dir" $sort_dir "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.conversations.search" $qp)
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4308,13 +4308,13 @@ export def "searchmessages messages" [
   --count: int # Pass the number of results you want per "page". Maximum of `100`.
   --highlight: oneof<nothing, bool> # Pass a value of `true` to enable query highlight markers (see below).
   --page: int
-  --qp-query: string # Search query.
+  --query: string # Search query.
   --qp-sort: string # Return matches sorted by either `score` or `timestamp`.
   --sort-dir: string # Change sort direction to ascending (`asc`) or descending (`desc`).
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "highlight" $highlight "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sort_dir" $sort_dir "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "highlight" $highlight "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sort_dir" $sort_dir "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search.messages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

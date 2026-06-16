@@ -281,7 +281,7 @@ export def "vaults-items CreateVaultItem" [
   --urls: list # e.g. [{href: https://example.com, primary: true}, {href: https://example.org}] — item shape: {href: string, label?: string, primary?: bool}
   vault: record # shape: {id: string}
   --version: int
-  --body-fields: list # item shape: {generate?: bool, id: string, label?: string, purpose?: ""|"USERNAME"|"PASSWORD"|"NOTES", recipe?: record, section?: record, type: "STRING"|"EMAIL"|"CONCEALED"|"URL"|"TOTP"|"DATE"|"MONTH_YEAR"|"MENU", value?: string}
+  --fields: list # item shape: {generate?: bool, id: string, label?: string, purpose?: ""|"USERNAME"|"PASSWORD"|"NOTES", recipe?: record, section?: record, type: "STRING"|"EMAIL"|"CONCEALED"|"URL"|"TOTP"|"DATE"|"MONTH_YEAR"|"MENU", value?: string}
   --files: list # item shape: {content?: string, id?: string, name?: string, section?: record, size?: int}
   --sections: list # item shape: {id?: string, label?: string}
 ]: any -> record<category: string, createdAt: string, favorite: bool, id: string, lastEditedBy: string, state: string, tags: list<string>, title: string, updatedAt: string, urls: table<href: string, label: string, primary: bool>, vault: record<id: string>, version: int, fields: table<entropy: float, generate: bool, id: string, label: string, purpose: string, recipe: record, section: record, type: string, value: string>, files: table<content: string, content_path: string, id: string, name: string, section: record, size: int>, sections: table<id: string, label: string>> {
@@ -289,7 +289,7 @@ export def "vaults-items CreateVaultItem" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/vaults/($vaultUuid)/items")
-  let body = {category: $category, favorite: $favorite, id: $id, tags: $tags, title: $title, urls: $urls, vault: $vault, version: $version, fields: $body_fields, files: $files, sections: $sections} | compact
+  let body = {category: $category, favorite: $favorite, id: $id, tags: $tags, title: $title, urls: $urls, vault: $vault, version: $version, fields: $fields, files: $files, sections: $sections} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -399,7 +399,7 @@ export def "vaults-items UpdateVaultItem" [
   --urls: list # e.g. [{href: https://example.com, primary: true}, {href: https://example.org}] — item shape: {href: string, label?: string, primary?: bool}
   vault: record # shape: {id: string}
   --version: int
-  --body-fields: list # item shape: {generate?: bool, id: string, label?: string, purpose?: ""|"USERNAME"|"PASSWORD"|"NOTES", recipe?: record, section?: record, type: "STRING"|"EMAIL"|"CONCEALED"|"URL"|"TOTP"|"DATE"|"MONTH_YEAR"|"MENU", value?: string}
+  --fields: list # item shape: {generate?: bool, id: string, label?: string, purpose?: ""|"USERNAME"|"PASSWORD"|"NOTES", recipe?: record, section?: record, type: "STRING"|"EMAIL"|"CONCEALED"|"URL"|"TOTP"|"DATE"|"MONTH_YEAR"|"MENU", value?: string}
   --files: list # item shape: {content?: string, id?: string, name?: string, section?: record, size?: int}
   --sections: list # item shape: {id?: string, label?: string}
 ]: any -> record<category: string, createdAt: string, favorite: bool, id: string, lastEditedBy: string, state: string, tags: list<string>, title: string, updatedAt: string, urls: table<href: string, label: string, primary: bool>, vault: record<id: string>, version: int, fields: table<entropy: float, generate: bool, id: string, label: string, purpose: string, recipe: record, section: record, type: string, value: string>, files: table<content: string, content_path: string, id: string, name: string, section: record, size: int>, sections: table<id: string, label: string>> {
@@ -407,7 +407,7 @@ export def "vaults-items UpdateVaultItem" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/vaults/($vaultUuid)/items/($itemUuid)")
-  let body = {category: $category, favorite: $favorite, id: $id, tags: $tags, title: $title, urls: $urls, vault: $vault, version: $version, fields: $body_fields, files: $files, sections: $sections} | compact
+  let body = {category: $category, favorite: $favorite, id: $id, tags: $tags, title: $title, urls: $urls, vault: $vault, version: $version, fields: $fields, files: $files, sections: $sections} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

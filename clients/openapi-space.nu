@@ -105,7 +105,7 @@ export def "apis list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # free text query to match (default: )
+  --query: string # free text query to match (default: )
   --limit: int # the maximum number of APIs to return (default: 10)
   --offset: int # the offset where to start from when fetching a limited number of APIs (default: 0)
   --qp-sort: string@sort-completer # sort criteria or result set * NAME - * UPATED * CREATED * OWNER  (default: NAME)
@@ -113,7 +113,7 @@ export def "apis list" [
 ]: nothing -> table<created: string, description: string, modified: string, name: string, owner: string, swagger: record, url: string, versions: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apis" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

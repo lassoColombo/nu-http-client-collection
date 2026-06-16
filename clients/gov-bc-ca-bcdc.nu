@@ -531,15 +531,15 @@ export def "action-resource-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The search criteria string or list of strings of the form ``{field}:{term1}`` (default: format:csv)
-  --qp-fields: string # Depreciated
+  --query: string # The search criteria string or list of strings of the form ``{field}:{term1}`` (default: format:csv)
+  --fields: string # Depreciated
   --order-by: string # A field on the resource model that orders the results
   --offset: int # Apply an offset to the query (default: 0)
   --limit: int # Apply a limit to the query (default: 0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/action/resource_search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

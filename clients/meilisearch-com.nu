@@ -291,11 +291,11 @@ export def "indexes-books-documents get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # e.g. 1
   --offset: string # e.g. 10
-  --qp-fields: string # e.g. id
+  --fields: string # e.g. id
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/indexes/books/documents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -394,11 +394,11 @@ export def "indexes-books-documents-2 get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # e.g. id
+  --fields: string # e.g. id
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/indexes/books/documents/2" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

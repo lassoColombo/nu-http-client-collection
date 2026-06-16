@@ -106,7 +106,7 @@ export def "about driveaboutget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -115,7 +115,7 @@ export def "about driveaboutget" [
 ]: nothing -> record<appInstalled: bool, canCreateDrives: bool, canCreateTeamDrives: bool, driveThemes: table<backgroundImageLink: string, colorRgb: string, id: string>, exportFormats: record, folderColorPalette: list<string>, importFormats: record, kind: string, maxImportSizes: record, maxUploadSize: string, storageQuota: record<limit: string, usage: string, usageInDrive: string, usageInDriveTrash: string>, teamDriveThemes: table<backgroundImageLink: string, colorRgb: string, id: string>, user: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/about" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -136,7 +136,7 @@ export def "changes drivechangeslist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -159,7 +159,7 @@ export def "changes drivechangeslist" [
 ]: nothing -> record<changes: table<changeType: string, drive: record, driveId: string, file: record, fileId: string, kind: string, removed: bool, teamDrive: record, teamDriveId: string, time: string, type: string>, kind: string, newStartPageToken: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "driveId" $driveId "scalar") (serialize-qp "includeCorpusRemovals" $includeCorpusRemovals "scalar") (serialize-qp "includeItemsFromAllDrives" $includeItemsFromAllDrives "scalar") (serialize-qp "includeLabels" $includeLabels "scalar") (serialize-qp "includePermissionsForView" $includePermissionsForView "scalar") (serialize-qp "includeRemoved" $includeRemoved "scalar") (serialize-qp "includeTeamDriveItems" $includeTeamDriveItems "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "restrictToMyDrive" $restrictToMyDrive "scalar") (serialize-qp "spaces" $spaces "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar") (serialize-qp "teamDriveId" $teamDriveId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "driveId" $driveId "scalar") (serialize-qp "includeCorpusRemovals" $includeCorpusRemovals "scalar") (serialize-qp "includeItemsFromAllDrives" $includeItemsFromAllDrives "scalar") (serialize-qp "includeLabels" $includeLabels "scalar") (serialize-qp "includePermissionsForView" $includePermissionsForView "scalar") (serialize-qp "includeRemoved" $includeRemoved "scalar") (serialize-qp "includeTeamDriveItems" $includeTeamDriveItems "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "restrictToMyDrive" $restrictToMyDrive "scalar") (serialize-qp "spaces" $spaces "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar") (serialize-qp "teamDriveId" $teamDriveId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/changes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -180,7 +180,7 @@ export def "changes-start-page-token drivechangesgetStartPageToken" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -193,7 +193,7 @@ export def "changes-start-page-token drivechangesgetStartPageToken" [
 ]: nothing -> record<kind: string, startPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "driveId" $driveId "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar") (serialize-qp "teamDriveId" $teamDriveId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "driveId" $driveId "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar") (serialize-qp "teamDriveId" $teamDriveId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/changes/startPageToken" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -214,7 +214,7 @@ export def "changes-watch drivechangeswatch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -248,7 +248,7 @@ export def "changes-watch drivechangeswatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "driveId" $driveId "scalar") (serialize-qp "includeCorpusRemovals" $includeCorpusRemovals "scalar") (serialize-qp "includeItemsFromAllDrives" $includeItemsFromAllDrives "scalar") (serialize-qp "includeLabels" $includeLabels "scalar") (serialize-qp "includePermissionsForView" $includePermissionsForView "scalar") (serialize-qp "includeRemoved" $includeRemoved "scalar") (serialize-qp "includeTeamDriveItems" $includeTeamDriveItems "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "restrictToMyDrive" $restrictToMyDrive "scalar") (serialize-qp "spaces" $spaces "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar") (serialize-qp "teamDriveId" $teamDriveId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "driveId" $driveId "scalar") (serialize-qp "includeCorpusRemovals" $includeCorpusRemovals "scalar") (serialize-qp "includeItemsFromAllDrives" $includeItemsFromAllDrives "scalar") (serialize-qp "includeLabels" $includeLabels "scalar") (serialize-qp "includePermissionsForView" $includePermissionsForView "scalar") (serialize-qp "includeRemoved" $includeRemoved "scalar") (serialize-qp "includeTeamDriveItems" $includeTeamDriveItems "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "restrictToMyDrive" $restrictToMyDrive "scalar") (serialize-qp "spaces" $spaces "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar") (serialize-qp "teamDriveId" $teamDriveId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/changes/watch" $qp)
   let body = {address: $address, expiration: $expiration, id: $id, kind: $kind, params: $params, payload: $payload, resourceId: $resourceId, resourceUri: $resourceUri, token: $body_token, type: $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -271,7 +271,7 @@ export def "channels-stop drivechannelsstop" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -291,7 +291,7 @@ export def "channels-stop drivechannelsstop" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels/stop" $qp)
   let body = {address: $address, expiration: $expiration, id: $id, kind: $kind, params: $params, payload: $payload, resourceId: $resourceId, resourceUri: $resourceUri, token: $body_token, type: $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -314,7 +314,7 @@ export def "drives drivedriveslist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -327,7 +327,7 @@ export def "drives drivedriveslist" [
 ]: nothing -> record<drives: table<backgroundImageFile: record, backgroundImageLink: string, capabilities: record, colorRgb: string, createdTime: string, hidden: bool, id: string, kind: string, name: string, orgUnitId: string, restrictions: record, themeId: string>, kind: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/drives" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -351,7 +351,7 @@ export def "drives drivedrivescreate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -374,7 +374,7 @@ export def "drives drivedrivescreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "requestId" $requestId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "requestId" $requestId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/drives" $qp)
   let body = {backgroundImageFile: $backgroundImageFile, backgroundImageLink: $backgroundImageLink, capabilities: $capabilities, colorRgb: $colorRgb, createdTime: $createdTime, hidden: $hidden, id: $id, kind: $kind, name: $name, orgUnitId: $orgUnitId, restrictions: $restrictions, themeId: $themeId} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -398,7 +398,7 @@ export def "drives drivedrivesdelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -409,7 +409,7 @@ export def "drives drivedrivesdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "allowItemDeletion" $allowItemDeletion "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "allowItemDeletion" $allowItemDeletion "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/drives/($driveId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -431,7 +431,7 @@ export def "drives drivedrivesget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -441,7 +441,7 @@ export def "drives drivedrivesget" [
 ]: nothing -> record<backgroundImageFile: record<id: string, width: float, xCoordinate: float, yCoordinate: float>, backgroundImageLink: string, capabilities: record<canAddChildren: bool, canChangeCopyRequiresWriterPermissionRestriction: bool, canChangeDomainUsersOnlyRestriction: bool, canChangeDriveBackground: bool, canChangeDriveMembersOnlyRestriction: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction: bool, canComment: bool, canCopy: bool, canDeleteChildren: bool, canDeleteDrive: bool, canDownload: bool, canEdit: bool, canListChildren: bool, canManageMembers: bool, canReadRevisions: bool, canRename: bool, canRenameDrive: bool, canResetDriveRestrictions: bool, canShare: bool, canTrashChildren: bool>, colorRgb: string, createdTime: string, hidden: bool, id: string, kind: string, name: string, orgUnitId: string, restrictions: record<adminManagedRestrictions: bool, copyRequiresWriterPermission: bool, domainUsersOnly: bool, driveMembersOnly: bool, sharingFoldersRequiresOrganizerPermission: bool>, themeId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/drives/($driveId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -466,7 +466,7 @@ export def "drives drivedrivesupdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -489,7 +489,7 @@ export def "drives drivedrivesupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/drives/($driveId)" $qp)
   let body = {backgroundImageFile: $backgroundImageFile, backgroundImageLink: $backgroundImageLink, capabilities: $capabilities, colorRgb: $colorRgb, createdTime: $createdTime, hidden: $hidden, id: $id, kind: $kind, name: $name, orgUnitId: $orgUnitId, restrictions: $restrictions, themeId: $themeId} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -513,7 +513,7 @@ export def "drives-hide drivedriveshide" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -522,7 +522,7 @@ export def "drives-hide drivedriveshide" [
 ]: nothing -> record<backgroundImageFile: record<id: string, width: float, xCoordinate: float, yCoordinate: float>, backgroundImageLink: string, capabilities: record<canAddChildren: bool, canChangeCopyRequiresWriterPermissionRestriction: bool, canChangeDomainUsersOnlyRestriction: bool, canChangeDriveBackground: bool, canChangeDriveMembersOnlyRestriction: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction: bool, canComment: bool, canCopy: bool, canDeleteChildren: bool, canDeleteDrive: bool, canDownload: bool, canEdit: bool, canListChildren: bool, canManageMembers: bool, canReadRevisions: bool, canRename: bool, canRenameDrive: bool, canResetDriveRestrictions: bool, canShare: bool, canTrashChildren: bool>, colorRgb: string, createdTime: string, hidden: bool, id: string, kind: string, name: string, orgUnitId: string, restrictions: record<adminManagedRestrictions: bool, copyRequiresWriterPermission: bool, domainUsersOnly: bool, driveMembersOnly: bool, sharingFoldersRequiresOrganizerPermission: bool>, themeId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/drives/($driveId)/hide" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -544,7 +544,7 @@ export def "drives-unhide drivedrivesunhide" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -553,7 +553,7 @@ export def "drives-unhide drivedrivesunhide" [
 ]: nothing -> record<backgroundImageFile: record<id: string, width: float, xCoordinate: float, yCoordinate: float>, backgroundImageLink: string, capabilities: record<canAddChildren: bool, canChangeCopyRequiresWriterPermissionRestriction: bool, canChangeDomainUsersOnlyRestriction: bool, canChangeDriveBackground: bool, canChangeDriveMembersOnlyRestriction: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction: bool, canComment: bool, canCopy: bool, canDeleteChildren: bool, canDeleteDrive: bool, canDownload: bool, canEdit: bool, canListChildren: bool, canManageMembers: bool, canReadRevisions: bool, canRename: bool, canRenameDrive: bool, canResetDriveRestrictions: bool, canShare: bool, canTrashChildren: bool>, colorRgb: string, createdTime: string, hidden: bool, id: string, kind: string, name: string, orgUnitId: string, restrictions: record<adminManagedRestrictions: bool, copyRequiresWriterPermission: bool, domainUsersOnly: bool, driveMembersOnly: bool, sharingFoldersRequiresOrganizerPermission: bool>, themeId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/drives/($driveId)/unhide" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -574,7 +574,7 @@ export def "files drivefileslist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -598,7 +598,7 @@ export def "files drivefileslist" [
 ]: nothing -> record<files: table<appProperties: record, capabilities: record, contentHints: record, contentRestrictions: list, copyRequiresWriterPermission: bool, createdTime: string, description: string, driveId: string, explicitlyTrashed: bool, exportLinks: record, fileExtension: string, folderColorRgb: string, fullFileExtension: string, hasAugmentedPermissions: bool, hasThumbnail: bool, headRevisionId: string, iconLink: string, id: string, imageMediaMetadata: record, isAppAuthorized: bool, kind: string, labelInfo: record, lastModifyingUser: record, linkShareMetadata: record, md5Checksum: string, mimeType: string, modifiedByMe: bool, modifiedByMeTime: string, modifiedTime: string, name: string, originalFilename: string, ownedByMe: bool, owners: list, parents: list, permissionIds: list, permissions: list, properties: record, quotaBytesUsed: string, resourceKey: string, sha1Checksum: string, sha256Checksum: string, shared: bool, sharedWithMeTime: string, sharingUser: record, shortcutDetails: record, size: string, spaces: list, starred: bool, teamDriveId: string, thumbnailLink: string, thumbnailVersion: string, trashed: bool, trashedTime: string, trashingUser: record, version: string, videoMediaMetadata: record, viewedByMe: bool, viewedByMeTime: string, viewersCanCopyContent: bool, webContentLink: string, webViewLink: string, writersCanShare: bool>, incompleteSearch: bool, kind: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "corpora" $corpora "scalar") (serialize-qp "corpus" $corpus "scalar") (serialize-qp "driveId" $driveId "scalar") (serialize-qp "includeItemsFromAllDrives" $includeItemsFromAllDrives "scalar") (serialize-qp "includeLabels" $includeLabels "scalar") (serialize-qp "includePermissionsForView" $includePermissionsForView "scalar") (serialize-qp "includeTeamDriveItems" $includeTeamDriveItems "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "spaces" $spaces "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar") (serialize-qp "teamDriveId" $teamDriveId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "corpora" $corpora "scalar") (serialize-qp "corpus" $corpus "scalar") (serialize-qp "driveId" $driveId "scalar") (serialize-qp "includeItemsFromAllDrives" $includeItemsFromAllDrives "scalar") (serialize-qp "includeLabels" $includeLabels "scalar") (serialize-qp "includePermissionsForView" $includePermissionsForView "scalar") (serialize-qp "includeTeamDriveItems" $includeTeamDriveItems "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "spaces" $spaces "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar") (serialize-qp "teamDriveId" $teamDriveId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/files" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -619,7 +619,7 @@ export def "files drivefilescreate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -639,7 +639,7 @@ export def "files drivefilescreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "enforceSingleParent" $enforceSingleParent "scalar") (serialize-qp "ignoreDefaultVisibility" $ignoreDefaultVisibility "scalar") (serialize-qp "includeLabels" $includeLabels "scalar") (serialize-qp "includePermissionsForView" $includePermissionsForView "scalar") (serialize-qp "keepRevisionForever" $keepRevisionForever "scalar") (serialize-qp "ocrLanguage" $ocrLanguage "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar") (serialize-qp "useContentAsIndexableText" $useContentAsIndexableText "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "enforceSingleParent" $enforceSingleParent "scalar") (serialize-qp "ignoreDefaultVisibility" $ignoreDefaultVisibility "scalar") (serialize-qp "includeLabels" $includeLabels "scalar") (serialize-qp "includePermissionsForView" $includePermissionsForView "scalar") (serialize-qp "keepRevisionForever" $keepRevisionForever "scalar") (serialize-qp "ocrLanguage" $ocrLanguage "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar") (serialize-qp "useContentAsIndexableText" $useContentAsIndexableText "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/files" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -661,7 +661,7 @@ export def "files-generate-ids drivefilesgenerateIds" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -673,7 +673,7 @@ export def "files-generate-ids drivefilesgenerateIds" [
 ]: nothing -> record<ids: list<string>, kind: string, space: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "space" $space "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "space" $space "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/files/generateIds" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -694,7 +694,7 @@ export def "files-trash drivefilesemptyTrash" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -705,7 +705,7 @@ export def "files-trash drivefilesemptyTrash" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "driveId" $driveId "scalar") (serialize-qp "enforceSingleParent" $enforceSingleParent "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "driveId" $driveId "scalar") (serialize-qp "enforceSingleParent" $enforceSingleParent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/files/trash" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -727,7 +727,7 @@ export def "files drivefilesdelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -739,7 +739,7 @@ export def "files drivefilesdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "enforceSingleParent" $enforceSingleParent "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "enforceSingleParent" $enforceSingleParent "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -761,7 +761,7 @@ export def "files drivefilesget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -775,7 +775,7 @@ export def "files drivefilesget" [
 ]: nothing -> record<appProperties: record, capabilities: record<canAcceptOwnership: bool, canAddChildren: bool, canAddFolderFromAnotherDrive: bool, canAddMyDriveParent: bool, canChangeCopyRequiresWriterPermission: bool, canChangeSecurityUpdateEnabled: bool, canChangeViewersCanCopyContent: bool, canComment: bool, canCopy: bool, canDelete: bool, canDeleteChildren: bool, canDownload: bool, canEdit: bool, canListChildren: bool, canModifyContent: bool, canModifyContentRestriction: bool, canModifyLabels: bool, canMoveChildrenOutOfDrive: bool, canMoveChildrenOutOfTeamDrive: bool, canMoveChildrenWithinDrive: bool, canMoveChildrenWithinTeamDrive: bool, canMoveItemIntoTeamDrive: bool, canMoveItemOutOfDrive: bool, canMoveItemOutOfTeamDrive: bool, canMoveItemWithinDrive: bool, canMoveItemWithinTeamDrive: bool, canMoveTeamDriveItem: bool, canReadDrive: bool, canReadLabels: bool, canReadRevisions: bool, canReadTeamDrive: bool, canRemoveChildren: bool, canRemoveMyDriveParent: bool, canRename: bool, canShare: bool, canTrash: bool, canTrashChildren: bool, canUntrash: bool>, contentHints: record<indexableText: string, thumbnail: record<image: string, mimeType: string>>, contentRestrictions: table<readOnly: bool, reason: string, restrictingUser: record, restrictionTime: string, type: string>, copyRequiresWriterPermission: bool, createdTime: string, description: string, driveId: string, explicitlyTrashed: bool, exportLinks: record, fileExtension: string, folderColorRgb: string, fullFileExtension: string, hasAugmentedPermissions: bool, hasThumbnail: bool, headRevisionId: string, iconLink: string, id: string, imageMediaMetadata: record<aperture: float, cameraMake: string, cameraModel: string, colorSpace: string, exposureBias: float, exposureMode: string, exposureTime: float, flashUsed: bool, focalLength: float, height: int, isoSpeed: int, lens: string, location: record<altitude: float, latitude: float, longitude: float>, maxApertureValue: float, meteringMode: string, rotation: int, sensor: string, subjectDistance: int, time: string, whiteBalance: string, width: int>, isAppAuthorized: bool, kind: string, labelInfo: record<labels: list<record>>, lastModifyingUser: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, linkShareMetadata: record<securityUpdateEligible: bool, securityUpdateEnabled: bool>, md5Checksum: string, mimeType: string, modifiedByMe: bool, modifiedByMeTime: string, modifiedTime: string, name: string, originalFilename: string, ownedByMe: bool, owners: table<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, parents: list<string>, permissionIds: list<string>, permissions: table<allowFileDiscovery: bool, deleted: bool, displayName: string, domain: string, emailAddress: string, expirationTime: string, id: string, kind: string, pendingOwner: bool, permissionDetails: list, photoLink: string, role: string, teamDrivePermissionDetails: list, type: string, view: string>, properties: record, quotaBytesUsed: string, resourceKey: string, sha1Checksum: string, sha256Checksum: string, shared: bool, sharedWithMeTime: string, sharingUser: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, shortcutDetails: record<targetId: string, targetMimeType: string, targetResourceKey: string>, size: string, spaces: list<string>, starred: bool, teamDriveId: string, thumbnailLink: string, thumbnailVersion: string, trashed: bool, trashedTime: string, trashingUser: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, version: string, videoMediaMetadata: record<durationMillis: string, height: int, width: int>, viewedByMe: bool, viewedByMeTime: string, viewersCanCopyContent: bool, webContentLink: string, webViewLink: string, writersCanShare: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "acknowledgeAbuse" $acknowledgeAbuse "scalar") (serialize-qp "includeLabels" $includeLabels "scalar") (serialize-qp "includePermissionsForView" $includePermissionsForView "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "acknowledgeAbuse" $acknowledgeAbuse "scalar") (serialize-qp "includeLabels" $includeLabels "scalar") (serialize-qp "includePermissionsForView" $includePermissionsForView "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -797,7 +797,7 @@ export def "files drivefilesupdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -818,7 +818,7 @@ export def "files drivefilesupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "addParents" $addParents "scalar") (serialize-qp "enforceSingleParent" $enforceSingleParent "scalar") (serialize-qp "includeLabels" $includeLabels "scalar") (serialize-qp "includePermissionsForView" $includePermissionsForView "scalar") (serialize-qp "keepRevisionForever" $keepRevisionForever "scalar") (serialize-qp "ocrLanguage" $ocrLanguage "scalar") (serialize-qp "removeParents" $removeParents "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar") (serialize-qp "useContentAsIndexableText" $useContentAsIndexableText "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "addParents" $addParents "scalar") (serialize-qp "enforceSingleParent" $enforceSingleParent "scalar") (serialize-qp "includeLabels" $includeLabels "scalar") (serialize-qp "includePermissionsForView" $includePermissionsForView "scalar") (serialize-qp "keepRevisionForever" $keepRevisionForever "scalar") (serialize-qp "ocrLanguage" $ocrLanguage "scalar") (serialize-qp "removeParents" $removeParents "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar") (serialize-qp "useContentAsIndexableText" $useContentAsIndexableText "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -841,7 +841,7 @@ export def "files-comments drivecommentslist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -854,7 +854,7 @@ export def "files-comments drivecommentslist" [
 ]: nothing -> record<comments: table<anchor: string, author: record, content: string, createdTime: string, deleted: bool, htmlContent: string, id: string, kind: string, modifiedTime: string, quotedFileContent: record, replies: list, resolved: bool>, kind: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "includeDeleted" $includeDeleted "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "startModifiedTime" $startModifiedTime "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "includeDeleted" $includeDeleted "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "startModifiedTime" $startModifiedTime "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/comments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -879,7 +879,7 @@ export def "files-comments drivecommentscreate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -901,7 +901,7 @@ export def "files-comments drivecommentscreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/comments" $qp)
   let body = {anchor: $anchor, author: $author, content: $content, createdTime: $createdTime, deleted: $deleted, htmlContent: $htmlContent, id: $id, kind: $kind, modifiedTime: $modifiedTime, quotedFileContent: $quotedFileContent, replies: $replies, resolved: $resolved} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -926,7 +926,7 @@ export def "files-comments drivecommentsdelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -935,7 +935,7 @@ export def "files-comments drivecommentsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/comments/($commentId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -958,7 +958,7 @@ export def "files-comments drivecommentsget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -968,7 +968,7 @@ export def "files-comments drivecommentsget" [
 ]: nothing -> record<anchor: string, author: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, content: string, createdTime: string, deleted: bool, htmlContent: string, id: string, kind: string, modifiedTime: string, quotedFileContent: record<mimeType: string, value: string>, replies: table<action: string, author: record, content: string, createdTime: string, deleted: bool, htmlContent: string, id: string, kind: string, modifiedTime: string>, resolved: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "includeDeleted" $includeDeleted "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "includeDeleted" $includeDeleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/comments/($commentId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -994,7 +994,7 @@ export def "files-comments drivecommentsupdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1016,7 +1016,7 @@ export def "files-comments drivecommentsupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/comments/($commentId)" $qp)
   let body = {anchor: $anchor, author: $author, content: $content, createdTime: $createdTime, deleted: $deleted, htmlContent: $htmlContent, id: $id, kind: $kind, modifiedTime: $modifiedTime, quotedFileContent: $quotedFileContent, replies: $replies, resolved: $resolved} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1041,7 +1041,7 @@ export def "files-comments-replies drivereplieslist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1053,7 +1053,7 @@ export def "files-comments-replies drivereplieslist" [
 ]: nothing -> record<kind: string, nextPageToken: string, replies: table<action: string, author: record, content: string, createdTime: string, deleted: bool, htmlContent: string, id: string, kind: string, modifiedTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "includeDeleted" $includeDeleted "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "includeDeleted" $includeDeleted "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/comments/($commentId)/replies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1077,7 +1077,7 @@ export def "files-comments-replies driverepliescreate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1096,7 +1096,7 @@ export def "files-comments-replies driverepliescreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/comments/($commentId)/replies" $qp)
   let body = {action: $action, author: $author, content: $content, createdTime: $createdTime, deleted: $deleted, htmlContent: $htmlContent, id: $id, kind: $kind, modifiedTime: $modifiedTime} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1122,7 +1122,7 @@ export def "files-comments-replies driverepliesdelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1131,7 +1131,7 @@ export def "files-comments-replies driverepliesdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/comments/($commentId)/replies/($replyId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1155,7 +1155,7 @@ export def "files-comments-replies driverepliesget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1165,7 +1165,7 @@ export def "files-comments-replies driverepliesget" [
 ]: nothing -> record<action: string, author: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, content: string, createdTime: string, deleted: bool, htmlContent: string, id: string, kind: string, modifiedTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "includeDeleted" $includeDeleted "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "includeDeleted" $includeDeleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/comments/($commentId)/replies/($replyId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1190,7 +1190,7 @@ export def "files-comments-replies driverepliesupdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1209,7 +1209,7 @@ export def "files-comments-replies driverepliesupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/comments/($commentId)/replies/($replyId)" $qp)
   let body = {action: $action, author: $author, content: $content, createdTime: $createdTime, deleted: $deleted, htmlContent: $htmlContent, id: $id, kind: $kind, modifiedTime: $modifiedTime} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1246,7 +1246,7 @@ export def "files-copy drivefilescopy" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1325,7 +1325,7 @@ export def "files-copy drivefilescopy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "enforceSingleParent" $enforceSingleParent "scalar") (serialize-qp "ignoreDefaultVisibility" $ignoreDefaultVisibility "scalar") (serialize-qp "includeLabels" $includeLabels "scalar") (serialize-qp "includePermissionsForView" $includePermissionsForView "scalar") (serialize-qp "keepRevisionForever" $keepRevisionForever "scalar") (serialize-qp "ocrLanguage" $ocrLanguage "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "enforceSingleParent" $enforceSingleParent "scalar") (serialize-qp "ignoreDefaultVisibility" $ignoreDefaultVisibility "scalar") (serialize-qp "includeLabels" $includeLabels "scalar") (serialize-qp "includePermissionsForView" $includePermissionsForView "scalar") (serialize-qp "keepRevisionForever" $keepRevisionForever "scalar") (serialize-qp "ocrLanguage" $ocrLanguage "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/copy" $qp)
   let body = {appProperties: $appProperties, capabilities: $capabilities, contentHints: $contentHints, contentRestrictions: $contentRestrictions, copyRequiresWriterPermission: $copyRequiresWriterPermission, createdTime: $createdTime, description: $description, driveId: $driveId, explicitlyTrashed: $explicitlyTrashed, fileExtension: $fileExtension, folderColorRgb: $folderColorRgb, fullFileExtension: $fullFileExtension, hasAugmentedPermissions: $hasAugmentedPermissions, hasThumbnail: $hasThumbnail, headRevisionId: $headRevisionId, iconLink: $iconLink, id: $id, imageMediaMetadata: $imageMediaMetadata, isAppAuthorized: $isAppAuthorized, kind: $kind, labelInfo: $labelInfo, lastModifyingUser: $lastModifyingUser, linkShareMetadata: $linkShareMetadata, md5Checksum: $md5Checksum, mimeType: $mimeType, modifiedByMe: $modifiedByMe, modifiedByMeTime: $modifiedByMeTime, modifiedTime: $modifiedTime, name: $name, originalFilename: $originalFilename, ownedByMe: $ownedByMe, owners: $owners, parents: $parents, permissionIds: $permissionIds, permissions: $permissions, properties: $properties, quotaBytesUsed: $quotaBytesUsed, resourceKey: $resourceKey, sha1Checksum: $sha1Checksum, sha256Checksum: $sha256Checksum, shared: $shared, sharedWithMeTime: $sharedWithMeTime, sharingUser: $sharingUser, shortcutDetails: $shortcutDetails, size: $size, spaces: $spaces, starred: $starred, teamDriveId: $teamDriveId, thumbnailLink: $thumbnailLink, thumbnailVersion: $thumbnailVersion, trashed: $trashed, trashedTime: $trashedTime, trashingUser: $trashingUser, version: $version, videoMediaMetadata: $videoMediaMetadata, viewedByMe: $viewedByMe, viewedByMeTime: $viewedByMeTime, viewersCanCopyContent: $viewersCanCopyContent, webContentLink: $webContentLink, webViewLink: $webViewLink, writersCanShare: $writersCanShare} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1349,7 +1349,7 @@ export def "files-export drivefilesexport" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1359,7 +1359,7 @@ export def "files-export drivefilesexport" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "mimeType" $mimeType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "mimeType" $mimeType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/export" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1381,7 +1381,7 @@ export def "files-list-labels drivefileslistLabels" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1392,7 +1392,7 @@ export def "files-list-labels drivefileslistLabels" [
 ]: nothing -> record<kind: string, labels: table<fields: record, id: string, kind: string, revisionId: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/listLabels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1415,7 +1415,7 @@ export def "files-modify-labels drivefilesmodifyLabels" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1427,7 +1427,7 @@ export def "files-modify-labels drivefilesmodifyLabels" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/modifyLabels" $qp)
   let body = {kind: $kind, labelModifications: $labelModifications} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1451,7 +1451,7 @@ export def "files-permissions drivepermissionslist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1466,7 +1466,7 @@ export def "files-permissions drivepermissionslist" [
 ]: nothing -> record<kind: string, nextPageToken: string, permissions: table<allowFileDiscovery: bool, deleted: bool, displayName: string, domain: string, emailAddress: string, expirationTime: string, id: string, kind: string, pendingOwner: bool, permissionDetails: list, photoLink: string, role: string, teamDrivePermissionDetails: list, type: string, view: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "includePermissionsForView" $includePermissionsForView "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "includePermissionsForView" $includePermissionsForView "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/permissions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1490,7 +1490,7 @@ export def "files-permissions drivepermissionscreate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1521,7 +1521,7 @@ export def "files-permissions drivepermissionscreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "emailMessage" $emailMessage "scalar") (serialize-qp "enforceSingleParent" $enforceSingleParent "scalar") (serialize-qp "moveToNewOwnersRoot" $moveToNewOwnersRoot "scalar") (serialize-qp "sendNotificationEmail" $sendNotificationEmail "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar") (serialize-qp "transferOwnership" $transferOwnership "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "emailMessage" $emailMessage "scalar") (serialize-qp "enforceSingleParent" $enforceSingleParent "scalar") (serialize-qp "moveToNewOwnersRoot" $moveToNewOwnersRoot "scalar") (serialize-qp "sendNotificationEmail" $sendNotificationEmail "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar") (serialize-qp "transferOwnership" $transferOwnership "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/permissions" $qp)
   let body = {allowFileDiscovery: $allowFileDiscovery, deleted: $deleted, displayName: $displayName, domain: $domain, emailAddress: $emailAddress, expirationTime: $expirationTime, id: $id, kind: $kind, pendingOwner: $pendingOwner, photoLink: $photoLink, role: $role, type: $type, view: $view} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1546,7 +1546,7 @@ export def "files-permissions drivepermissionsdelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1558,7 +1558,7 @@ export def "files-permissions drivepermissionsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/permissions/($permissionId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1581,7 +1581,7 @@ export def "files-permissions drivepermissionsget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1593,7 +1593,7 @@ export def "files-permissions drivepermissionsget" [
 ]: nothing -> record<allowFileDiscovery: bool, deleted: bool, displayName: string, domain: string, emailAddress: string, expirationTime: string, id: string, kind: string, pendingOwner: bool, permissionDetails: table<inherited: bool, inheritedFrom: string, permissionType: string, role: string>, photoLink: string, role: string, teamDrivePermissionDetails: table<inherited: bool, inheritedFrom: string, role: string, teamDrivePermissionType: string>, type: string, view: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/permissions/($permissionId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1618,7 +1618,7 @@ export def "files-permissions drivepermissionsupdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1646,7 +1646,7 @@ export def "files-permissions drivepermissionsupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "removeExpiration" $removeExpiration "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar") (serialize-qp "transferOwnership" $transferOwnership "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "removeExpiration" $removeExpiration "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar") (serialize-qp "transferOwnership" $transferOwnership "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/permissions/($permissionId)" $qp)
   let body = {allowFileDiscovery: $allowFileDiscovery, deleted: $deleted, displayName: $displayName, domain: $domain, emailAddress: $emailAddress, expirationTime: $expirationTime, id: $id, kind: $kind, pendingOwner: $pendingOwner, photoLink: $photoLink, role: $role, type: $type, view: $view} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1670,7 +1670,7 @@ export def "files-revisions driverevisionslist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1681,7 +1681,7 @@ export def "files-revisions driverevisionslist" [
 ]: nothing -> record<kind: string, nextPageToken: string, revisions: table<exportLinks: record, id: string, keepForever: bool, kind: string, lastModifyingUser: record, md5Checksum: string, mimeType: string, modifiedTime: string, originalFilename: string, publishAuto: bool, published: bool, publishedLink: string, publishedOutsideDomain: bool, size: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/revisions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1704,7 +1704,7 @@ export def "files-revisions driverevisionsdelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1713,7 +1713,7 @@ export def "files-revisions driverevisionsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/revisions/($revisionId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1736,7 +1736,7 @@ export def "files-revisions driverevisionsget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1746,7 +1746,7 @@ export def "files-revisions driverevisionsget" [
 ]: nothing -> record<exportLinks: record, id: string, keepForever: bool, kind: string, lastModifyingUser: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, md5Checksum: string, mimeType: string, modifiedTime: string, originalFilename: string, publishAuto: bool, published: bool, publishedLink: string, publishedOutsideDomain: bool, size: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "acknowledgeAbuse" $acknowledgeAbuse "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "acknowledgeAbuse" $acknowledgeAbuse "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/revisions/($revisionId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1770,7 +1770,7 @@ export def "files-revisions driverevisionsupdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1794,7 +1794,7 @@ export def "files-revisions driverevisionsupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/revisions/($revisionId)" $qp)
   let body = {exportLinks: $exportLinks, id: $id, keepForever: $keepForever, kind: $kind, lastModifyingUser: $lastModifyingUser, md5Checksum: $md5Checksum, mimeType: $mimeType, modifiedTime: $modifiedTime, originalFilename: $originalFilename, publishAuto: $publishAuto, published: $published, publishedLink: $publishedLink, publishedOutsideDomain: $publishedOutsideDomain, size: $size} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1818,7 +1818,7 @@ export def "files-watch drivefileswatch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1843,7 +1843,7 @@ export def "files-watch drivefileswatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "acknowledgeAbuse" $acknowledgeAbuse "scalar") (serialize-qp "includeLabels" $includeLabels "scalar") (serialize-qp "includePermissionsForView" $includePermissionsForView "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "acknowledgeAbuse" $acknowledgeAbuse "scalar") (serialize-qp "includeLabels" $includeLabels "scalar") (serialize-qp "includePermissionsForView" $includePermissionsForView "scalar") (serialize-qp "supportsAllDrives" $supportsAllDrives "scalar") (serialize-qp "supportsTeamDrives" $supportsTeamDrives "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($fileId)/watch" $qp)
   let body = {address: $address, expiration: $expiration, id: $id, kind: $kind, params: $params, payload: $payload, resourceId: $resourceId, resourceUri: $resourceUri, token: $body_token, type: $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1866,7 +1866,7 @@ export def "teamdrives driveteamdriveslist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1879,7 +1879,7 @@ export def "teamdrives driveteamdriveslist" [
 ]: nothing -> record<kind: string, nextPageToken: string, teamDrives: table<backgroundImageFile: record, backgroundImageLink: string, capabilities: record, colorRgb: string, createdTime: string, id: string, kind: string, name: string, orgUnitId: string, restrictions: record, themeId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teamdrives" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1903,7 +1903,7 @@ export def "teamdrives driveteamdrivescreate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1925,7 +1925,7 @@ export def "teamdrives driveteamdrivescreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "requestId" $requestId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "requestId" $requestId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teamdrives" $qp)
   let body = {backgroundImageFile: $backgroundImageFile, backgroundImageLink: $backgroundImageLink, capabilities: $capabilities, colorRgb: $colorRgb, createdTime: $createdTime, id: $id, kind: $kind, name: $name, orgUnitId: $orgUnitId, restrictions: $restrictions, themeId: $themeId} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1949,7 +1949,7 @@ export def "teamdrives driveteamdrivesdelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1958,7 +1958,7 @@ export def "teamdrives driveteamdrivesdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/teamdrives/($teamDriveId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1980,7 +1980,7 @@ export def "teamdrives driveteamdrivesget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1990,7 +1990,7 @@ export def "teamdrives driveteamdrivesget" [
 ]: nothing -> record<backgroundImageFile: record<id: string, width: float, xCoordinate: float, yCoordinate: float>, backgroundImageLink: string, capabilities: record<canAddChildren: bool, canChangeCopyRequiresWriterPermissionRestriction: bool, canChangeDomainUsersOnlyRestriction: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction: bool, canChangeTeamDriveBackground: bool, canChangeTeamMembersOnlyRestriction: bool, canComment: bool, canCopy: bool, canDeleteChildren: bool, canDeleteTeamDrive: bool, canDownload: bool, canEdit: bool, canListChildren: bool, canManageMembers: bool, canReadRevisions: bool, canRemoveChildren: bool, canRename: bool, canRenameTeamDrive: bool, canResetTeamDriveRestrictions: bool, canShare: bool, canTrashChildren: bool>, colorRgb: string, createdTime: string, id: string, kind: string, name: string, orgUnitId: string, restrictions: record<adminManagedRestrictions: bool, copyRequiresWriterPermission: bool, domainUsersOnly: bool, sharingFoldersRequiresOrganizerPermission: bool, teamMembersOnly: bool>, themeId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/teamdrives/($teamDriveId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2015,7 +2015,7 @@ export def "teamdrives driveteamdrivesupdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2037,7 +2037,7 @@ export def "teamdrives driveteamdrivesupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "useDomainAdminAccess" $useDomainAdminAccess "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/teamdrives/($teamDriveId)" $qp)
   let body = {backgroundImageFile: $backgroundImageFile, backgroundImageLink: $backgroundImageLink, capabilities: $capabilities, colorRgb: $colorRgb, createdTime: $createdTime, id: $id, kind: $kind, name: $name, orgUnitId: $orgUnitId, restrictions: $restrictions, themeId: $themeId} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }

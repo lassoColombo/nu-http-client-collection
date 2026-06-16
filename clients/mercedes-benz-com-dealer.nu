@@ -142,13 +142,13 @@ export def "dealers dealersGET" [
   --brand: string@brand-completer # Filter by brand, valid values are:   * MB: Mercedes-Benz   * SMT: Smart
   --productGroup: string@productGroup-completer # Filter by a product group
   --activity: string@activity-completer # Filter by activity, valid actitvity values are:   * PARTS: Spare Parts Sales   * SALES: Sales of new vehicles   * SERVICE: Maintaining and repair   * USED-VEHICLES-TRADE: Sales of used vehicles
-  --qp-fields: string # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned. e.g. fields=dealers(dealerId,address(street,city))
+  --fields: string # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned. e.g. fields=dealers(dealerId,address(street,city))
   --page: int # The index of the page to be returned. If this parameter is omitted, the first page will be returned.  (format: int32)
   --pageSize: int # The index of the page to be returned. If this parameter is omitted, the first page will be returned.  (format: int32)
 ]: nothing -> record<_links: record<next: record<href: string>, previous: record<href: string>, self: record<href: string>>, dealers: table<_links: record, address: record, brandCodes: list, communication: record, dealerId: string, distance: record, functions: list, geoCoordinates: record, legalName: string, nameAddition: string, openingHours: list, region: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dealerIds" $dealerIds "csv") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radiusValue" $radiusValue "scalar") (serialize-qp "radiusUnit" $radiusUnit "scalar") (serialize-qp "countryIsoCode" $countryIsoCode "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "brand" $brand "scalar") (serialize-qp "productGroup" $productGroup "scalar") (serialize-qp "activity" $activity "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dealerIds" $dealerIds "csv") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radiusValue" $radiusValue "scalar") (serialize-qp "radiusUnit" $radiusUnit "scalar") (serialize-qp "countryIsoCode" $countryIsoCode "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "brand" $brand "scalar") (serialize-qp "productGroup" $productGroup "scalar") (serialize-qp "activity" $activity "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dealers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -169,11 +169,11 @@ export def "dealers dealerGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned. e.g. fields=dealerId,address(street,city)
+  --fields: string # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned. e.g. fields=dealerId,address(street,city)
 ]: nothing -> record<_links: record<self: record<href: string>>, address: record<addressAddition: string, city: string, countryIsoCode: string, district: string, street: string, zipCode: string>, brandCodes: table<brand: record>, communication: record<general: record<email: string, facebook: string, fax: string, googlePlus: string, mobile: string, phone: string, twitter: string, website: string>>, dealerId: string, distance: record<unit: string, value: float>, functions: table<activity: record, brand: record, productGroup: record>, geoCoordinates: record<latitude: float, longitude: float>, legalName: string, nameAddition: string, openingHours: table<function: record, weekdays: record>, region: record<region: string, subRegion: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/dealers/($dealerId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

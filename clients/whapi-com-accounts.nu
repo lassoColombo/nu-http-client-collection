@@ -101,7 +101,7 @@ export def "account get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # Specify an absolute field list to return (Comma-Separated List)
+  --fields: list # Specify an absolute field list to return (Comma-Separated List)
   --include: list # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list # Specify fields from the default to exclude (Comma-Separated List)
   --languageAsPerTerritory: string # Defines response field name language, true (default) returns in language defined by territory, false returns in English (default: true)
@@ -112,7 +112,7 @@ export def "account get" [
 ]: nothing -> record<accountId: string, accountNum: string, additionalSystemStatuses: string, birthPlace: string, city: string, contactable: bool, country: string, countryCode: string, county: string, currencyCode: string, customerId: string, email: string, fax: string, firstName: string, flags: table<flagName: string, flagReason: string, flagValue: string>, ipAddress: string, language: string, lastLogin: string, lastName: string, mobile: string, nif: string, office: string, partnerContactable: bool, postcode: string, secondLastName: string, status: string, street1: string, street2: string, street3: string, terms_and_conditions: string, timeZone: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "languageAsPerTerritory" $languageAsPerTerritory "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "languageAsPerTerritory" $languageAsPerTerritory "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account" $qp)
   let extra_headers = {"apiKey": $apiKey, "apiSecret": $apiSecret, "apiTicket": $apiTicket, "territory": $territory} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -134,7 +134,7 @@ export def "account-balance get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # Specify an absolute field list to return (Comma-Separated List)
+  --fields: list # Specify an absolute field list to return (Comma-Separated List)
   --include: list # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list # Specify fields from the default to exclude (Comma-Separated List)
   --languageAsPerTerritory: string # Defines response field name language, true (default) returns in language defined by territory, false returns in English (default: true)
@@ -145,7 +145,7 @@ export def "account-balance get" [
 ]: nothing -> record<availableFunds: float, balance: float, currencyCode: string, withdrawableFunds: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "languageAsPerTerritory" $languageAsPerTerritory "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "languageAsPerTerritory" $languageAsPerTerritory "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/balance" $qp)
   let extra_headers = {"apiKey": $apiKey, "apiSecret": $apiSecret, "apiTicket": $apiTicket, "territory": $territory} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -207,7 +207,7 @@ export def "account-payments get" [
   --dateTo: string # The TO datetime for payments to be returned. (yyyy-MM-ddTHH:mm:ss)
   --qp-sort: string # The order the response will be retuned by. i.e. date,desc (default: date,asc)
   --transactionType: string # Allows the user to select with they want to see withdrawls or deposits. If it is omitted from the query both types will be returned
-  --qp-fields: list # Specify an absolute field list to return (Comma-Separated List)
+  --fields: list # Specify an absolute field list to return (Comma-Separated List)
   --include: list # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list # Specify fields from the default to exclude (Comma-Separated List)
   --languageAsPerTerritory: string # Defines response field name language, true (default) returns in language defined by territory, false returns in English (default: true)
@@ -218,7 +218,7 @@ export def "account-payments get" [
 ]: nothing -> record<payments: table<action: string, amount: float, channel: string, commision: float, id: string, ipAddress: string, methodId: string, paymentDateTime: string, status: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "dateFrom" $dateFrom "scalar") (serialize-qp "dateTo" $dateTo "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "transactionType" $transactionType "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "languageAsPerTerritory" $languageAsPerTerritory "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "dateFrom" $dateFrom "scalar") (serialize-qp "dateTo" $dateTo "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "transactionType" $transactionType "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "languageAsPerTerritory" $languageAsPerTerritory "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/payments" $qp)
   let extra_headers = {"apiKey": $apiKey, "apiSecret": $apiSecret, "apiTicket": $apiTicket, "territory": $territory} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -240,7 +240,7 @@ export def "account-plus-card get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # Specify an absolute field list to return (Comma-Separated List)
+  --fields: list # Specify an absolute field list to return (Comma-Separated List)
   --include: list # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list # Specify fields from the default to exclude (Comma-Separated List)
   --apiKey: string # A unique identifier of your application that is generated by the API portal.
@@ -249,7 +249,7 @@ export def "account-plus-card get" [
 ]: nothing -> record<card: record<blocked: bool, cardNumber: string>, onlineAccount: record<name: string, onlineAccountNumber: string>, phone: record<phoneNumber: string>, pin: record<attemptsRemaining: float, blocked: bool>, retailAccount: record<selfExcluded: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/account/plusCard" $qp)
   let extra_headers = {"apiKey": $apiKey, "apiSecret": $apiSecret, "apiTicket": $apiTicket} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

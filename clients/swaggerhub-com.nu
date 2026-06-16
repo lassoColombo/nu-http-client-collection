@@ -110,7 +110,7 @@ export def "apis searchApis" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Free text query to match
+  --query: string # Free text query to match
   --state: string@state-completer # Matches against published state of the spec: * UNPUBLISHED - spec is a draft, a work in progress * PUBLISHED - spec is a stable version ready for consuming from client applications * ANY - either PUBLISHED or UNPUBLISHED  (default: ALL)
   --page: int # Page to return (format: int32, default: 0)
   --limit: int # Number of results per page (1 .. 100) (format: int32, default: 10)
@@ -119,7 +119,7 @@ export def "apis searchApis" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apis" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1096,7 +1096,7 @@ export def "domains searchDomains" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Free text query to match
+  --query: string # Free text query to match
   --state: string@state-completer # Matches against published state of the spec: * UNPUBLISHED - spec is a draft, a work in progress * PUBLISHED - spec is a stable version ready for consuming from client applications * ANY - either PUBLISHED or UNPUBLISHED  (default: ALL)
   --page: int # Page to return (format: int32, default: 0)
   --limit: int # Number of results per page (1 .. 100) (format: int32, default: 10)
@@ -1105,7 +1105,7 @@ export def "domains searchDomains" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/domains" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2072,7 +2072,7 @@ export def "specs searchApisAndDomains" [
   --visibility: string@visibility-completer # The visibility of a definition in SwaggerHub: * PUBLIC - can be viewed by anyone * PRIVATE - can only be viewed by you or your organization and those that you are collaborating with or have shared it with * ANY - either PUBLIC or PRIVATE  (default: ANY)
   --state: string@state-completer # Matches against published state of the spec: * UNPUBLISHED - spec is a draft, a work in progress * PUBLISHED - spec is a stable version ready for consuming from client applications * ANY - either PUBLISHED or UNPUBLISHED  (default: ALL)
   --owner: string # API or domain owner. Can be username or organization name. Case-sensitive.
-  --qp-query: string # Free text query to match
+  --query: string # Free text query to match
   --page: int # Page to return (format: int32, default: 0)
   --limit: int # Number of results per page (1 .. 100) (format: int32, default: 10)
   --qp-sort: string@sort-completer # Sort criteria of result set: * NAME * UPDATED * CREATED * OWNER * BEST_MATCH - by relevance * TITLE - by `info.title`  (default: NAME)
@@ -2080,7 +2080,7 @@ export def "specs searchApisAndDomains" [
 ]: nothing -> record<apis: table<description: string, name: string, properties: list, tags: list>, description: string, name: string, offset: int, totalCount: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "specType" $specType "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "specType" $specType "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/specs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

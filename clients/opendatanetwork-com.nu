@@ -315,7 +315,7 @@ export def "search-question Get-questions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # String to search against. (e.g. seattle)
+  --query: string # String to search against. (e.g. seattle)
   --limit: float # Maximum number of results to return. Must be an integer from 0 to 50000. (default: 10)
   --offset: float # Number of results to skip. Used for pagination.
   --app-token: string # The [Socrata App Token](https://dev.socrata.com/docs/app-tokens.html) to be used with your request. The `app_token` parameter is required if an app token is not passed via the `X-App-Token` HTTP header. Clients must [register for their own app tokens](https://dev.socrata.com/docs/app-tokens.html). (e.g. cQovpGcdUT1CSzgYk0KPYdAI0)
@@ -323,7 +323,7 @@ export def "search-question Get-questions" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "app_token" $app_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "app_token" $app_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/v1/question" $qp)
   let extra_headers = {"X-App-Token": $X_App_Token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -346,7 +346,7 @@ export def "suggest Get-suggestions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Query to match. (e.g. seattl)
+  --query: string # Query to match. (e.g. seattl)
   --limit: float # Maximum number of results to return. Must be an integer from 0 to 100. (default: 5)
   --variable-id: string # This parameter is only available when suggesting entities with `type=entity`. If it is provided, suggestions will be filtered to include only entities that have data for the given variable.  If the variable provided is invalid, no entities will be returned.  Note that this filtering will increase response time significantly, so it should only be used when necessary. (e.g. demographics.population.count)
   --app-token: string # The [Socrata App Token](https://dev.socrata.com/docs/app-tokens.html) to be used with your request. The `app_token` parameter is required if an app token is not passed via the `X-App-Token` HTTP header. Clients must [register for their own app tokens](https://dev.socrata.com/docs/app-tokens.html). (e.g. cQovpGcdUT1CSzgYk0KPYdAI0)
@@ -354,7 +354,7 @@ export def "suggest Get-suggestions" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "variable_id" $variable_id "scalar") (serialize-qp "app_token" $app_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "variable_id" $variable_id "scalar") (serialize-qp "app_token" $app_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/suggest/v1/($type)" $qp)
   let extra_headers = {"X-App-Token": $X_App_Token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

@@ -621,7 +621,7 @@ export def "search v1search" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # search terms, typically as typed into a search field. Up to 120 characters.
+  --query: string # search terms, typically as typed into a search field. Up to 120 characters.
   --query-fields: string # list of insights, metadata, and bundle fields to search with the query. Use insights.spoken_words for searching audio, metadata.* for all metadata fields, bundle.* for all bundle fields, * for audio and all fields. Default is insights.spoken_words and metadata.*. List is space or comma separated single string or an array of strings. If single string, up to 1024 characters.
   --filter: string # filter expression, typically programmatically generated based on input controls and data segregation rules etc. Up to 500 characters.
   --language: string@language-completer # Language to search in, specified with an RFC5646 code. Default is "en"
@@ -631,7 +631,7 @@ export def "search v1search" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "query_fields" $query_fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "iterator" $iterator "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "query_fields" $query_fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "iterator" $iterator "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/search" $qp)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

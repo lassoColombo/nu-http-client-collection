@@ -111,7 +111,7 @@ export def "v1beta1-catalogs cloudprivatecatalogproducercatalogslist" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --xgafv: string@xgafv-completer # V1 error format.
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -122,7 +122,7 @@ export def "v1beta1-catalogs cloudprivatecatalogproducercatalogslist" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "parent" $parent "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "parent" $parent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta1/catalogs" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -148,7 +148,7 @@ export def "v1beta1-catalogs cloudprivatecatalogproducercatalogscreate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --xgafv: string@xgafv-completer # V1 error format.
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -163,7 +163,7 @@ export def "v1beta1-catalogs cloudprivatecatalogproducercatalogscreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta1/catalogs" $qp)
   let body = {createTime: $createTime, description: $description, displayName: $displayName, name: $name, parent: $parent, updateTime: $updateTime} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -191,7 +191,7 @@ export def "v1beta1-operations cloudprivatecatalogproduceroperationslist" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --xgafv: string@xgafv-completer # V1 error format.
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -203,7 +203,7 @@ export def "v1beta1-operations cloudprivatecatalogproduceroperationslist" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta1/operations" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -230,7 +230,7 @@ export def "v1beta1 cloudprivatecatalogproducercatalogsproductsversionsdelete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --xgafv: string@xgafv-completer # V1 error format.
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -239,7 +239,7 @@ export def "v1beta1 cloudprivatecatalogproducercatalogsproductsversionsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($name)" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -266,7 +266,7 @@ export def "v1beta1 cloudprivatecatalogproducercatalogsproductsversionsget" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --xgafv: string@xgafv-completer # V1 error format.
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -274,7 +274,7 @@ export def "v1beta1 cloudprivatecatalogproducercatalogsproductsversionsget" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($name)" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -301,7 +301,7 @@ export def "v1beta1 cloudprivatecatalogproducercatalogsproductsversionspatch" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --xgafv: string@xgafv-completer # V1 error format.
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -317,7 +317,7 @@ export def "v1beta1 cloudprivatecatalogproducercatalogsproductsversionspatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($name)" $qp)
   let body = {asset: $asset, createTime: $createTime, description: $description, name: $body_name, originalAsset: $originalAsset, updateTime: $updateTime} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -346,7 +346,7 @@ export def "v1beta1 cloudprivatecatalogproduceroperationscancel" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --xgafv: string@xgafv-completer # V1 error format.
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -356,7 +356,7 @@ export def "v1beta1 cloudprivatecatalogproduceroperationscancel" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($name):cancel" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
@@ -384,7 +384,7 @@ export def "v1beta1 cloudprivatecatalogproducercatalogsproductscopy" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --xgafv: string@xgafv-completer # V1 error format.
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -394,7 +394,7 @@ export def "v1beta1 cloudprivatecatalogproducercatalogsproductscopy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($name):copy" $qp)
   let body = {destinationProductName: $destinationProductName} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -423,7 +423,7 @@ export def "v1beta1 cloudprivatecatalogproducercatalogsundelete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --xgafv: string@xgafv-completer # V1 error format.
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -433,7 +433,7 @@ export def "v1beta1 cloudprivatecatalogproducercatalogsundelete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($name):undelete" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
@@ -461,7 +461,7 @@ export def "v1beta1-associations cloudprivatecatalogproducercatalogsassociations
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --xgafv: string@xgafv-completer # V1 error format.
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -471,7 +471,7 @@ export def "v1beta1-associations cloudprivatecatalogproducercatalogsassociations
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/associations" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -499,7 +499,7 @@ export def "v1beta1-associations cloudprivatecatalogproducercatalogsassociations
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --xgafv: string@xgafv-completer # V1 error format.
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -509,7 +509,7 @@ export def "v1beta1-associations cloudprivatecatalogproducercatalogsassociations
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/associations" $qp)
   let body = {association: $association} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -538,7 +538,7 @@ export def "v1beta1-products cloudprivatecatalogproducercatalogsproductslist" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --xgafv: string@xgafv-completer # V1 error format.
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -549,7 +549,7 @@ export def "v1beta1-products cloudprivatecatalogproducercatalogsproductslist" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/products" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -576,7 +576,7 @@ export def "v1beta1-products cloudprivatecatalogproducercatalogsproductscreate" 
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --xgafv: string@xgafv-completer # V1 error format.
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -591,7 +591,7 @@ export def "v1beta1-products cloudprivatecatalogproducercatalogsproductscreate" 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/products" $qp)
   let body = {assetType: $assetType, createTime: $createTime, displayMetadata: $displayMetadata, iconUri: $iconUri, name: $name, updateTime: $updateTime} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -620,7 +620,7 @@ export def "v1beta1-versions cloudprivatecatalogproducercatalogsproductsversions
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --xgafv: string@xgafv-completer # V1 error format.
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -630,7 +630,7 @@ export def "v1beta1-versions cloudprivatecatalogproducercatalogsproductsversions
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/versions" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -657,7 +657,7 @@ export def "v1beta1-versions cloudprivatecatalogproducercatalogsproductsversions
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --xgafv: string@xgafv-completer # V1 error format.
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -672,7 +672,7 @@ export def "v1beta1-versions cloudprivatecatalogproducercatalogsproductsversions
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/versions" $qp)
   let body = {asset: $asset, createTime: $createTime, description: $description, name: $name, originalAsset: $originalAsset, updateTime: $updateTime} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -701,7 +701,7 @@ export def "v1beta1-icons-upload cloudprivatecatalogproducercatalogsproductsicon
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --xgafv: string@xgafv-completer # V1 error format.
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -711,7 +711,7 @@ export def "v1beta1-icons-upload cloudprivatecatalogproducercatalogsproductsicon
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($product)/icons:upload" $qp)
   let body = {icon: $icon} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -740,7 +740,7 @@ export def "v1beta1 cloudprivatecatalogproducercatalogsgetIamPolicy" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --xgafv: string@xgafv-completer # V1 error format.
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -749,7 +749,7 @@ export def "v1beta1 cloudprivatecatalogproducercatalogsgetIamPolicy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "options.requestedPolicyVersion" $optionsrequestedPolicyVersion "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "options.requestedPolicyVersion" $optionsrequestedPolicyVersion "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($resource):getIamPolicy" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -777,7 +777,7 @@ export def "v1beta1 cloudprivatecatalogproducercatalogssetIamPolicy" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --xgafv: string@xgafv-completer # V1 error format.
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -788,7 +788,7 @@ export def "v1beta1 cloudprivatecatalogproducercatalogssetIamPolicy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($resource):setIamPolicy" $qp)
   let body = {policy: $policy, updateMask: $updateMask} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -817,7 +817,7 @@ export def "v1beta1 cloudprivatecatalogproducercatalogstestIamPermissions" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --xgafv: string@xgafv-completer # V1 error format.
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -827,7 +827,7 @@ export def "v1beta1 cloudprivatecatalogproducercatalogstestIamPermissions" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($resource):testIamPermissions" $qp)
   let body = {permissions: $permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }

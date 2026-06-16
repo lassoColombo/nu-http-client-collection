@@ -657,18 +657,18 @@ export def "audio-search searchTracks" [
   --moods: list # Show tracks with each of the specified moods; to get the list of moods, use `GET /v2/audio/moods` (e.g. [Confident, Playful])
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 20, e.g. 1)
-  --qp-query: string # One or more search terms separated by spaces (e.g. drum)
+  --query: string # One or more search terms separated by spaces (e.g. drum)
   --qp-sort: string@sort-completer-1 # Sort by (e.g. score)
   --sort-order: string@sort-order-completer # Sort order (default: desc)
   --vocal-description: string # Show tracks with the specified vocal description (male, female) (e.g. female)
   --view: string@view-completer # Amount of detail to render in the response (default: minimal, e.g. full)
-  --qp-fields: string # Fields to display in the response; see the documentation for the fields parameter in the overview section
+  --fields: string # Fields to display in the response; see the documentation for the fields parameter in the overview section
   --library: string@library-completer # Which library to search (default: premier)
   --language: string # Which language to search in
 ]: nothing -> record<data: table<added_date: string, affiliate_url: string, album: record, artists: list, assets: record, bpm: int, contributor: record, deleted_time: string, description: string, duration: float, genres: list, id: string, instruments: list, is_adult: bool, is_instrumental: bool, isrc: string, keywords: list, language: string, lyrics: string, media_type: string, model_releases: list, moods: list, published_time: string, recording_version: string, releases: list, similar_artists: list, submitted_time: string, title: string, updated_time: string, url: string, vocal_description: string>, message: string, page: int, per_page: int, search_id: string, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "artists" $artists "multi") (serialize-qp "bpm" $bpm "scalar") (serialize-qp "bpm_from" $bpm_from "scalar") (serialize-qp "bpm_to" $bpm_to "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "duration_from" $duration_from "scalar") (serialize-qp "duration_to" $duration_to "scalar") (serialize-qp "genre" $genre "multi") (serialize-qp "is_instrumental" $is_instrumental "scalar") (serialize-qp "instruments" $instruments "multi") (serialize-qp "moods" $moods "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "vocal_description" $vocal_description "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "library" $library "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "artists" $artists "multi") (serialize-qp "bpm" $bpm "scalar") (serialize-qp "bpm_from" $bpm_from "scalar") (serialize-qp "bpm_to" $bpm_to "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "duration_from" $duration_from "scalar") (serialize-qp "duration_to" $duration_to "scalar") (serialize-qp "genre" $genre "multi") (serialize-qp "is_instrumental" $is_instrumental "scalar") (serialize-qp "instruments" $instruments "multi") (serialize-qp "moods" $moods "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "vocal_description" $vocal_description "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "library" $library "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/audio/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -726,7 +726,7 @@ export def "bulk-search-images bulkSearchImages" [
   --color: string # Specify either a hexadecimal color in the format '4F21EA' or 'grayscale'; the API returns images that use similar colors (e.g. 4F21EA)
   --contributor: list # Show images with the specified contributor names or IDs, allows multiple (e.g. [123456])
   --contributor-country: string # Show images from contributors in one or more specified countries, or start with NOT to exclude a country from the search (e.g. US)
-  --qp-fields: string # Fields to display in the response; see the documentation for the fields parameter in the overview section
+  --fields: string # Fields to display in the response; see the documentation for the fields parameter in the overview section
   --height: int # (Deprecated; use height_from and height_to instead) Show images with the specified height (DEPRECATED)
   --height-from: int # Show images with the specified height or larger, in pixels (e.g. 1080)
   --height-to: int # Show images with the specified height or smaller, in pixels (e.g. 1080)
@@ -756,7 +756,7 @@ export def "bulk-search-images bulkSearchImages" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "added_date" $added_date "scalar") (serialize-qp "added_date_start" $added_date_start "scalar") (serialize-qp "aspect_ratio_min" $aspect_ratio_min "scalar") (serialize-qp "aspect_ratio_max" $aspect_ratio_max "scalar") (serialize-qp "aspect_ratio" $aspect_ratio "scalar") (serialize-qp "added_date_end" $added_date_end "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "contributor" $contributor "multi") (serialize-qp "contributor_country" $contributor_country "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "height_from" $height_from "scalar") (serialize-qp "height_to" $height_to "scalar") (serialize-qp "image_type" $image_type "multi") (serialize-qp "keyword_safe_search" $keyword_safe_search "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "license" $license "multi") (serialize-qp "model" $model "multi") (serialize-qp "orientation" $orientation "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "people_model_released" $people_model_released "scalar") (serialize-qp "people_age" $people_age "scalar") (serialize-qp "people_ethnicity" $people_ethnicity "multi") (serialize-qp "people_gender" $people_gender "scalar") (serialize-qp "people_number" $people_number "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "safe" $safe "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "spellcheck_query" $spellcheck_query "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "width_from" $width_from "scalar") (serialize-qp "width_to" $width_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "added_date" $added_date "scalar") (serialize-qp "added_date_start" $added_date_start "scalar") (serialize-qp "aspect_ratio_min" $aspect_ratio_min "scalar") (serialize-qp "aspect_ratio_max" $aspect_ratio_max "scalar") (serialize-qp "aspect_ratio" $aspect_ratio "scalar") (serialize-qp "added_date_end" $added_date_end "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "contributor" $contributor "multi") (serialize-qp "contributor_country" $contributor_country "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "height_from" $height_from "scalar") (serialize-qp "height_to" $height_to "scalar") (serialize-qp "image_type" $image_type "multi") (serialize-qp "keyword_safe_search" $keyword_safe_search "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "license" $license "multi") (serialize-qp "model" $model "multi") (serialize-qp "orientation" $orientation "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "people_model_released" $people_model_released "scalar") (serialize-qp "people_age" $people_age "scalar") (serialize-qp "people_ethnicity" $people_ethnicity "multi") (serialize-qp "people_gender" $people_gender "scalar") (serialize-qp "people_number" $people_number "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "safe" $safe "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "spellcheck_query" $spellcheck_query "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "width_from" $width_from "scalar") (serialize-qp "width_to" $width_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/bulk_search/images" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -945,13 +945,13 @@ export def "catalog-search searchCatalog" [
   --qp-sort: string@sort-completer # Sort by (default: newest)
   --page: int # Page number (default: 1, e.g. 1)
   --per-page: int # Number of results per page (default: 20, e.g. 50)
-  --qp-query: string # One or more search terms separated by spaces (e.g. dogs on the beach)
+  --query: string # One or more search terms separated by spaces (e.g. dogs on the beach)
   --collection-id: list # Filter by collection id (e.g. [123456, 456789, 13579])
   --asset-type: list # Filter by asset type (e.g. [image, editorial-image])
 ]: nothing -> record<data: table<asset: record, collection_ids: list, created_time: string, id: string>, page: float, per_page: float, total_count: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "collection_id" $collection_id "multi") (serialize-qp "asset_type" $asset_type "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "collection_id" $collection_id "multi") (serialize-qp "asset_type" $asset_type "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/catalog/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1388,7 +1388,7 @@ export def "editorial-images-search searchEditorialImages" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # One or more search terms separated by spaces (e.g. The Academy Awards)
+  --query: string # One or more search terms separated by spaces (e.g. The Academy Awards)
   --qp-sort: string@sort-completer-4 # Sort by (default: relevant)
   --category: string # Show editorial content with each of the specified editorial categories; specify category names in a comma-separated list (e.g. Alone,Performing)
   --country: string # Show only editorial content that is available for distribution in a certain country (format: country-code-3, e.g. USA)
@@ -1400,7 +1400,7 @@ export def "editorial-images-search searchEditorialImages" [
 ]: nothing -> record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, date_taken: string, description: string, id: string, keywords: list, special_instructions: string, title: string>, message: string, next: string, page: int, per_page: int, prev: string, search_id: string, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "supplier_code" $supplier_code "multi") (serialize-qp "date_start" $date_start "scalar") (serialize-qp "date_end" $date_end "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "supplier_code" $supplier_code "multi") (serialize-qp "date_start" $date_start "scalar") (serialize-qp "date_end" $date_end "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/editorial/images/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1592,7 +1592,7 @@ export def "editorial-search searchEditorial" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # One or more search terms separated by spaces
+  --query: string # One or more search terms separated by spaces
   --qp-sort: string@sort-completer-4 # Sort by (default: relevant)
   --category: string # Show editorial content within a certain editorial category; specify by category name
   --country: string # Show only editorial content that is available for distribution in a certain country (format: country-code-3, e.g. USA)
@@ -1604,7 +1604,7 @@ export def "editorial-search searchEditorial" [
 ]: nothing -> record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, date_taken: string, description: string, id: string, keywords: list, special_instructions: string, title: string>, message: string, next: string, page: int, per_page: int, prev: string, search_id: string, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "supplier_code" $supplier_code "multi") (serialize-qp "date_start" $date_start "scalar") (serialize-qp "date_end" $date_end "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "supplier_code" $supplier_code "multi") (serialize-qp "date_start" $date_start "scalar") (serialize-qp "date_end" $date_end "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/editorial/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1742,7 +1742,7 @@ export def "editorial-videos-search searchEditorialVideos" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # One or more search terms separated by spaces (e.g. The Academy Awards)
+  --query: string # One or more search terms separated by spaces (e.g. The Academy Awards)
   --qp-sort: string@sort-completer-4 # Sort by (default: relevant)
   --category: string # Show editorial content with each of the specified editorial categories; specify category names in a comma-separated list (e.g. Alone,Performing)
   --country: string # Show only editorial video content that is available for distribution in a certain country (format: country-code-3, e.g. USA)
@@ -1756,7 +1756,7 @@ export def "editorial-videos-search searchEditorialVideos" [
 ]: nothing -> record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, date_taken: string, description: string, id: string, keywords: list, title: string>, message: string, next: string, page: int, per_page: int, prev: string, search_id: string, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "supplier_code" $supplier_code "multi") (serialize-qp "date_start" $date_start "scalar") (serialize-qp "date_end" $date_end "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "fps" $fps "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "supplier_code" $supplier_code "multi") (serialize-qp "date_start" $date_start "scalar") (serialize-qp "date_end" $date_end "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "fps" $fps "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/editorial/videos/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2334,7 +2334,7 @@ export def "images-search searchImages" [
   --color: string # Specify either a hexadecimal color in the format '4F21EA' or 'grayscale'; the API returns images that use similar colors (e.g. 4F21EA)
   --contributor: list # Show images with the specified contributor names or IDs, allows multiple (e.g. [123456])
   --contributor-country: string # Show images from contributors in one or more specified countries, or start with NOT to exclude a country from the search (e.g. US)
-  --qp-fields: string # Fields to display in the response; see the documentation for the fields parameter in the overview section
+  --fields: string # Fields to display in the response; see the documentation for the fields parameter in the overview section
   --height: int # (Deprecated; use height_from and height_to instead) Show images with the specified height (DEPRECATED)
   --height-from: int # Show images with the specified height or larger, in pixels (e.g. 1080)
   --height-to: int # Show images with the specified height or smaller, in pixels (e.g. 1080)
@@ -2351,7 +2351,7 @@ export def "images-search searchImages" [
   --people-ethnicity: list # Show images with people of the specified ethnicities, or start with NOT to show images without those ethnicities (e.g. hispanic)
   --people-gender: string@people-gender-completer # Show images with people of the specified gender (e.g. both)
   --people-number: int # Show images with the specified number of people (e.g. 2)
-  --qp-query: string # One or more search terms separated by spaces; you can use NOT to filter out images that match a term (e.g. dogs on the beach)
+  --query: string # One or more search terms separated by spaces; you can use NOT to filter out images that match a term (e.g. dogs on the beach)
   --region: string # Raise or lower search result rankings based on the result's relevance to a specified region; you can provide a country code or an IP address from which the API infers a country (e.g. US)
   --safe: oneof<nothing, bool> # Enable or disable safe search (default: true)
   --qp-sort: string@sort-completer-2 # Sort by (default: popular)
@@ -2363,7 +2363,7 @@ export def "images-search searchImages" [
 ]: nothing -> record<data: table<added_date: string, affiliate_url: string, aspect: float, assets: record, categories: list, contributor: record, description: string, has_model_release: bool, has_property_release: bool, id: string, image_type: string, insights: record, is_adult: bool, is_editorial: bool, is_illustration: bool, keywords: list, media_type: string, model_releases: list, models: list, releases: list, url: string>, insights: record<label_performance: list<record>>, message: string, page: int, per_page: int, search_id: string, spellcheck_info: record, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "added_date" $added_date "scalar") (serialize-qp "added_date_start" $added_date_start "scalar") (serialize-qp "aspect_ratio_min" $aspect_ratio_min "scalar") (serialize-qp "aspect_ratio_max" $aspect_ratio_max "scalar") (serialize-qp "aspect_ratio" $aspect_ratio "scalar") (serialize-qp "ai_search" $ai_search "scalar") (serialize-qp "ai_labels_limit" $ai_labels_limit "scalar") (serialize-qp "ai_industry" $ai_industry "scalar") (serialize-qp "ai_objective" $ai_objective "scalar") (serialize-qp "added_date_end" $added_date_end "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "contributor" $contributor "multi") (serialize-qp "contributor_country" $contributor_country "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "height_from" $height_from "scalar") (serialize-qp "height_to" $height_to "scalar") (serialize-qp "image_type" $image_type "multi") (serialize-qp "keyword_safe_search" $keyword_safe_search "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "license" $license "multi") (serialize-qp "model" $model "multi") (serialize-qp "orientation" $orientation "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "people_model_released" $people_model_released "scalar") (serialize-qp "people_age" $people_age "scalar") (serialize-qp "people_ethnicity" $people_ethnicity "multi") (serialize-qp "people_gender" $people_gender "scalar") (serialize-qp "people_number" $people_number "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "safe" $safe "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "spellcheck_query" $spellcheck_query "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "width_from" $width_from "scalar") (serialize-qp "width_to" $width_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "added_date" $added_date "scalar") (serialize-qp "added_date_start" $added_date_start "scalar") (serialize-qp "aspect_ratio_min" $aspect_ratio_min "scalar") (serialize-qp "aspect_ratio_max" $aspect_ratio_max "scalar") (serialize-qp "aspect_ratio" $aspect_ratio "scalar") (serialize-qp "ai_search" $ai_search "scalar") (serialize-qp "ai_labels_limit" $ai_labels_limit "scalar") (serialize-qp "ai_industry" $ai_industry "scalar") (serialize-qp "ai_objective" $ai_objective "scalar") (serialize-qp "added_date_end" $added_date_end "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "contributor" $contributor "multi") (serialize-qp "contributor_country" $contributor_country "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "height_from" $height_from "scalar") (serialize-qp "height_to" $height_to "scalar") (serialize-qp "image_type" $image_type "multi") (serialize-qp "keyword_safe_search" $keyword_safe_search "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "license" $license "multi") (serialize-qp "model" $model "multi") (serialize-qp "orientation" $orientation "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "people_model_released" $people_model_released "scalar") (serialize-qp "people_age" $people_age "scalar") (serialize-qp "people_ethnicity" $people_ethnicity "multi") (serialize-qp "people_gender" $people_gender "scalar") (serialize-qp "people_number" $people_number "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "safe" $safe "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "spellcheck_query" $spellcheck_query "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "width_from" $width_from "scalar") (serialize-qp "width_to" $width_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/images/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2383,12 +2383,12 @@ export def "images-search-suggestions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search term for which you want keyword suggestions (e.g. cats)
+  --query: string # Search term for which you want keyword suggestions (e.g. cats)
   --limit: int # Limit the number of suggestions (default: 10)
 ]: nothing -> record<data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/images/search/suggestions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2700,7 +2700,7 @@ export def "sfx-search searchSFX" [
   --duration-to: int # Show sound effects with the specified duration or shorter in seconds (e.g. 180)
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 20, e.g. 1)
-  --qp-query: string # One or more search terms separated by spaces (e.g. drum)
+  --query: string # One or more search terms separated by spaces (e.g. drum)
   --safe: oneof<nothing, bool> # Enable or disable safe search (default: true)
   --qp-sort: string@sort-completer-5 # Sort by (default: popular, e.g. popular)
   --view: string@view-completer # Amount of detail to render in the response (default: minimal, e.g. full)
@@ -2708,7 +2708,7 @@ export def "sfx-search searchSFX" [
 ]: nothing -> record<data: table<added_date: string, affiliate_url: string, artist: string, assets: record, contributor: record, description: string, duration: float, id: string, keywords: list, media_type: string, releases: list, title: string, updated_time: string, url: string>, message: string, page: int, per_page: int, search_id: string, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "added_date" $added_date "scalar") (serialize-qp "added_date_start" $added_date_start "scalar") (serialize-qp "added_date_end" $added_date_end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "duration_from" $duration_from "scalar") (serialize-qp "duration_to" $duration_to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "safe" $safe "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "added_date" $added_date "scalar") (serialize-qp "added_date_start" $added_date_start "scalar") (serialize-qp "added_date_end" $added_date_end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "duration_from" $duration_from "scalar") (serialize-qp "duration_to" $duration_to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "safe" $safe "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/sfx/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3331,7 +3331,7 @@ export def "videos-search searchVideos" [
   --people-gender: string@people-gender-completer # Show videos with people with the specified gender (e.g. female)
   --people-number: int # Show videos with the specified number of people (e.g. 2)
   --people-model-released: oneof<nothing, bool> # Show only videos of people with a signed model release (e.g. true)
-  --qp-query: string # One or more search terms separated by spaces; you can use NOT to filter out videos that match a term (e.g. dogs running on the beach)
+  --query: string # One or more search terms separated by spaces; you can use NOT to filter out videos that match a term (e.g. dogs running on the beach)
   --resolution: string@resolution-completer # Show videos with the specified resolution (e.g. 4k)
   --safe: oneof<nothing, bool> # Enable or disable safe search (default: true)
   --qp-sort: string@sort-completer-2 # Sort by one of these categories (default: popular)
@@ -3339,7 +3339,7 @@ export def "videos-search searchVideos" [
 ]: nothing -> record<data: table<added_date: string, affiliate_url: string, aspect: float, aspect_ratio: string, assets: record, categories: list, contributor: record, description: string, duration: float, has_model_release: bool, has_property_release: bool, id: string, is_adult: bool, is_editorial: bool, keywords: list, media_type: string, models: list, url: string>, message: string, page: int, per_page: int, search_id: string, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "added_date" $added_date "scalar") (serialize-qp "added_date_start" $added_date_start "scalar") (serialize-qp "added_date_end" $added_date_end "scalar") (serialize-qp "aspect_ratio" $aspect_ratio "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "contributor" $contributor "multi") (serialize-qp "contributor_country" $contributor_country "multi") (serialize-qp "duration" $duration "scalar") (serialize-qp "duration_from" $duration_from "scalar") (serialize-qp "duration_to" $duration_to "scalar") (serialize-qp "fps" $fps "scalar") (serialize-qp "fps_from" $fps_from "scalar") (serialize-qp "fps_to" $fps_to "scalar") (serialize-qp "keyword_safe_search" $keyword_safe_search "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "license" $license "multi") (serialize-qp "model" $model "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "people_age" $people_age "scalar") (serialize-qp "people_ethnicity" $people_ethnicity "multi") (serialize-qp "people_gender" $people_gender "scalar") (serialize-qp "people_number" $people_number "scalar") (serialize-qp "people_model_released" $people_model_released "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "safe" $safe "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "added_date" $added_date "scalar") (serialize-qp "added_date_start" $added_date_start "scalar") (serialize-qp "added_date_end" $added_date_end "scalar") (serialize-qp "aspect_ratio" $aspect_ratio "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "contributor" $contributor "multi") (serialize-qp "contributor_country" $contributor_country "multi") (serialize-qp "duration" $duration "scalar") (serialize-qp "duration_from" $duration_from "scalar") (serialize-qp "duration_to" $duration_to "scalar") (serialize-qp "fps" $fps "scalar") (serialize-qp "fps_from" $fps_from "scalar") (serialize-qp "fps_to" $fps_to "scalar") (serialize-qp "keyword_safe_search" $keyword_safe_search "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "license" $license "multi") (serialize-qp "model" $model "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "people_age" $people_age "scalar") (serialize-qp "people_ethnicity" $people_ethnicity "multi") (serialize-qp "people_gender" $people_gender "scalar") (serialize-qp "people_number" $people_number "scalar") (serialize-qp "people_model_released" $people_model_released "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "safe" $safe "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/videos/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3359,12 +3359,12 @@ export def "videos-search-suggestions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search term for which you want keyword suggestions (e.g. cats)
+  --query: string # Search term for which you want keyword suggestions (e.g. cats)
   --limit: int # Limit the number of the suggestions (default: 10)
 ]: nothing -> record<data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/videos/search/suggestions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

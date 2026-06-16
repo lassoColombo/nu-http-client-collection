@@ -2282,12 +2282,12 @@ export def "products-searchjson get" [
   --login: string # API OAuth login. (format: string)
   --authtoken: string # API OAuth token. (format: string)
   --locale: string # Locale code of the translation (format: string)
-  --qp-query: string # Text to query for the Product (format: string)
-  --qp-fields: string@fields-completer # Comma separated values of the fields to query for the Product (format: string)
+  --query: string # Text to query for the Product (format: string)
+  --fields: string@fields-completer # Comma separated values of the fields to query for the Product (format: string)
 ]: nothing -> table<product: record<barcode: string, categories: list, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list, weight: float, width: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products/search.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

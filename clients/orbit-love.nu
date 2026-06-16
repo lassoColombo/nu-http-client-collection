@@ -308,7 +308,7 @@ export def "members list" [
   --start-date: string # Filter activities after this date. Format: YYYY-MM-DD.
   --end-date: string # Filter activities before this date. Format: YYYY-MM-DD.
   --relative: string # Relative timeframes. Format: this_<integer>_<period>, with period in [days, weeks, months, years]. For example, this_30_days.
-  --qp-query: string
+  --query: string
   --page: string
   --direction: string@direction-completer
   --items: string@items-completer
@@ -319,7 +319,7 @@ export def "members list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "affiliation" $affiliation "scalar") (serialize-qp "member_tags" $member_tags "scalar") (serialize-qp "orbit" $orbit "scalar") (serialize-qp "activity_type" $activity_type "scalar") (serialize-qp "identity" $identity "scalar") (serialize-qp "company[]" $company "scalar") (serialize-qp "title[]" $title "scalar") (serialize-qp "regions[]" $regions "scalar") (serialize-qp "countries[]" $countries "scalar") (serialize-qp "cities[]" $cities "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "relative" $relative "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "activities_count_min" $activities_count_min "scalar") (serialize-qp "activities_count_max" $activities_count_max "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "affiliation" $affiliation "scalar") (serialize-qp "member_tags" $member_tags "scalar") (serialize-qp "orbit" $orbit "scalar") (serialize-qp "activity_type" $activity_type "scalar") (serialize-qp "identity" $identity "scalar") (serialize-qp "company[]" $company "scalar") (serialize-qp "title[]" $title "scalar") (serialize-qp "regions[]" $regions "scalar") (serialize-qp "countries[]" $countries "scalar") (serialize-qp "cities[]" $cities "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "relative" $relative "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "activities_count_min" $activities_count_min "scalar") (serialize-qp "activities_count_max" $activities_count_max "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/($workspace_slug)/members" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -764,7 +764,7 @@ export def "organizations list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string
+  --query: string
   --page: string
   --direction: string@direction-completer
   --items: string@items-completer
@@ -772,7 +772,7 @@ export def "organizations list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/($workspace_slug)/organizations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

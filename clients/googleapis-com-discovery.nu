@@ -104,7 +104,7 @@ export def "apis discoveryapislist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -115,7 +115,7 @@ export def "apis discoveryapislist" [
 ]: nothing -> record<discoveryVersion: string, items: table<description: string, discoveryLink: string, discoveryRestUrl: string, documentationLink: string, icons: record, id: string, kind: string, labels: list, name: string, preferred: bool, title: string, version: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "preferred" $preferred "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "preferred" $preferred "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apis" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -138,7 +138,7 @@ export def "apis-rest discoveryapisgetRest" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -147,7 +147,7 @@ export def "apis-rest discoveryapisgetRest" [
 ]: nothing -> record<auth: record<oauth2: record<scopes: record>>, basePath: string, baseUrl: string, batchPath: string, canonicalName: string, description: string, discoveryVersion: string, documentationLink: string, etag: string, exponentialBackoffDefault: bool, features: list<string>, icons: record<x16: string, x32: string>, id: string, kind: string, labels: list<string>, methods: record, name: string, ownerDomain: string, ownerName: string, packagePath: string, parameters: record, protocol: string, resources: record, revision: string, rootUrl: string, schemas: record, servicePath: string, title: string, version: string, version_module: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/apis/($api)/($version)/rest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

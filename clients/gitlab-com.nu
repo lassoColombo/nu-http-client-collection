@@ -725,13 +725,13 @@ export def "groups-members list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A query string to search for members
+  --query: string # A query string to search for members
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
 ]: nothing -> record<access_level: string, avatar_url: string, expires_at: string, id: string, name: string, state: string, username: string, web_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v3/groups/($id)/members" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3911,13 +3911,13 @@ export def "projects-members list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A query string to search for members
+  --query: string # A query string to search for members
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
 ]: nothing -> record<access_level: string, avatar_url: string, expires_at: string, id: string, name: string, state: string, username: string, web_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v3/projects/($id)/members" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

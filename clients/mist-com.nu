@@ -19441,12 +19441,12 @@ export def "sites-sle-metric-impact-summary get" [
   --start: int # default: 0
   --end: int # default: 0
   --duration: string # For historical stats and/or logs where time range is needed, you can specify the time range in a few different ways:   * ?start=1430000000&end=1430864000	specify the start / end   * ?end=1430864000&duration=1d	specify end time and duration   * ?duration=1d	specify duration, end will be now() in seconds (default: 1d, e.g. 10m)
-  --qp-fields: string@fields-completer
+  --fields: string@fields-completer
   --classifier: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "classifier" $classifier "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "classifier" $classifier "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v1/sites/($site_id)/sle/($scope)/($scope_id)/metric/($metric)/impact-summary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

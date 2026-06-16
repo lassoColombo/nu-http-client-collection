@@ -101,13 +101,13 @@ export def "aialphasearchmessages messages" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-query: string # Search query
+  query: string # Search query
 ]: any -> record<ok: bool, results: table<message: string, permalink: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ai.alpha.search.messages")
-  let body = {query: $body_query} | compact
+  let body = {query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

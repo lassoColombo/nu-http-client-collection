@@ -1782,12 +1782,12 @@ export def "playlists get-playlist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
-  --qp-fields: string # e.g. items(added_by.id,track(name,href,album(name,href)))
+  --fields: string # e.g. items(added_by.id,track(name,href,album(name,href)))
   --additional-types: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "market" $market "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "additional_types" $additional_types "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "market" $market "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "additional_types" $additional_types "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/playlists/($playlist_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1989,14 +1989,14 @@ export def "playlists-tracks get-playlists-tracks" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
-  --qp-fields: string # e.g. items(added_by.id,track(name,href,album(name,href)))
+  --fields: string # e.g. items(added_by.id,track(name,href,album(name,href)))
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
   --additional-types: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "market" $market "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "additional_types" $additional_types "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "market" $market "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "additional_types" $additional_types "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/playlists/($playlist_id)/tracks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

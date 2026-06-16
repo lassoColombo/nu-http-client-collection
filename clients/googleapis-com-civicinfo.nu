@@ -108,18 +108,18 @@ export def "civicinfo-divisions civicinfodivisionssearch" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-query: string # The search query. Queries can cover any parts of a OCD ID or a human readable division name. All words given in the query are treated as required patterns. In addition to that, most query operators of the Apache Lucene library are supported. See http://lucene.apache.org/core/2_9_4/queryparsersyntax.html
+  --query: string # The search query. Queries can cover any parts of a OCD ID or a human readable division name. All words given in the query are treated as required patterns. In addition to that, most query operators of the Apache Lucene library are supported. See http://lucene.apache.org/core/2_9_4/queryparsersyntax.html
 ]: nothing -> record<kind: string, results: table<aliases: list, name: string, ocdId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/civicinfo/v2/divisions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -143,7 +143,7 @@ export def "civicinfo-elections civicinfoelectionselectionQuery" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -153,7 +153,7 @@ export def "civicinfo-elections civicinfoelectionselectionQuery" [
 ]: nothing -> record<elections: table<electionDay: string, id: string, name: string, ocdDivisionId: string, shapeLookupBehavior: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/civicinfo/v2/elections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -177,7 +177,7 @@ export def "civicinfo-representatives civicinforepresentativesrepresentativeInfo
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -191,7 +191,7 @@ export def "civicinfo-representatives civicinforepresentativesrepresentativeInfo
 ]: nothing -> record<divisions: record, kind: string, normalizedInput: record<city: string, line1: string, line2: string, line3: string, locationName: string, state: string, zip: string>, offices: table<divisionId: string, levels: list, name: string, officialIndices: list, roles: list, sources: list>, officials: table<address: list, channels: list, emails: list, geocodingSummaries: list, name: string, party: string, phones: list, photoUrl: string, urls: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "address" $address "scalar") (serialize-qp "includeOffices" $includeOffices "scalar") (serialize-qp "levels" $levels "multi") (serialize-qp "roles" $roles "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "address" $address "scalar") (serialize-qp "includeOffices" $includeOffices "scalar") (serialize-qp "levels" $levels "multi") (serialize-qp "roles" $roles "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/civicinfo/v2/representatives" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -216,7 +216,7 @@ export def "civicinfo-representatives civicinforepresentativesrepresentativeInfo
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -229,7 +229,7 @@ export def "civicinfo-representatives civicinforepresentativesrepresentativeInfo
 ]: nothing -> record<divisions: record, offices: table<divisionId: string, levels: list, name: string, officialIndices: list, roles: list, sources: list>, officials: table<address: list, channels: list, emails: list, geocodingSummaries: list, name: string, party: string, phones: list, photoUrl: string, urls: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "levels" $levels "multi") (serialize-qp "recursive" $recursive "scalar") (serialize-qp "roles" $roles "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "levels" $levels "multi") (serialize-qp "recursive" $recursive "scalar") (serialize-qp "roles" $roles "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/civicinfo/v2/representatives/($ocdId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -253,7 +253,7 @@ export def "civicinfo-voterinfo civicinfoelectionsvoterInfoQuery" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -267,7 +267,7 @@ export def "civicinfo-voterinfo civicinfoelectionsvoterInfoQuery" [
 ]: nothing -> record<contests: table<ballotPlacement: string, ballotTitle: string, candidates: list, district: record, electorateSpecifications: string, level: list, numberElected: string, numberVotingFor: string, office: string, primaryParties: list, referendumBallotResponses: list, referendumBrief: string, referendumConStatement: string, referendumEffectOfAbstain: string, referendumPassageThreshold: string, referendumProStatement: string, referendumSubtitle: string, referendumText: string, referendumTitle: string, referendumUrl: string, roles: list, sources: list, special: string, type: string>, dropOffLocations: table<address: record, endDate: string, latitude: float, longitude: float, name: string, notes: string, pollingHours: string, sources: list, startDate: string, voterServices: string>, earlyVoteSites: table<address: record, endDate: string, latitude: float, longitude: float, name: string, notes: string, pollingHours: string, sources: list, startDate: string, voterServices: string>, election: record<electionDay: string, id: string, name: string, ocdDivisionId: string, shapeLookupBehavior: string>, kind: string, mailOnly: bool, normalizedInput: record<city: string, line1: string, line2: string, line3: string, locationName: string, state: string, zip: string>, otherElections: table<electionDay: string, id: string, name: string, ocdDivisionId: string, shapeLookupBehavior: string>, pollingLocations: table<address: record, endDate: string, latitude: float, longitude: float, name: string, notes: string, pollingHours: string, sources: list, startDate: string, voterServices: string>, precinctId: string, precincts: table<administrationRegionId: string, contestId: list, datasetId: string, earlyVoteSiteId: list, electoralDistrictId: list, id: string, mailOnly: bool, name: string, number: string, ocdId: list, pollingLocationId: list, spatialBoundaryId: list, splitName: string, ward: string>, state: table<electionAdministrationBody: record, local_jurisdiction: any, name: string, sources: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "address" $address "scalar") (serialize-qp "electionId" $electionId "scalar") (serialize-qp "officialOnly" $officialOnly "scalar") (serialize-qp "returnAllAvailableData" $returnAllAvailableData "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "address" $address "scalar") (serialize-qp "electionId" $electionId "scalar") (serialize-qp "officialOnly" $officialOnly "scalar") (serialize-qp "returnAllAvailableData" $returnAllAvailableData "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/civicinfo/v2/voterinfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

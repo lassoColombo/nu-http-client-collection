@@ -260,12 +260,12 @@ export def "attachments GetAttachmentCollection" [
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values.  Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
   --q: string # The partial search of the text fields.
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. It accepts a comma-separated list of objects to expand. See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
-  --qp-fields: string # Limit the returned fields to the list specified, separated by comma. Note that id is always returned.
+  --fields: string # Limit the returned fields to the list specified, separated by comma. Note that id is always returned.
   --qp-sort: list # The collection items sort field and order (prefix with "-" for descending sort).
 ]: nothing -> table<_embedded: list<any>, _links: list<any>, createdTime: record, description: string, fileId: string, id: record, name: string, relatedId: string, relatedType: string, updatedTime: record> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/attachments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1556,12 +1556,12 @@ export def "customers GetCustomerCollection" [
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values.  Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
   --q: string # The partial search of the text fields.
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. It accepts a comma-separated list of objects to expand. See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
-  --qp-fields: string # Limit the returned fields to the list specified, separated by comma. Note that id is always returned.
+  --fields: string # Limit the returned fields to the list specified, separated by comma. Note that id is always returned.
   --qp-sort: list # The collection items sort field and order (prefix with "-" for descending sort).
 ]: nothing -> table<_embedded: list<any>, _links: list<any>, averageValue: record<amount: float, amountUsd: float, currency: record>, createdTime: record, customFields: record, defaultPaymentInstrument: record, email: string, firstName: string, id: record, invoiceCount: int, lastName: string, lastPaymentTime: record, lifetimeRevenue: record<amount: float, amountUsd: float, currency: record>, paymentCount: int, paymentToken: string, primaryAddress: record<address: string, address2: string, city: string, country: string, emails: list, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list, postalCode: string, region: string>, revision: int, tags: list<record>, updatedTime: record, websiteId: record> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/customers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1652,11 +1652,11 @@ export def "customers GetCustomer" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. It accepts a comma-separated list of objects to expand. See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
-  --qp-fields: string # Limit the returned fields to the list specified, separated by comma. Note that id is always returned.
+  --fields: string # Limit the returned fields to the list specified, separated by comma. Note that id is always returned.
 ]: nothing -> record<_embedded: list<any>, _links: list<any>, averageValue: record<amount: float, amountUsd: float, currency: record>, createdTime: record, customFields: record, defaultPaymentInstrument: record, email: string, firstName: string, id: record, invoiceCount: int, lastName: string, lastPaymentTime: record, lifetimeRevenue: record<amount: float, amountUsd: float, currency: record>, paymentCount: int, paymentToken: string, primaryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, revision: int, tags: table<_links: list, createdTime: record, id: record, name: string, updatedTime: record>, updatedTime: record, websiteId: record> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/customers/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2125,12 +2125,12 @@ export def "files GetFileCollection" [
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values.  Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
   --q: string # The partial search of the text fields.
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. It accepts a comma-separated list of objects to expand. See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
-  --qp-fields: string # Limit the returned fields to the list specified, separated by comma. Note that id is always returned.
+  --fields: string # Limit the returned fields to the list specified, separated by comma. Note that id is always returned.
   --qp-sort: list # The collection items sort field and order (prefix with "-" for descending sort).
 ]: nothing -> table<_links: list<any>, createdTime: record, description: string, extension: string, height: int, id: record, isPublic: bool, mime: string, name: string, sha1: string, size: int, tags: list<string>, updatedTime: record, width: int> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/files" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5701,13 +5701,13 @@ export def "transactions-update PostTransactionUpdate" [
   --Organization-Id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --amount: float # The transaction amount. (format: double)
   --currency: any # The transaction currency.
-  --body-result: string@result-completer # Transaction result.
+  result: string@result-completer # Transaction result.
 ]: any -> record<3ds: record<authenticated: string, enrolled: string, flow: string, isDowngraded: bool, liability: string, version: string>, amount: float, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, billingDescriptor: string, childTransactions: list<string>, createdTime: record, currency: record, customFields: record, customerId: record, description: string, gatewayName: record, has3ds: bool, hasAmountAdjustment: bool, id: record, invoiceIds: list<string>, isRebill: bool, isRetry: bool, parentTransactionId: record, paymentInstrument: record, planIds: list<string>, processedTime: record, purchaseAmount: float, purchaseCurrency: record, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: record, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list<string>, type: string, updatedTime: record, websiteId: record, _embedded: list<any>, _links: list<any>, acquirerName: record, arn: string, bin: string, bumpOffer: record<language: record, order: record<amount: float, currency: string>, outcome: string, presentedOffers: record, selectedOffer: record<bumpAmount: record, bumpAmountInUsd: record, customFields: record, offerId: string, offerType: string>, version: record>, dcc: record<base: record<amount: float, currency: string>, outcome: string, quote: record<amount: float, currency: string>, usdMarkup: record>, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record<avsResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, cvvResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, response: record<code: string, message: string, originalCode: string, originalMessage: string, type: string>>, gatewayAccountId: record, gatewayTransactionId: record, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: record, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: record, retriedTransactionId: record, retriesResult: string, retryInstruction: record<afterAttemptPolicy: string, afterRetryEndPolicy: string, attempts: list<record>>, revision: int, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/transactions/($id)/update")
-  let body = {amount: $amount, currency: $currency, result: $body_result} | compact
+  let body = {amount: $amount, currency: $currency, result: $result} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"Organization-Id": $Organization_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

@@ -272,12 +272,12 @@ export def "meta-companies list-companies" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 1)
   --pageSize: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
-  --qp-query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
+  --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --orderBy: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
 ]: nothing -> record<results: table<created: string, createdByUserName: string, dataConnections: list, description: string, id: string, lastSync: any, name: string, platform: string, redirect: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "orderBy" $orderBy "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $orderBy "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/meta/companies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

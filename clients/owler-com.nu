@@ -107,13 +107,13 @@ export def "company-basicsearch basicCompanySearch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --q: string # Search term
-  --qp-fields: list # Fields to be searched - name, website, ticker, permid. If not specfied, will be searched against all fields
+  --fields: list # Fields to be searched - name, website, ticker, permid. If not specfied, will be searched against all fields
   --limit: string # Number of results to be displayed - 10 (by default, if not specified) to 30
   --format: string@format-completer # Format of the response content - json (by default if not specified), xml (default: json)
 ]: nothing -> record<company: table<company_id: int, hq_address: record, name: string, perm_id: string, profile_url: string, short_name: string, website: string>> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/company/basicsearch" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -237,13 +237,13 @@ export def "company-fuzzysearch fuzzyCompanySearch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --q: string # Search term
-  --qp-fields: list # Fields to be searched - name, website, ticker, permid, address, phone. Each field and its corresponding value has to be specified
+  --fields: list # Fields to be searched - name, website, ticker, permid, address, phone. Each field and its corresponding value has to be specified
   --limit: string # Number of results to be displayed - 10 (by default, if not specified) to 30
   --format: string@format-completer # Format of the response content - json (by default if not specified), xml (default: json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/company/fuzzysearch" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -290,13 +290,13 @@ export def "company-search searchCompany" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --q: string # Search term
-  --qp-fields: list # Fields to be searched - name, website, ticker. If not specified, will be searched against all fields
+  --fields: list # Fields to be searched - name, website, ticker. If not specified, will be searched against all fields
   --limit: string # Number of results to be displayed - 10 (by default, if not specified) to 30
   --format: string@format-completer # Format of the response content - json (by default if not specified), xml (default: json)
 ]: nothing -> record<feeds: table<category: string, company: record, enclosure_image: string, feed_date: string, id: string, owler_feed_url: string, publisher_logo: string, publisher_name: string, source_url: string, title: string>, pagination_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/company/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

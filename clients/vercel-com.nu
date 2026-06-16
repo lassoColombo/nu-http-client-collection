@@ -816,7 +816,7 @@ export def "integrations-search-repo get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string
+  --query: string
   --namespaceId: string
   --provider: string@provider-completer
   --installationId: string
@@ -824,7 +824,7 @@ export def "integrations-search-repo get" [
 ]: nothing -> record<gitAccount: record<namespaceId: any, provider: string>, repos: table<defaultBranch: string, id: any, name: string, namespace: string, ownerType: string, private: bool, slug: string, updatedAt: float, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "namespaceId" $namespaceId "scalar") (serialize-qp "provider" $provider "scalar") (serialize-qp "installationId" $installationId "scalar") (serialize-qp "teamId" $teamId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "namespaceId" $namespaceId "scalar") (serialize-qp "provider" $provider "scalar") (serialize-qp "installationId" $installationId "scalar") (serialize-qp "teamId" $teamId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/integrations/search-repo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

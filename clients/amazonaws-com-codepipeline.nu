@@ -1111,14 +1111,14 @@ export def "x-amz-target-code-pipeline-20150709put-approval-result PutApprovalRe
   pipelineName: any
   stageName: any
   actionName: any
-  --body-result: any
+  result: any
   --body-token: any
 ]: any -> record<approvedAt: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodePipeline_20150709.PutApprovalResult")
-  let body = {pipelineName: $pipelineName, stageName: $stageName, actionName: $actionName, result: $body_result, token: $body_token} | compact
+  let body = {pipelineName: $pipelineName, stageName: $stageName, actionName: $actionName, result: $result, token: $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

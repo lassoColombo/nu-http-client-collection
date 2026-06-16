@@ -126,7 +126,7 @@ export def "walletobjects-event-ticket-class walletobjectseventticketclasslist" 
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -139,7 +139,7 @@ export def "walletobjects-event-ticket-class walletobjectseventticketclasslist" 
 ]: nothing -> record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<allowMultipleUsersPerObject: bool, callbackOptions: record, classTemplateInfo: record, confirmationCodeLabel: string, countryCode: string, customConfirmationCodeLabel: record, customGateLabel: record, customRowLabel: record, customSeatLabel: record, customSectionLabel: record, dateTime: record, enableSmartTap: bool, eventId: string, eventName: record, finePrint: record, gateLabel: string, heroImage: record, hexBackgroundColor: string, homepageUri: record, id: string, imageModulesData: list, infoModuleData: record, issuerName: string, kind: string, linksModuleData: record, localizedIssuerName: record, locations: list, logo: record, messages: list, multipleDevicesAndHoldersAllowedStatus: string, redemptionIssuers: list, review: record, reviewStatus: string, rowLabel: string, seatLabel: string, sectionLabel: string, securityAnimation: record, textModulesData: list, venue: record, version: string, viewUnlockRequirement: string, wordMark: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "issuerId" $issuerId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "issuerId" $issuerId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/eventTicketClass" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -187,7 +187,7 @@ export def "walletobjects-event-ticket-class walletobjectseventticketclassinsert
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -240,7 +240,7 @@ export def "walletobjects-event-ticket-class walletobjectseventticketclassinsert
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/eventTicketClass" $qp)
   let body = {allowMultipleUsersPerObject: $allowMultipleUsersPerObject, callbackOptions: $callbackOptions, classTemplateInfo: $classTemplateInfo, confirmationCodeLabel: $confirmationCodeLabel, countryCode: $countryCode, customConfirmationCodeLabel: $customConfirmationCodeLabel, customGateLabel: $customGateLabel, customRowLabel: $customRowLabel, customSeatLabel: $customSeatLabel, customSectionLabel: $customSectionLabel, dateTime: $dateTime, enableSmartTap: $enableSmartTap, eventId: $eventId, eventName: $eventName, finePrint: $finePrint, gateLabel: $gateLabel, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, homepageUri: $homepageUri, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, issuerName: $issuerName, kind: $kind, linksModuleData: $linksModuleData, localizedIssuerName: $localizedIssuerName, locations: $locations, logo: $logo, messages: $messages, multipleDevicesAndHoldersAllowedStatus: $multipleDevicesAndHoldersAllowedStatus, redemptionIssuers: $redemptionIssuers, review: $review, reviewStatus: $reviewStatus, rowLabel: $rowLabel, seatLabel: $seatLabel, sectionLabel: $sectionLabel, securityAnimation: $securityAnimation, textModulesData: $textModulesData, venue: $venue, version: $version, viewUnlockRequirement: $viewUnlockRequirement, wordMark: $wordMark} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -267,7 +267,7 @@ export def "walletobjects-event-ticket-class walletobjectseventticketclassget" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -277,7 +277,7 @@ export def "walletobjects-event-ticket-class walletobjectseventticketclassget" [
 ]: nothing -> record<allowMultipleUsersPerObject: bool, callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record<firstBottomDetail: record, firstTopDetail: record, secondTopDetail: record>, cardTemplateOverride: record<cardRowTemplateInfos: list>, detailsTemplateOverride: record<detailsItemInfos: list>, listTemplateOverride: record<firstRowOption: record, secondRowOption: record, thirdRowOption: record>>, confirmationCodeLabel: string, countryCode: string, customConfirmationCodeLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customGateLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customRowLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customSeatLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customSectionLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, dateTime: record<customDoorsOpenLabel: record<defaultValue: record, kind: string, translatedValues: list>, doorsOpen: string, doorsOpenLabel: string, end: string, kind: string, start: string>, enableSmartTap: bool, eventId: string, eventName: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, finePrint: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, gateLabel: string, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record<defaultValue: record, kind: string, translatedValues: list>, uri: string>, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, issuerName: string, kind: string, linksModuleData: record<uris: list<record>>, localizedIssuerName: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, logo: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, multipleDevicesAndHoldersAllowedStatus: string, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, rowLabel: string, seatLabel: string, sectionLabel: string, securityAnimation: record<animationType: string>, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, venue: record<address: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, name: record<defaultValue: record, kind: string, translatedValues: list>>, version: string, viewUnlockRequirement: string, wordMark: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/eventTicketClass/($resourceId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -326,7 +326,7 @@ export def "walletobjects-event-ticket-class walletobjectseventticketclasspatch"
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -379,7 +379,7 @@ export def "walletobjects-event-ticket-class walletobjectseventticketclasspatch"
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/eventTicketClass/($resourceId)" $qp)
   let body = {allowMultipleUsersPerObject: $allowMultipleUsersPerObject, callbackOptions: $callbackOptions, classTemplateInfo: $classTemplateInfo, confirmationCodeLabel: $confirmationCodeLabel, countryCode: $countryCode, customConfirmationCodeLabel: $customConfirmationCodeLabel, customGateLabel: $customGateLabel, customRowLabel: $customRowLabel, customSeatLabel: $customSeatLabel, customSectionLabel: $customSectionLabel, dateTime: $dateTime, enableSmartTap: $enableSmartTap, eventId: $eventId, eventName: $eventName, finePrint: $finePrint, gateLabel: $gateLabel, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, homepageUri: $homepageUri, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, issuerName: $issuerName, kind: $kind, linksModuleData: $linksModuleData, localizedIssuerName: $localizedIssuerName, locations: $locations, logo: $logo, messages: $messages, multipleDevicesAndHoldersAllowedStatus: $multipleDevicesAndHoldersAllowedStatus, redemptionIssuers: $redemptionIssuers, review: $review, reviewStatus: $reviewStatus, rowLabel: $rowLabel, seatLabel: $seatLabel, sectionLabel: $sectionLabel, securityAnimation: $securityAnimation, textModulesData: $textModulesData, venue: $venue, version: $version, viewUnlockRequirement: $viewUnlockRequirement, wordMark: $wordMark} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -430,7 +430,7 @@ export def "walletobjects-event-ticket-class walletobjectseventticketclassupdate
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -483,7 +483,7 @@ export def "walletobjects-event-ticket-class walletobjectseventticketclassupdate
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/eventTicketClass/($resourceId)" $qp)
   let body = {allowMultipleUsersPerObject: $allowMultipleUsersPerObject, callbackOptions: $callbackOptions, classTemplateInfo: $classTemplateInfo, confirmationCodeLabel: $confirmationCodeLabel, countryCode: $countryCode, customConfirmationCodeLabel: $customConfirmationCodeLabel, customGateLabel: $customGateLabel, customRowLabel: $customRowLabel, customSeatLabel: $customSeatLabel, customSectionLabel: $customSectionLabel, dateTime: $dateTime, enableSmartTap: $enableSmartTap, eventId: $eventId, eventName: $eventName, finePrint: $finePrint, gateLabel: $gateLabel, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, homepageUri: $homepageUri, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, issuerName: $issuerName, kind: $kind, linksModuleData: $linksModuleData, localizedIssuerName: $localizedIssuerName, locations: $locations, logo: $logo, messages: $messages, multipleDevicesAndHoldersAllowedStatus: $multipleDevicesAndHoldersAllowedStatus, redemptionIssuers: $redemptionIssuers, review: $review, reviewStatus: $reviewStatus, rowLabel: $rowLabel, seatLabel: $seatLabel, sectionLabel: $sectionLabel, securityAnimation: $securityAnimation, textModulesData: $textModulesData, venue: $venue, version: $version, viewUnlockRequirement: $viewUnlockRequirement, wordMark: $wordMark} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -511,7 +511,7 @@ export def "walletobjects-event-ticket-class-add-message walletobjectseventticke
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -523,7 +523,7 @@ export def "walletobjects-event-ticket-class-add-message walletobjectseventticke
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/eventTicketClass/($resourceId)/addMessage" $qp)
   let body = {message: $message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -549,7 +549,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectlist
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -562,7 +562,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectlist
 ]: nothing -> record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<appLinkData: record, barcode: record, classId: string, classReference: record, disableExpirationNotification: bool, faceValue: record, groupingInfo: record, hasLinkedDevice: bool, hasUsers: bool, heroImage: record, hexBackgroundColor: string, id: string, imageModulesData: list, infoModuleData: record, kind: string, linkedOfferIds: list, linksModuleData: record, locations: list, messages: list, passConstraints: record, reservationInfo: record, rotatingBarcode: record, seatInfo: record, smartTapRedemptionValue: string, state: string, textModulesData: list, ticketHolderName: string, ticketNumber: string, ticketType: record, validTimeInterval: record, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "classId" $classId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "classId" $classId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/eventTicketObject" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -604,7 +604,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectinse
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -646,7 +646,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectinse
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/eventTicketObject" $qp)
   let body = {appLinkData: $appLinkData, barcode: $barcode, classId: $classId, classReference: $classReference, disableExpirationNotification: $disableExpirationNotification, faceValue: $faceValue, groupingInfo: $groupingInfo, hasLinkedDevice: $hasLinkedDevice, hasUsers: $hasUsers, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, kind: $kind, linkedOfferIds: $linkedOfferIds, linksModuleData: $linksModuleData, locations: $locations, messages: $messages, passConstraints: $passConstraints, reservationInfo: $reservationInfo, rotatingBarcode: $rotatingBarcode, seatInfo: $seatInfo, smartTapRedemptionValue: $smartTapRedemptionValue, state: $state, textModulesData: $textModulesData, ticketHolderName: $ticketHolderName, ticketNumber: $ticketNumber, ticketType: $ticketType, validTimeInterval: $validTimeInterval, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -673,7 +673,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectget"
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -683,7 +683,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectget"
 ]: nothing -> record<appLinkData: record<androidAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, iosAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, webAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>>, barcode: record<alternateText: string, kind: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, type: string, value: string>, classId: string, classReference: record<allowMultipleUsersPerObject: bool, callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record, cardTemplateOverride: record, detailsTemplateOverride: record, listTemplateOverride: record>, confirmationCodeLabel: string, countryCode: string, customConfirmationCodeLabel: record<defaultValue: record, kind: string, translatedValues: list>, customGateLabel: record<defaultValue: record, kind: string, translatedValues: list>, customRowLabel: record<defaultValue: record, kind: string, translatedValues: list>, customSeatLabel: record<defaultValue: record, kind: string, translatedValues: list>, customSectionLabel: record<defaultValue: record, kind: string, translatedValues: list>, dateTime: record<customDoorsOpenLabel: record, doorsOpen: string, doorsOpenLabel: string, end: string, kind: string, start: string>, enableSmartTap: bool, eventId: string, eventName: record<defaultValue: record, kind: string, translatedValues: list>, finePrint: record<defaultValue: record, kind: string, translatedValues: list>, gateLabel: string, heroImage: record<contentDescription: record, kind: string, sourceUri: record>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record, uri: string>, id: string, imageModulesData: list<record>, infoModuleData: record<labelValueRows: list, showLastUpdateTime: bool>, issuerName: string, kind: string, linksModuleData: record<uris: list>, localizedIssuerName: record<defaultValue: record, kind: string, translatedValues: list>, locations: list<record>, logo: record<contentDescription: record, kind: string, sourceUri: record>, messages: list<record>, multipleDevicesAndHoldersAllowedStatus: string, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, rowLabel: string, seatLabel: string, sectionLabel: string, securityAnimation: record<animationType: string>, textModulesData: list<record>, venue: record<address: record, kind: string, name: record>, version: string, viewUnlockRequirement: string, wordMark: record<contentDescription: record, kind: string, sourceUri: record>>, disableExpirationNotification: bool, faceValue: record<currencyCode: string, kind: string, micros: string>, groupingInfo: record<groupingId: string, sortIndex: int>, hasLinkedDevice: bool, hasUsers: bool, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, hexBackgroundColor: string, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, kind: string, linkedOfferIds: list<string>, linksModuleData: record<uris: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, passConstraints: record<screenshotEligibility: string>, reservationInfo: record<confirmationCode: string, kind: string>, rotatingBarcode: record<alternateText: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, totpDetails: record<algorithm: string, parameters: list, periodMillis: string>, type: string, valuePattern: string>, seatInfo: record<gate: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, row: record<defaultValue: record, kind: string, translatedValues: list>, seat: record<defaultValue: record, kind: string, translatedValues: list>, section: record<defaultValue: record, kind: string, translatedValues: list>>, smartTapRedemptionValue: string, state: string, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, ticketHolderName: string, ticketNumber: string, ticketType: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, validTimeInterval: record<end: record<date: string>, kind: string, start: record<date: string>>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/eventTicketObject/($resourceId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -726,7 +726,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectpatc
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -768,7 +768,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectpatc
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/eventTicketObject/($resourceId)" $qp)
   let body = {appLinkData: $appLinkData, barcode: $barcode, classId: $classId, classReference: $classReference, disableExpirationNotification: $disableExpirationNotification, faceValue: $faceValue, groupingInfo: $groupingInfo, hasLinkedDevice: $hasLinkedDevice, hasUsers: $hasUsers, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, kind: $kind, linkedOfferIds: $linkedOfferIds, linksModuleData: $linksModuleData, locations: $locations, messages: $messages, passConstraints: $passConstraints, reservationInfo: $reservationInfo, rotatingBarcode: $rotatingBarcode, seatInfo: $seatInfo, smartTapRedemptionValue: $smartTapRedemptionValue, state: $state, textModulesData: $textModulesData, ticketHolderName: $ticketHolderName, ticketNumber: $ticketNumber, ticketType: $ticketType, validTimeInterval: $validTimeInterval, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -813,7 +813,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectupda
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -855,7 +855,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectupda
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/eventTicketObject/($resourceId)" $qp)
   let body = {appLinkData: $appLinkData, barcode: $barcode, classId: $classId, classReference: $classReference, disableExpirationNotification: $disableExpirationNotification, faceValue: $faceValue, groupingInfo: $groupingInfo, hasLinkedDevice: $hasLinkedDevice, hasUsers: $hasUsers, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, kind: $kind, linkedOfferIds: $linkedOfferIds, linksModuleData: $linksModuleData, locations: $locations, messages: $messages, passConstraints: $passConstraints, reservationInfo: $reservationInfo, rotatingBarcode: $rotatingBarcode, seatInfo: $seatInfo, smartTapRedemptionValue: $smartTapRedemptionValue, state: $state, textModulesData: $textModulesData, ticketHolderName: $ticketHolderName, ticketNumber: $ticketNumber, ticketType: $ticketType, validTimeInterval: $validTimeInterval, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -883,7 +883,7 @@ export def "walletobjects-event-ticket-object-add-message walletobjectseventtick
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -895,7 +895,7 @@ export def "walletobjects-event-ticket-object-add-message walletobjectseventtick
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/eventTicketObject/($resourceId)/addMessage" $qp)
   let body = {message: $message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -923,7 +923,7 @@ export def "walletobjects-event-ticket-object-modify-linked-offer-objects wallet
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -935,7 +935,7 @@ export def "walletobjects-event-ticket-object-modify-linked-offer-objects wallet
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/eventTicketObject/($resourceId)/modifyLinkedOfferObjects" $qp)
   let body = {linkedOfferObjectIds: $linkedOfferObjectIds} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -961,7 +961,7 @@ export def "walletobjects-flight-class walletobjectsflightclasslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -974,7 +974,7 @@ export def "walletobjects-flight-class walletobjectsflightclasslist" [
 ]: nothing -> record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<allowMultipleUsersPerObject: bool, boardingAndSeatingPolicy: record, callbackOptions: record, classTemplateInfo: record, countryCode: string, destination: record, enableSmartTap: bool, flightHeader: record, flightStatus: string, heroImage: record, hexBackgroundColor: string, homepageUri: record, id: string, imageModulesData: list, infoModuleData: record, issuerName: string, kind: string, languageOverride: string, linksModuleData: record, localBoardingDateTime: string, localEstimatedOrActualArrivalDateTime: string, localEstimatedOrActualDepartureDateTime: string, localGateClosingDateTime: string, localScheduledArrivalDateTime: string, localScheduledDepartureDateTime: string, localizedIssuerName: record, locations: list, messages: list, multipleDevicesAndHoldersAllowedStatus: string, origin: record, redemptionIssuers: list, review: record, reviewStatus: string, securityAnimation: record, textModulesData: list, version: string, viewUnlockRequirement: string, wordMark: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "issuerId" $issuerId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "issuerId" $issuerId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/flightClass" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1016,7 +1016,7 @@ export def "walletobjects-flight-class walletobjectsflightclassinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1065,7 +1065,7 @@ export def "walletobjects-flight-class walletobjectsflightclassinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/flightClass" $qp)
   let body = {allowMultipleUsersPerObject: $allowMultipleUsersPerObject, boardingAndSeatingPolicy: $boardingAndSeatingPolicy, callbackOptions: $callbackOptions, classTemplateInfo: $classTemplateInfo, countryCode: $countryCode, destination: $destination, enableSmartTap: $enableSmartTap, flightHeader: $flightHeader, flightStatus: $flightStatus, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, homepageUri: $homepageUri, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, issuerName: $issuerName, kind: $kind, languageOverride: $languageOverride, linksModuleData: $linksModuleData, localBoardingDateTime: $localBoardingDateTime, localEstimatedOrActualArrivalDateTime: $localEstimatedOrActualArrivalDateTime, localEstimatedOrActualDepartureDateTime: $localEstimatedOrActualDepartureDateTime, localGateClosingDateTime: $localGateClosingDateTime, localScheduledArrivalDateTime: $localScheduledArrivalDateTime, localScheduledDepartureDateTime: $localScheduledDepartureDateTime, localizedIssuerName: $localizedIssuerName, locations: $locations, messages: $messages, multipleDevicesAndHoldersAllowedStatus: $multipleDevicesAndHoldersAllowedStatus, origin: $origin, redemptionIssuers: $redemptionIssuers, review: $review, reviewStatus: $reviewStatus, securityAnimation: $securityAnimation, textModulesData: $textModulesData, version: $version, viewUnlockRequirement: $viewUnlockRequirement, wordMark: $wordMark} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1092,7 +1092,7 @@ export def "walletobjects-flight-class walletobjectsflightclassget" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1102,7 +1102,7 @@ export def "walletobjects-flight-class walletobjectsflightclassget" [
 ]: nothing -> record<allowMultipleUsersPerObject: bool, boardingAndSeatingPolicy: record<boardingPolicy: string, kind: string, seatClassPolicy: string>, callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record<firstBottomDetail: record, firstTopDetail: record, secondTopDetail: record>, cardTemplateOverride: record<cardRowTemplateInfos: list>, detailsTemplateOverride: record<detailsItemInfos: list>, listTemplateOverride: record<firstRowOption: record, secondRowOption: record, thirdRowOption: record>>, countryCode: string, destination: record<airportIataCode: string, airportNameOverride: record<defaultValue: record, kind: string, translatedValues: list>, gate: string, kind: string, terminal: string>, enableSmartTap: bool, flightHeader: record<carrier: record<airlineAllianceLogo: record, airlineLogo: record, airlineName: record, carrierIataCode: string, carrierIcaoCode: string, kind: string>, flightNumber: string, flightNumberDisplayOverride: string, kind: string, operatingCarrier: record<airlineAllianceLogo: record, airlineLogo: record, airlineName: record, carrierIataCode: string, carrierIcaoCode: string, kind: string>, operatingFlightNumber: string>, flightStatus: string, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record<defaultValue: record, kind: string, translatedValues: list>, uri: string>, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, issuerName: string, kind: string, languageOverride: string, linksModuleData: record<uris: list<record>>, localBoardingDateTime: string, localEstimatedOrActualArrivalDateTime: string, localEstimatedOrActualDepartureDateTime: string, localGateClosingDateTime: string, localScheduledArrivalDateTime: string, localScheduledDepartureDateTime: string, localizedIssuerName: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, multipleDevicesAndHoldersAllowedStatus: string, origin: record<airportIataCode: string, airportNameOverride: record<defaultValue: record, kind: string, translatedValues: list>, gate: string, kind: string, terminal: string>, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, securityAnimation: record<animationType: string>, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, version: string, viewUnlockRequirement: string, wordMark: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/flightClass/($resourceId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1145,7 +1145,7 @@ export def "walletobjects-flight-class walletobjectsflightclasspatch" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1194,7 +1194,7 @@ export def "walletobjects-flight-class walletobjectsflightclasspatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/flightClass/($resourceId)" $qp)
   let body = {allowMultipleUsersPerObject: $allowMultipleUsersPerObject, boardingAndSeatingPolicy: $boardingAndSeatingPolicy, callbackOptions: $callbackOptions, classTemplateInfo: $classTemplateInfo, countryCode: $countryCode, destination: $destination, enableSmartTap: $enableSmartTap, flightHeader: $flightHeader, flightStatus: $flightStatus, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, homepageUri: $homepageUri, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, issuerName: $issuerName, kind: $kind, languageOverride: $languageOverride, linksModuleData: $linksModuleData, localBoardingDateTime: $localBoardingDateTime, localEstimatedOrActualArrivalDateTime: $localEstimatedOrActualArrivalDateTime, localEstimatedOrActualDepartureDateTime: $localEstimatedOrActualDepartureDateTime, localGateClosingDateTime: $localGateClosingDateTime, localScheduledArrivalDateTime: $localScheduledArrivalDateTime, localScheduledDepartureDateTime: $localScheduledDepartureDateTime, localizedIssuerName: $localizedIssuerName, locations: $locations, messages: $messages, multipleDevicesAndHoldersAllowedStatus: $multipleDevicesAndHoldersAllowedStatus, origin: $origin, redemptionIssuers: $redemptionIssuers, review: $review, reviewStatus: $reviewStatus, securityAnimation: $securityAnimation, textModulesData: $textModulesData, version: $version, viewUnlockRequirement: $viewUnlockRequirement, wordMark: $wordMark} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1239,7 +1239,7 @@ export def "walletobjects-flight-class walletobjectsflightclassupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1288,7 +1288,7 @@ export def "walletobjects-flight-class walletobjectsflightclassupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/flightClass/($resourceId)" $qp)
   let body = {allowMultipleUsersPerObject: $allowMultipleUsersPerObject, boardingAndSeatingPolicy: $boardingAndSeatingPolicy, callbackOptions: $callbackOptions, classTemplateInfo: $classTemplateInfo, countryCode: $countryCode, destination: $destination, enableSmartTap: $enableSmartTap, flightHeader: $flightHeader, flightStatus: $flightStatus, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, homepageUri: $homepageUri, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, issuerName: $issuerName, kind: $kind, languageOverride: $languageOverride, linksModuleData: $linksModuleData, localBoardingDateTime: $localBoardingDateTime, localEstimatedOrActualArrivalDateTime: $localEstimatedOrActualArrivalDateTime, localEstimatedOrActualDepartureDateTime: $localEstimatedOrActualDepartureDateTime, localGateClosingDateTime: $localGateClosingDateTime, localScheduledArrivalDateTime: $localScheduledArrivalDateTime, localScheduledDepartureDateTime: $localScheduledDepartureDateTime, localizedIssuerName: $localizedIssuerName, locations: $locations, messages: $messages, multipleDevicesAndHoldersAllowedStatus: $multipleDevicesAndHoldersAllowedStatus, origin: $origin, redemptionIssuers: $redemptionIssuers, review: $review, reviewStatus: $reviewStatus, securityAnimation: $securityAnimation, textModulesData: $textModulesData, version: $version, viewUnlockRequirement: $viewUnlockRequirement, wordMark: $wordMark} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1316,7 +1316,7 @@ export def "walletobjects-flight-class-add-message walletobjectsflightclassaddme
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1328,7 +1328,7 @@ export def "walletobjects-flight-class-add-message walletobjectsflightclassaddme
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/flightClass/($resourceId)/addMessage" $qp)
   let body = {message: $message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1354,7 +1354,7 @@ export def "walletobjects-flight-object walletobjectsflightobjectlist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1367,7 +1367,7 @@ export def "walletobjects-flight-object walletobjectsflightobjectlist" [
 ]: nothing -> record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<appLinkData: record, barcode: record, boardingAndSeatingInfo: record, classId: string, classReference: record, disableExpirationNotification: bool, groupingInfo: record, hasLinkedDevice: bool, hasUsers: bool, heroImage: record, hexBackgroundColor: string, id: string, imageModulesData: list, infoModuleData: record, kind: string, linksModuleData: record, locations: list, messages: list, passConstraints: record, passengerName: string, reservationInfo: record, rotatingBarcode: record, securityProgramLogo: record, smartTapRedemptionValue: string, state: string, textModulesData: list, validTimeInterval: record, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "classId" $classId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "classId" $classId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/flightObject" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1408,7 +1408,7 @@ export def "walletobjects-flight-object walletobjectsflightobjectinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1447,7 +1447,7 @@ export def "walletobjects-flight-object walletobjectsflightobjectinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/flightObject" $qp)
   let body = {appLinkData: $appLinkData, barcode: $barcode, boardingAndSeatingInfo: $boardingAndSeatingInfo, classId: $classId, classReference: $classReference, disableExpirationNotification: $disableExpirationNotification, groupingInfo: $groupingInfo, hasLinkedDevice: $hasLinkedDevice, hasUsers: $hasUsers, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, kind: $kind, linksModuleData: $linksModuleData, locations: $locations, messages: $messages, passConstraints: $passConstraints, passengerName: $passengerName, reservationInfo: $reservationInfo, rotatingBarcode: $rotatingBarcode, securityProgramLogo: $securityProgramLogo, smartTapRedemptionValue: $smartTapRedemptionValue, state: $state, textModulesData: $textModulesData, validTimeInterval: $validTimeInterval, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1474,7 +1474,7 @@ export def "walletobjects-flight-object walletobjectsflightobjectget" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1484,7 +1484,7 @@ export def "walletobjects-flight-object walletobjectsflightobjectget" [
 ]: nothing -> record<appLinkData: record<androidAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, iosAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, webAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>>, barcode: record<alternateText: string, kind: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, type: string, value: string>, boardingAndSeatingInfo: record<boardingDoor: string, boardingGroup: string, boardingPosition: string, boardingPrivilegeImage: record<contentDescription: record, kind: string, sourceUri: record>, kind: string, seatAssignment: record<defaultValue: record, kind: string, translatedValues: list>, seatClass: string, seatNumber: string, sequenceNumber: string>, classId: string, classReference: record<allowMultipleUsersPerObject: bool, boardingAndSeatingPolicy: record<boardingPolicy: string, kind: string, seatClassPolicy: string>, callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record, cardTemplateOverride: record, detailsTemplateOverride: record, listTemplateOverride: record>, countryCode: string, destination: record<airportIataCode: string, airportNameOverride: record, gate: string, kind: string, terminal: string>, enableSmartTap: bool, flightHeader: record<carrier: record, flightNumber: string, flightNumberDisplayOverride: string, kind: string, operatingCarrier: record, operatingFlightNumber: string>, flightStatus: string, heroImage: record<contentDescription: record, kind: string, sourceUri: record>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record, uri: string>, id: string, imageModulesData: list<record>, infoModuleData: record<labelValueRows: list, showLastUpdateTime: bool>, issuerName: string, kind: string, languageOverride: string, linksModuleData: record<uris: list>, localBoardingDateTime: string, localEstimatedOrActualArrivalDateTime: string, localEstimatedOrActualDepartureDateTime: string, localGateClosingDateTime: string, localScheduledArrivalDateTime: string, localScheduledDepartureDateTime: string, localizedIssuerName: record<defaultValue: record, kind: string, translatedValues: list>, locations: list<record>, messages: list<record>, multipleDevicesAndHoldersAllowedStatus: string, origin: record<airportIataCode: string, airportNameOverride: record, gate: string, kind: string, terminal: string>, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, securityAnimation: record<animationType: string>, textModulesData: list<record>, version: string, viewUnlockRequirement: string, wordMark: record<contentDescription: record, kind: string, sourceUri: record>>, disableExpirationNotification: bool, groupingInfo: record<groupingId: string, sortIndex: int>, hasLinkedDevice: bool, hasUsers: bool, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, hexBackgroundColor: string, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, kind: string, linksModuleData: record<uris: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, passConstraints: record<screenshotEligibility: string>, passengerName: string, reservationInfo: record<confirmationCode: string, eticketNumber: string, frequentFlyerInfo: record<frequentFlyerNumber: string, frequentFlyerProgramName: record, kind: string>, kind: string>, rotatingBarcode: record<alternateText: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, totpDetails: record<algorithm: string, parameters: list, periodMillis: string>, type: string, valuePattern: string>, securityProgramLogo: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, smartTapRedemptionValue: string, state: string, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, validTimeInterval: record<end: record<date: string>, kind: string, start: record<date: string>>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/flightObject/($resourceId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1526,7 +1526,7 @@ export def "walletobjects-flight-object walletobjectsflightobjectpatch" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1565,7 +1565,7 @@ export def "walletobjects-flight-object walletobjectsflightobjectpatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/flightObject/($resourceId)" $qp)
   let body = {appLinkData: $appLinkData, barcode: $barcode, boardingAndSeatingInfo: $boardingAndSeatingInfo, classId: $classId, classReference: $classReference, disableExpirationNotification: $disableExpirationNotification, groupingInfo: $groupingInfo, hasLinkedDevice: $hasLinkedDevice, hasUsers: $hasUsers, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, kind: $kind, linksModuleData: $linksModuleData, locations: $locations, messages: $messages, passConstraints: $passConstraints, passengerName: $passengerName, reservationInfo: $reservationInfo, rotatingBarcode: $rotatingBarcode, securityProgramLogo: $securityProgramLogo, smartTapRedemptionValue: $smartTapRedemptionValue, state: $state, textModulesData: $textModulesData, validTimeInterval: $validTimeInterval, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1609,7 +1609,7 @@ export def "walletobjects-flight-object walletobjectsflightobjectupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1648,7 +1648,7 @@ export def "walletobjects-flight-object walletobjectsflightobjectupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/flightObject/($resourceId)" $qp)
   let body = {appLinkData: $appLinkData, barcode: $barcode, boardingAndSeatingInfo: $boardingAndSeatingInfo, classId: $classId, classReference: $classReference, disableExpirationNotification: $disableExpirationNotification, groupingInfo: $groupingInfo, hasLinkedDevice: $hasLinkedDevice, hasUsers: $hasUsers, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, kind: $kind, linksModuleData: $linksModuleData, locations: $locations, messages: $messages, passConstraints: $passConstraints, passengerName: $passengerName, reservationInfo: $reservationInfo, rotatingBarcode: $rotatingBarcode, securityProgramLogo: $securityProgramLogo, smartTapRedemptionValue: $smartTapRedemptionValue, state: $state, textModulesData: $textModulesData, validTimeInterval: $validTimeInterval, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1676,7 +1676,7 @@ export def "walletobjects-flight-object-add-message walletobjectsflightobjectadd
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1688,7 +1688,7 @@ export def "walletobjects-flight-object-add-message walletobjectsflightobjectadd
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/flightObject/($resourceId)/addMessage" $qp)
   let body = {message: $message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1714,7 +1714,7 @@ export def "walletobjects-generic-class walletobjectsgenericclasslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1727,7 +1727,7 @@ export def "walletobjects-generic-class walletobjectsgenericclasslist" [
 ]: nothing -> record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<callbackOptions: record, classTemplateInfo: record, enableSmartTap: bool, id: string, imageModulesData: list, linksModuleData: record, multipleDevicesAndHoldersAllowedStatus: string, redemptionIssuers: list, securityAnimation: record, textModulesData: list, viewUnlockRequirement: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "issuerId" $issuerId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "issuerId" $issuerId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/genericClass" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1757,7 +1757,7 @@ export def "walletobjects-generic-class walletobjectsgenericclassinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1779,7 +1779,7 @@ export def "walletobjects-generic-class walletobjectsgenericclassinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/genericClass" $qp)
   let body = {callbackOptions: $callbackOptions, classTemplateInfo: $classTemplateInfo, enableSmartTap: $enableSmartTap, id: $id, imageModulesData: $imageModulesData, linksModuleData: $linksModuleData, multipleDevicesAndHoldersAllowedStatus: $multipleDevicesAndHoldersAllowedStatus, redemptionIssuers: $redemptionIssuers, securityAnimation: $securityAnimation, textModulesData: $textModulesData, viewUnlockRequirement: $viewUnlockRequirement} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1806,7 +1806,7 @@ export def "walletobjects-generic-class walletobjectsgenericclassget" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1816,7 +1816,7 @@ export def "walletobjects-generic-class walletobjectsgenericclassget" [
 ]: nothing -> record<callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record<firstBottomDetail: record, firstTopDetail: record, secondTopDetail: record>, cardTemplateOverride: record<cardRowTemplateInfos: list>, detailsTemplateOverride: record<detailsItemInfos: list>, listTemplateOverride: record<firstRowOption: record, secondRowOption: record, thirdRowOption: record>>, enableSmartTap: bool, id: string, imageModulesData: table<id: string, mainImage: record>, linksModuleData: record<uris: list<record>>, multipleDevicesAndHoldersAllowedStatus: string, redemptionIssuers: list<string>, securityAnimation: record<animationType: string>, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, viewUnlockRequirement: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/genericClass/($resourceId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1847,7 +1847,7 @@ export def "walletobjects-generic-class walletobjectsgenericclasspatch" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1869,7 +1869,7 @@ export def "walletobjects-generic-class walletobjectsgenericclasspatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/genericClass/($resourceId)" $qp)
   let body = {callbackOptions: $callbackOptions, classTemplateInfo: $classTemplateInfo, enableSmartTap: $enableSmartTap, id: $id, imageModulesData: $imageModulesData, linksModuleData: $linksModuleData, multipleDevicesAndHoldersAllowedStatus: $multipleDevicesAndHoldersAllowedStatus, redemptionIssuers: $redemptionIssuers, securityAnimation: $securityAnimation, textModulesData: $textModulesData, viewUnlockRequirement: $viewUnlockRequirement} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1902,7 +1902,7 @@ export def "walletobjects-generic-class walletobjectsgenericclassupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1924,7 +1924,7 @@ export def "walletobjects-generic-class walletobjectsgenericclassupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/genericClass/($resourceId)" $qp)
   let body = {callbackOptions: $callbackOptions, classTemplateInfo: $classTemplateInfo, enableSmartTap: $enableSmartTap, id: $id, imageModulesData: $imageModulesData, linksModuleData: $linksModuleData, multipleDevicesAndHoldersAllowedStatus: $multipleDevicesAndHoldersAllowedStatus, redemptionIssuers: $redemptionIssuers, securityAnimation: $securityAnimation, textModulesData: $textModulesData, viewUnlockRequirement: $viewUnlockRequirement} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1950,7 +1950,7 @@ export def "walletobjects-generic-object walletobjectsgenericobjectlist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1963,7 +1963,7 @@ export def "walletobjects-generic-object walletobjectsgenericobjectlist" [
 ]: nothing -> record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<appLinkData: record, barcode: record, cardTitle: record, classId: string, genericType: string, groupingInfo: record, hasUsers: bool, header: record, heroImage: record, hexBackgroundColor: string, id: string, imageModulesData: list, linksModuleData: record, logo: record, notifications: record, passConstraints: record, rotatingBarcode: record, smartTapRedemptionValue: string, state: string, subheader: record, textModulesData: list, validTimeInterval: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "classId" $classId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "classId" $classId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/genericObject" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2002,7 +2002,7 @@ export def "walletobjects-generic-object walletobjectsgenericobjectinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2035,7 +2035,7 @@ export def "walletobjects-generic-object walletobjectsgenericobjectinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/genericObject" $qp)
   let body = {appLinkData: $appLinkData, barcode: $barcode, cardTitle: $cardTitle, classId: $classId, genericType: $genericType, groupingInfo: $groupingInfo, hasUsers: $hasUsers, header: $header, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, id: $id, imageModulesData: $imageModulesData, linksModuleData: $linksModuleData, logo: $logo, notifications: $notifications, passConstraints: $passConstraints, rotatingBarcode: $rotatingBarcode, smartTapRedemptionValue: $smartTapRedemptionValue, state: $state, subheader: $subheader, textModulesData: $textModulesData, validTimeInterval: $validTimeInterval} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2062,7 +2062,7 @@ export def "walletobjects-generic-object walletobjectsgenericobjectget" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2072,7 +2072,7 @@ export def "walletobjects-generic-object walletobjectsgenericobjectget" [
 ]: nothing -> record<appLinkData: record<androidAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, iosAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, webAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>>, barcode: record<alternateText: string, kind: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, type: string, value: string>, cardTitle: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, classId: string, genericType: string, groupingInfo: record<groupingId: string, sortIndex: int>, hasUsers: bool, header: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, hexBackgroundColor: string, id: string, imageModulesData: table<id: string, mainImage: record>, linksModuleData: record<uris: list<record>>, logo: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, notifications: record<expiryNotification: record<enableNotification: bool>, upcomingNotification: record<enableNotification: bool>>, passConstraints: record<screenshotEligibility: string>, rotatingBarcode: record<alternateText: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, totpDetails: record<algorithm: string, parameters: list, periodMillis: string>, type: string, valuePattern: string>, smartTapRedemptionValue: string, state: string, subheader: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, validTimeInterval: record<end: record<date: string>, kind: string, start: record<date: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/genericObject/($resourceId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2112,7 +2112,7 @@ export def "walletobjects-generic-object walletobjectsgenericobjectpatch" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2145,7 +2145,7 @@ export def "walletobjects-generic-object walletobjectsgenericobjectpatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/genericObject/($resourceId)" $qp)
   let body = {appLinkData: $appLinkData, barcode: $barcode, cardTitle: $cardTitle, classId: $classId, genericType: $genericType, groupingInfo: $groupingInfo, hasUsers: $hasUsers, header: $header, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, id: $id, imageModulesData: $imageModulesData, linksModuleData: $linksModuleData, logo: $logo, notifications: $notifications, passConstraints: $passConstraints, rotatingBarcode: $rotatingBarcode, smartTapRedemptionValue: $smartTapRedemptionValue, state: $state, subheader: $subheader, textModulesData: $textModulesData, validTimeInterval: $validTimeInterval} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2187,7 +2187,7 @@ export def "walletobjects-generic-object walletobjectsgenericobjectupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2220,7 +2220,7 @@ export def "walletobjects-generic-object walletobjectsgenericobjectupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/genericObject/($resourceId)" $qp)
   let body = {appLinkData: $appLinkData, barcode: $barcode, cardTitle: $cardTitle, classId: $classId, genericType: $genericType, groupingInfo: $groupingInfo, hasUsers: $hasUsers, header: $header, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, id: $id, imageModulesData: $imageModulesData, linksModuleData: $linksModuleData, logo: $logo, notifications: $notifications, passConstraints: $passConstraints, rotatingBarcode: $rotatingBarcode, smartTapRedemptionValue: $smartTapRedemptionValue, state: $state, subheader: $subheader, textModulesData: $textModulesData, validTimeInterval: $validTimeInterval} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2246,7 +2246,7 @@ export def "walletobjects-gift-card-class walletobjectsgiftcardclasslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2259,7 +2259,7 @@ export def "walletobjects-gift-card-class walletobjectsgiftcardclasslist" [
 ]: nothing -> record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<allowBarcodeRedemption: bool, allowMultipleUsersPerObject: bool, callbackOptions: record, cardNumberLabel: string, classTemplateInfo: record, countryCode: string, enableSmartTap: bool, eventNumberLabel: string, heroImage: record, hexBackgroundColor: string, homepageUri: record, id: string, imageModulesData: list, infoModuleData: record, issuerName: string, kind: string, linksModuleData: record, localizedCardNumberLabel: record, localizedEventNumberLabel: record, localizedIssuerName: record, localizedMerchantName: record, localizedPinLabel: record, locations: list, merchantName: string, messages: list, multipleDevicesAndHoldersAllowedStatus: string, pinLabel: string, programLogo: record, redemptionIssuers: list, review: record, reviewStatus: string, securityAnimation: record, textModulesData: list, version: string, viewUnlockRequirement: string, wordMark: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "issuerId" $issuerId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "issuerId" $issuerId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/giftCardClass" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2302,7 +2302,7 @@ export def "walletobjects-gift-card-class walletobjectsgiftcardclassinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2349,7 +2349,7 @@ export def "walletobjects-gift-card-class walletobjectsgiftcardclassinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/giftCardClass" $qp)
   let body = {allowBarcodeRedemption: $allowBarcodeRedemption, allowMultipleUsersPerObject: $allowMultipleUsersPerObject, callbackOptions: $callbackOptions, cardNumberLabel: $cardNumberLabel, classTemplateInfo: $classTemplateInfo, countryCode: $countryCode, enableSmartTap: $enableSmartTap, eventNumberLabel: $eventNumberLabel, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, homepageUri: $homepageUri, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, issuerName: $issuerName, kind: $kind, linksModuleData: $linksModuleData, localizedCardNumberLabel: $localizedCardNumberLabel, localizedEventNumberLabel: $localizedEventNumberLabel, localizedIssuerName: $localizedIssuerName, localizedMerchantName: $localizedMerchantName, localizedPinLabel: $localizedPinLabel, locations: $locations, merchantName: $merchantName, messages: $messages, multipleDevicesAndHoldersAllowedStatus: $multipleDevicesAndHoldersAllowedStatus, pinLabel: $pinLabel, programLogo: $programLogo, redemptionIssuers: $redemptionIssuers, review: $review, reviewStatus: $reviewStatus, securityAnimation: $securityAnimation, textModulesData: $textModulesData, version: $version, viewUnlockRequirement: $viewUnlockRequirement, wordMark: $wordMark} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2376,7 +2376,7 @@ export def "walletobjects-gift-card-class walletobjectsgiftcardclassget" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2386,7 +2386,7 @@ export def "walletobjects-gift-card-class walletobjectsgiftcardclassget" [
 ]: nothing -> record<allowBarcodeRedemption: bool, allowMultipleUsersPerObject: bool, callbackOptions: record<updateRequestUrl: string, url: string>, cardNumberLabel: string, classTemplateInfo: record<cardBarcodeSectionDetails: record<firstBottomDetail: record, firstTopDetail: record, secondTopDetail: record>, cardTemplateOverride: record<cardRowTemplateInfos: list>, detailsTemplateOverride: record<detailsItemInfos: list>, listTemplateOverride: record<firstRowOption: record, secondRowOption: record, thirdRowOption: record>>, countryCode: string, enableSmartTap: bool, eventNumberLabel: string, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record<defaultValue: record, kind: string, translatedValues: list>, uri: string>, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, issuerName: string, kind: string, linksModuleData: record<uris: list<record>>, localizedCardNumberLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedEventNumberLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedIssuerName: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedMerchantName: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedPinLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, merchantName: string, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, multipleDevicesAndHoldersAllowedStatus: string, pinLabel: string, programLogo: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, securityAnimation: record<animationType: string>, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, version: string, viewUnlockRequirement: string, wordMark: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/giftCardClass/($resourceId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2430,7 +2430,7 @@ export def "walletobjects-gift-card-class walletobjectsgiftcardclasspatch" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2477,7 +2477,7 @@ export def "walletobjects-gift-card-class walletobjectsgiftcardclasspatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/giftCardClass/($resourceId)" $qp)
   let body = {allowBarcodeRedemption: $allowBarcodeRedemption, allowMultipleUsersPerObject: $allowMultipleUsersPerObject, callbackOptions: $callbackOptions, cardNumberLabel: $cardNumberLabel, classTemplateInfo: $classTemplateInfo, countryCode: $countryCode, enableSmartTap: $enableSmartTap, eventNumberLabel: $eventNumberLabel, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, homepageUri: $homepageUri, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, issuerName: $issuerName, kind: $kind, linksModuleData: $linksModuleData, localizedCardNumberLabel: $localizedCardNumberLabel, localizedEventNumberLabel: $localizedEventNumberLabel, localizedIssuerName: $localizedIssuerName, localizedMerchantName: $localizedMerchantName, localizedPinLabel: $localizedPinLabel, locations: $locations, merchantName: $merchantName, messages: $messages, multipleDevicesAndHoldersAllowedStatus: $multipleDevicesAndHoldersAllowedStatus, pinLabel: $pinLabel, programLogo: $programLogo, redemptionIssuers: $redemptionIssuers, review: $review, reviewStatus: $reviewStatus, securityAnimation: $securityAnimation, textModulesData: $textModulesData, version: $version, viewUnlockRequirement: $viewUnlockRequirement, wordMark: $wordMark} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2523,7 +2523,7 @@ export def "walletobjects-gift-card-class walletobjectsgiftcardclassupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2570,7 +2570,7 @@ export def "walletobjects-gift-card-class walletobjectsgiftcardclassupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/giftCardClass/($resourceId)" $qp)
   let body = {allowBarcodeRedemption: $allowBarcodeRedemption, allowMultipleUsersPerObject: $allowMultipleUsersPerObject, callbackOptions: $callbackOptions, cardNumberLabel: $cardNumberLabel, classTemplateInfo: $classTemplateInfo, countryCode: $countryCode, enableSmartTap: $enableSmartTap, eventNumberLabel: $eventNumberLabel, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, homepageUri: $homepageUri, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, issuerName: $issuerName, kind: $kind, linksModuleData: $linksModuleData, localizedCardNumberLabel: $localizedCardNumberLabel, localizedEventNumberLabel: $localizedEventNumberLabel, localizedIssuerName: $localizedIssuerName, localizedMerchantName: $localizedMerchantName, localizedPinLabel: $localizedPinLabel, locations: $locations, merchantName: $merchantName, messages: $messages, multipleDevicesAndHoldersAllowedStatus: $multipleDevicesAndHoldersAllowedStatus, pinLabel: $pinLabel, programLogo: $programLogo, redemptionIssuers: $redemptionIssuers, review: $review, reviewStatus: $reviewStatus, securityAnimation: $securityAnimation, textModulesData: $textModulesData, version: $version, viewUnlockRequirement: $viewUnlockRequirement, wordMark: $wordMark} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2598,7 +2598,7 @@ export def "walletobjects-gift-card-class-add-message walletobjectsgiftcardclass
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2610,7 +2610,7 @@ export def "walletobjects-gift-card-class-add-message walletobjectsgiftcardclass
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/giftCardClass/($resourceId)/addMessage" $qp)
   let body = {message: $message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2636,7 +2636,7 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectlist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2649,7 +2649,7 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectlist" [
 ]: nothing -> record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<appLinkData: record, balance: record, balanceUpdateTime: record, barcode: record, cardNumber: string, classId: string, classReference: record, disableExpirationNotification: bool, eventNumber: string, groupingInfo: record, hasLinkedDevice: bool, hasUsers: bool, heroImage: record, id: string, imageModulesData: list, infoModuleData: record, kind: string, linksModuleData: record, locations: list, messages: list, passConstraints: record, pin: string, rotatingBarcode: record, smartTapRedemptionValue: string, state: string, textModulesData: list, validTimeInterval: record, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "classId" $classId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "classId" $classId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/giftCardObject" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2689,7 +2689,7 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2728,7 +2728,7 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/giftCardObject" $qp)
   let body = {appLinkData: $appLinkData, balance: $balance, balanceUpdateTime: $balanceUpdateTime, barcode: $barcode, cardNumber: $cardNumber, classId: $classId, classReference: $classReference, disableExpirationNotification: $disableExpirationNotification, eventNumber: $eventNumber, groupingInfo: $groupingInfo, hasLinkedDevice: $hasLinkedDevice, hasUsers: $hasUsers, heroImage: $heroImage, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, kind: $kind, linksModuleData: $linksModuleData, locations: $locations, messages: $messages, passConstraints: $passConstraints, pin: $pin, rotatingBarcode: $rotatingBarcode, smartTapRedemptionValue: $smartTapRedemptionValue, state: $state, textModulesData: $textModulesData, validTimeInterval: $validTimeInterval, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2755,7 +2755,7 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectget" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2765,7 +2765,7 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectget" [
 ]: nothing -> record<appLinkData: record<androidAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, iosAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, webAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>>, balance: record<currencyCode: string, kind: string, micros: string>, balanceUpdateTime: record<date: string>, barcode: record<alternateText: string, kind: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, type: string, value: string>, cardNumber: string, classId: string, classReference: record<allowBarcodeRedemption: bool, allowMultipleUsersPerObject: bool, callbackOptions: record<updateRequestUrl: string, url: string>, cardNumberLabel: string, classTemplateInfo: record<cardBarcodeSectionDetails: record, cardTemplateOverride: record, detailsTemplateOverride: record, listTemplateOverride: record>, countryCode: string, enableSmartTap: bool, eventNumberLabel: string, heroImage: record<contentDescription: record, kind: string, sourceUri: record>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record, uri: string>, id: string, imageModulesData: list<record>, infoModuleData: record<labelValueRows: list, showLastUpdateTime: bool>, issuerName: string, kind: string, linksModuleData: record<uris: list>, localizedCardNumberLabel: record<defaultValue: record, kind: string, translatedValues: list>, localizedEventNumberLabel: record<defaultValue: record, kind: string, translatedValues: list>, localizedIssuerName: record<defaultValue: record, kind: string, translatedValues: list>, localizedMerchantName: record<defaultValue: record, kind: string, translatedValues: list>, localizedPinLabel: record<defaultValue: record, kind: string, translatedValues: list>, locations: list<record>, merchantName: string, messages: list<record>, multipleDevicesAndHoldersAllowedStatus: string, pinLabel: string, programLogo: record<contentDescription: record, kind: string, sourceUri: record>, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, securityAnimation: record<animationType: string>, textModulesData: list<record>, version: string, viewUnlockRequirement: string, wordMark: record<contentDescription: record, kind: string, sourceUri: record>>, disableExpirationNotification: bool, eventNumber: string, groupingInfo: record<groupingId: string, sortIndex: int>, hasLinkedDevice: bool, hasUsers: bool, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, kind: string, linksModuleData: record<uris: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, passConstraints: record<screenshotEligibility: string>, pin: string, rotatingBarcode: record<alternateText: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, totpDetails: record<algorithm: string, parameters: list, periodMillis: string>, type: string, valuePattern: string>, smartTapRedemptionValue: string, state: string, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, validTimeInterval: record<end: record<date: string>, kind: string, start: record<date: string>>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/giftCardObject/($resourceId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2806,7 +2806,7 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectpatch" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2845,7 +2845,7 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectpatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/giftCardObject/($resourceId)" $qp)
   let body = {appLinkData: $appLinkData, balance: $balance, balanceUpdateTime: $balanceUpdateTime, barcode: $barcode, cardNumber: $cardNumber, classId: $classId, classReference: $classReference, disableExpirationNotification: $disableExpirationNotification, eventNumber: $eventNumber, groupingInfo: $groupingInfo, hasLinkedDevice: $hasLinkedDevice, hasUsers: $hasUsers, heroImage: $heroImage, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, kind: $kind, linksModuleData: $linksModuleData, locations: $locations, messages: $messages, passConstraints: $passConstraints, pin: $pin, rotatingBarcode: $rotatingBarcode, smartTapRedemptionValue: $smartTapRedemptionValue, state: $state, textModulesData: $textModulesData, validTimeInterval: $validTimeInterval, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2888,7 +2888,7 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2927,7 +2927,7 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/giftCardObject/($resourceId)" $qp)
   let body = {appLinkData: $appLinkData, balance: $balance, balanceUpdateTime: $balanceUpdateTime, barcode: $barcode, cardNumber: $cardNumber, classId: $classId, classReference: $classReference, disableExpirationNotification: $disableExpirationNotification, eventNumber: $eventNumber, groupingInfo: $groupingInfo, hasLinkedDevice: $hasLinkedDevice, hasUsers: $hasUsers, heroImage: $heroImage, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, kind: $kind, linksModuleData: $linksModuleData, locations: $locations, messages: $messages, passConstraints: $passConstraints, pin: $pin, rotatingBarcode: $rotatingBarcode, smartTapRedemptionValue: $smartTapRedemptionValue, state: $state, textModulesData: $textModulesData, validTimeInterval: $validTimeInterval, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2955,7 +2955,7 @@ export def "walletobjects-gift-card-object-add-message walletobjectsgiftcardobje
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2967,7 +2967,7 @@ export def "walletobjects-gift-card-object-add-message walletobjectsgiftcardobje
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/giftCardObject/($resourceId)/addMessage" $qp)
   let body = {message: $message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2993,7 +2993,7 @@ export def "walletobjects-issuer walletobjectsissuerlist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3003,7 +3003,7 @@ export def "walletobjects-issuer walletobjectsissuerlist" [
 ]: nothing -> record<resources: table<contactInfo: record, homepageUrl: string, issuerId: string, name: string, smartTapMerchantData: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/issuer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3029,7 +3029,7 @@ export def "walletobjects-issuer walletobjectsissuerinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3045,7 +3045,7 @@ export def "walletobjects-issuer walletobjectsissuerinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/issuer" $qp)
   let body = {contactInfo: $contactInfo, homepageUrl: $homepageUrl, issuerId: $issuerId, name: $name, smartTapMerchantData: $smartTapMerchantData} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -3072,7 +3072,7 @@ export def "walletobjects-issuer walletobjectsissuerget" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3082,7 +3082,7 @@ export def "walletobjects-issuer walletobjectsissuerget" [
 ]: nothing -> record<contactInfo: record<alertsEmails: list<string>, email: string, name: string, phone: string>, homepageUrl: string, issuerId: string, name: string, smartTapMerchantData: record<authenticationKeys: list<record>, smartTapMerchantId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/issuer/($resourceId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3109,7 +3109,7 @@ export def "walletobjects-issuer walletobjectsissuerpatch" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3125,7 +3125,7 @@ export def "walletobjects-issuer walletobjectsissuerpatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/issuer/($resourceId)" $qp)
   let body = {contactInfo: $contactInfo, homepageUrl: $homepageUrl, issuerId: $issuerId, name: $name, smartTapMerchantData: $smartTapMerchantData} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -3154,7 +3154,7 @@ export def "walletobjects-issuer walletobjectsissuerupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3170,7 +3170,7 @@ export def "walletobjects-issuer walletobjectsissuerupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/issuer/($resourceId)" $qp)
   let body = {contactInfo: $contactInfo, homepageUrl: $homepageUrl, issuerId: $issuerId, name: $name, smartTapMerchantData: $smartTapMerchantData} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -3196,7 +3196,7 @@ export def "walletobjects-jwt walletobjectsjwtinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3208,7 +3208,7 @@ export def "walletobjects-jwt walletobjectsjwtinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/jwt" $qp)
   let body = {jwt: $jwt} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -3234,7 +3234,7 @@ export def "walletobjects-loyalty-class walletobjectsloyaltyclasslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3247,7 +3247,7 @@ export def "walletobjects-loyalty-class walletobjectsloyaltyclasslist" [
 ]: nothing -> record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<accountIdLabel: string, accountNameLabel: string, allowMultipleUsersPerObject: bool, callbackOptions: record, classTemplateInfo: record, countryCode: string, discoverableProgram: record, enableSmartTap: bool, heroImage: record, hexBackgroundColor: string, homepageUri: record, id: string, imageModulesData: list, infoModuleData: record, issuerName: string, kind: string, linksModuleData: record, localizedAccountIdLabel: record, localizedAccountNameLabel: record, localizedIssuerName: record, localizedProgramName: record, localizedRewardsTier: record, localizedRewardsTierLabel: record, localizedSecondaryRewardsTier: record, localizedSecondaryRewardsTierLabel: record, locations: list, messages: list, multipleDevicesAndHoldersAllowedStatus: string, programLogo: record, programName: string, redemptionIssuers: list, review: record, reviewStatus: string, rewardsTier: string, rewardsTierLabel: string, secondaryRewardsTier: string, secondaryRewardsTierLabel: string, securityAnimation: record, textModulesData: list, version: string, viewUnlockRequirement: string, wordMark: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "issuerId" $issuerId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "issuerId" $issuerId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/loyaltyClass" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3294,7 +3294,7 @@ export def "walletobjects-loyalty-class walletobjectsloyaltyclassinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3347,7 +3347,7 @@ export def "walletobjects-loyalty-class walletobjectsloyaltyclassinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/loyaltyClass" $qp)
   let body = {accountIdLabel: $accountIdLabel, accountNameLabel: $accountNameLabel, allowMultipleUsersPerObject: $allowMultipleUsersPerObject, callbackOptions: $callbackOptions, classTemplateInfo: $classTemplateInfo, countryCode: $countryCode, discoverableProgram: $discoverableProgram, enableSmartTap: $enableSmartTap, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, homepageUri: $homepageUri, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, issuerName: $issuerName, kind: $kind, linksModuleData: $linksModuleData, localizedAccountIdLabel: $localizedAccountIdLabel, localizedAccountNameLabel: $localizedAccountNameLabel, localizedIssuerName: $localizedIssuerName, localizedProgramName: $localizedProgramName, localizedRewardsTier: $localizedRewardsTier, localizedRewardsTierLabel: $localizedRewardsTierLabel, localizedSecondaryRewardsTier: $localizedSecondaryRewardsTier, localizedSecondaryRewardsTierLabel: $localizedSecondaryRewardsTierLabel, locations: $locations, messages: $messages, multipleDevicesAndHoldersAllowedStatus: $multipleDevicesAndHoldersAllowedStatus, programLogo: $programLogo, programName: $programName, redemptionIssuers: $redemptionIssuers, review: $review, reviewStatus: $reviewStatus, rewardsTier: $rewardsTier, rewardsTierLabel: $rewardsTierLabel, secondaryRewardsTier: $secondaryRewardsTier, secondaryRewardsTierLabel: $secondaryRewardsTierLabel, securityAnimation: $securityAnimation, textModulesData: $textModulesData, version: $version, viewUnlockRequirement: $viewUnlockRequirement, wordMark: $wordMark} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -3374,7 +3374,7 @@ export def "walletobjects-loyalty-class walletobjectsloyaltyclassget" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3384,7 +3384,7 @@ export def "walletobjects-loyalty-class walletobjectsloyaltyclassget" [
 ]: nothing -> record<accountIdLabel: string, accountNameLabel: string, allowMultipleUsersPerObject: bool, callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record<firstBottomDetail: record, firstTopDetail: record, secondTopDetail: record>, cardTemplateOverride: record<cardRowTemplateInfos: list>, detailsTemplateOverride: record<detailsItemInfos: list>, listTemplateOverride: record<firstRowOption: record, secondRowOption: record, thirdRowOption: record>>, countryCode: string, discoverableProgram: record<merchantSigninInfo: record<signinWebsite: record>, merchantSignupInfo: record<signupSharedDatas: list, signupWebsite: record>, state: string>, enableSmartTap: bool, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record<defaultValue: record, kind: string, translatedValues: list>, uri: string>, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, issuerName: string, kind: string, linksModuleData: record<uris: list<record>>, localizedAccountIdLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedAccountNameLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedIssuerName: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedProgramName: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedRewardsTier: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedRewardsTierLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedSecondaryRewardsTier: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedSecondaryRewardsTierLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, multipleDevicesAndHoldersAllowedStatus: string, programLogo: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, programName: string, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, rewardsTier: string, rewardsTierLabel: string, secondaryRewardsTier: string, secondaryRewardsTierLabel: string, securityAnimation: record<animationType: string>, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, version: string, viewUnlockRequirement: string, wordMark: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/loyaltyClass/($resourceId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3432,7 +3432,7 @@ export def "walletobjects-loyalty-class walletobjectsloyaltyclasspatch" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3485,7 +3485,7 @@ export def "walletobjects-loyalty-class walletobjectsloyaltyclasspatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/loyaltyClass/($resourceId)" $qp)
   let body = {accountIdLabel: $accountIdLabel, accountNameLabel: $accountNameLabel, allowMultipleUsersPerObject: $allowMultipleUsersPerObject, callbackOptions: $callbackOptions, classTemplateInfo: $classTemplateInfo, countryCode: $countryCode, discoverableProgram: $discoverableProgram, enableSmartTap: $enableSmartTap, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, homepageUri: $homepageUri, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, issuerName: $issuerName, kind: $kind, linksModuleData: $linksModuleData, localizedAccountIdLabel: $localizedAccountIdLabel, localizedAccountNameLabel: $localizedAccountNameLabel, localizedIssuerName: $localizedIssuerName, localizedProgramName: $localizedProgramName, localizedRewardsTier: $localizedRewardsTier, localizedRewardsTierLabel: $localizedRewardsTierLabel, localizedSecondaryRewardsTier: $localizedSecondaryRewardsTier, localizedSecondaryRewardsTierLabel: $localizedSecondaryRewardsTierLabel, locations: $locations, messages: $messages, multipleDevicesAndHoldersAllowedStatus: $multipleDevicesAndHoldersAllowedStatus, programLogo: $programLogo, programName: $programName, redemptionIssuers: $redemptionIssuers, review: $review, reviewStatus: $reviewStatus, rewardsTier: $rewardsTier, rewardsTierLabel: $rewardsTierLabel, secondaryRewardsTier: $secondaryRewardsTier, secondaryRewardsTierLabel: $secondaryRewardsTierLabel, securityAnimation: $securityAnimation, textModulesData: $textModulesData, version: $version, viewUnlockRequirement: $viewUnlockRequirement, wordMark: $wordMark} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -3535,7 +3535,7 @@ export def "walletobjects-loyalty-class walletobjectsloyaltyclassupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3588,7 +3588,7 @@ export def "walletobjects-loyalty-class walletobjectsloyaltyclassupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/loyaltyClass/($resourceId)" $qp)
   let body = {accountIdLabel: $accountIdLabel, accountNameLabel: $accountNameLabel, allowMultipleUsersPerObject: $allowMultipleUsersPerObject, callbackOptions: $callbackOptions, classTemplateInfo: $classTemplateInfo, countryCode: $countryCode, discoverableProgram: $discoverableProgram, enableSmartTap: $enableSmartTap, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, homepageUri: $homepageUri, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, issuerName: $issuerName, kind: $kind, linksModuleData: $linksModuleData, localizedAccountIdLabel: $localizedAccountIdLabel, localizedAccountNameLabel: $localizedAccountNameLabel, localizedIssuerName: $localizedIssuerName, localizedProgramName: $localizedProgramName, localizedRewardsTier: $localizedRewardsTier, localizedRewardsTierLabel: $localizedRewardsTierLabel, localizedSecondaryRewardsTier: $localizedSecondaryRewardsTier, localizedSecondaryRewardsTierLabel: $localizedSecondaryRewardsTierLabel, locations: $locations, messages: $messages, multipleDevicesAndHoldersAllowedStatus: $multipleDevicesAndHoldersAllowedStatus, programLogo: $programLogo, programName: $programName, redemptionIssuers: $redemptionIssuers, review: $review, reviewStatus: $reviewStatus, rewardsTier: $rewardsTier, rewardsTierLabel: $rewardsTierLabel, secondaryRewardsTier: $secondaryRewardsTier, secondaryRewardsTierLabel: $secondaryRewardsTierLabel, securityAnimation: $securityAnimation, textModulesData: $textModulesData, version: $version, viewUnlockRequirement: $viewUnlockRequirement, wordMark: $wordMark} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -3616,7 +3616,7 @@ export def "walletobjects-loyalty-class-add-message walletobjectsloyaltyclassadd
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3628,7 +3628,7 @@ export def "walletobjects-loyalty-class-add-message walletobjectsloyaltyclassadd
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/loyaltyClass/($resourceId)/addMessage" $qp)
   let body = {message: $message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -3654,7 +3654,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectlist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3667,7 +3667,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectlist" [
 ]: nothing -> record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<accountId: string, accountName: string, appLinkData: record, barcode: record, classId: string, classReference: record, disableExpirationNotification: bool, groupingInfo: record, hasLinkedDevice: bool, hasUsers: bool, heroImage: record, id: string, imageModulesData: list, infoModuleData: record, kind: string, linkedOfferIds: list, linksModuleData: record, locations: list, loyaltyPoints: record, messages: list, passConstraints: record, rotatingBarcode: record, secondaryLoyaltyPoints: record, smartTapRedemptionValue: string, state: string, textModulesData: list, validTimeInterval: record, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "classId" $classId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "classId" $classId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/loyaltyObject" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3707,7 +3707,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3746,7 +3746,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/loyaltyObject" $qp)
   let body = {accountId: $accountId, accountName: $accountName, appLinkData: $appLinkData, barcode: $barcode, classId: $classId, classReference: $classReference, disableExpirationNotification: $disableExpirationNotification, groupingInfo: $groupingInfo, hasLinkedDevice: $hasLinkedDevice, hasUsers: $hasUsers, heroImage: $heroImage, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, kind: $kind, linkedOfferIds: $linkedOfferIds, linksModuleData: $linksModuleData, locations: $locations, loyaltyPoints: $loyaltyPoints, messages: $messages, passConstraints: $passConstraints, rotatingBarcode: $rotatingBarcode, secondaryLoyaltyPoints: $secondaryLoyaltyPoints, smartTapRedemptionValue: $smartTapRedemptionValue, state: $state, textModulesData: $textModulesData, validTimeInterval: $validTimeInterval, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -3773,7 +3773,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectget" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3783,7 +3783,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectget" [
 ]: nothing -> record<accountId: string, accountName: string, appLinkData: record<androidAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, iosAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, webAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>>, barcode: record<alternateText: string, kind: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, type: string, value: string>, classId: string, classReference: record<accountIdLabel: string, accountNameLabel: string, allowMultipleUsersPerObject: bool, callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record, cardTemplateOverride: record, detailsTemplateOverride: record, listTemplateOverride: record>, countryCode: string, discoverableProgram: record<merchantSigninInfo: record, merchantSignupInfo: record, state: string>, enableSmartTap: bool, heroImage: record<contentDescription: record, kind: string, sourceUri: record>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record, uri: string>, id: string, imageModulesData: list<record>, infoModuleData: record<labelValueRows: list, showLastUpdateTime: bool>, issuerName: string, kind: string, linksModuleData: record<uris: list>, localizedAccountIdLabel: record<defaultValue: record, kind: string, translatedValues: list>, localizedAccountNameLabel: record<defaultValue: record, kind: string, translatedValues: list>, localizedIssuerName: record<defaultValue: record, kind: string, translatedValues: list>, localizedProgramName: record<defaultValue: record, kind: string, translatedValues: list>, localizedRewardsTier: record<defaultValue: record, kind: string, translatedValues: list>, localizedRewardsTierLabel: record<defaultValue: record, kind: string, translatedValues: list>, localizedSecondaryRewardsTier: record<defaultValue: record, kind: string, translatedValues: list>, localizedSecondaryRewardsTierLabel: record<defaultValue: record, kind: string, translatedValues: list>, locations: list<record>, messages: list<record>, multipleDevicesAndHoldersAllowedStatus: string, programLogo: record<contentDescription: record, kind: string, sourceUri: record>, programName: string, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, rewardsTier: string, rewardsTierLabel: string, secondaryRewardsTier: string, secondaryRewardsTierLabel: string, securityAnimation: record<animationType: string>, textModulesData: list<record>, version: string, viewUnlockRequirement: string, wordMark: record<contentDescription: record, kind: string, sourceUri: record>>, disableExpirationNotification: bool, groupingInfo: record<groupingId: string, sortIndex: int>, hasLinkedDevice: bool, hasUsers: bool, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, kind: string, linkedOfferIds: list<string>, linksModuleData: record<uris: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, loyaltyPoints: record<balance: record<double: float, int: int, money: record, string: string>, label: string, localizedLabel: record<defaultValue: record, kind: string, translatedValues: list>>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, passConstraints: record<screenshotEligibility: string>, rotatingBarcode: record<alternateText: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, totpDetails: record<algorithm: string, parameters: list, periodMillis: string>, type: string, valuePattern: string>, secondaryLoyaltyPoints: record<balance: record<double: float, int: int, money: record, string: string>, label: string, localizedLabel: record<defaultValue: record, kind: string, translatedValues: list>>, smartTapRedemptionValue: string, state: string, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, validTimeInterval: record<end: record<date: string>, kind: string, start: record<date: string>>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/loyaltyObject/($resourceId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3824,7 +3824,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectpatch" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3863,7 +3863,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectpatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/loyaltyObject/($resourceId)" $qp)
   let body = {accountId: $accountId, accountName: $accountName, appLinkData: $appLinkData, barcode: $barcode, classId: $classId, classReference: $classReference, disableExpirationNotification: $disableExpirationNotification, groupingInfo: $groupingInfo, hasLinkedDevice: $hasLinkedDevice, hasUsers: $hasUsers, heroImage: $heroImage, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, kind: $kind, linkedOfferIds: $linkedOfferIds, linksModuleData: $linksModuleData, locations: $locations, loyaltyPoints: $loyaltyPoints, messages: $messages, passConstraints: $passConstraints, rotatingBarcode: $rotatingBarcode, secondaryLoyaltyPoints: $secondaryLoyaltyPoints, smartTapRedemptionValue: $smartTapRedemptionValue, state: $state, textModulesData: $textModulesData, validTimeInterval: $validTimeInterval, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -3906,7 +3906,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3945,7 +3945,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/loyaltyObject/($resourceId)" $qp)
   let body = {accountId: $accountId, accountName: $accountName, appLinkData: $appLinkData, barcode: $barcode, classId: $classId, classReference: $classReference, disableExpirationNotification: $disableExpirationNotification, groupingInfo: $groupingInfo, hasLinkedDevice: $hasLinkedDevice, hasUsers: $hasUsers, heroImage: $heroImage, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, kind: $kind, linkedOfferIds: $linkedOfferIds, linksModuleData: $linksModuleData, locations: $locations, loyaltyPoints: $loyaltyPoints, messages: $messages, passConstraints: $passConstraints, rotatingBarcode: $rotatingBarcode, secondaryLoyaltyPoints: $secondaryLoyaltyPoints, smartTapRedemptionValue: $smartTapRedemptionValue, state: $state, textModulesData: $textModulesData, validTimeInterval: $validTimeInterval, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -3973,7 +3973,7 @@ export def "walletobjects-loyalty-object-add-message walletobjectsloyaltyobjecta
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -3985,7 +3985,7 @@ export def "walletobjects-loyalty-object-add-message walletobjectsloyaltyobjecta
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/loyaltyObject/($resourceId)/addMessage" $qp)
   let body = {message: $message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -4013,7 +4013,7 @@ export def "walletobjects-loyalty-object-modify-linked-offer-objects walletobjec
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -4025,7 +4025,7 @@ export def "walletobjects-loyalty-object-modify-linked-offer-objects walletobjec
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/loyaltyObject/($resourceId)/modifyLinkedOfferObjects" $qp)
   let body = {linkedOfferObjectIds: $linkedOfferObjectIds} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -4051,7 +4051,7 @@ export def "walletobjects-offer-class walletobjectsofferclasslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -4064,7 +4064,7 @@ export def "walletobjects-offer-class walletobjectsofferclasslist" [
 ]: nothing -> record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<allowMultipleUsersPerObject: bool, callbackOptions: record, classTemplateInfo: record, countryCode: string, details: string, enableSmartTap: bool, finePrint: string, helpUri: record, heroImage: record, hexBackgroundColor: string, homepageUri: record, id: string, imageModulesData: list, infoModuleData: record, issuerName: string, kind: string, linksModuleData: record, localizedDetails: record, localizedFinePrint: record, localizedIssuerName: record, localizedProvider: record, localizedShortTitle: record, localizedTitle: record, locations: list, messages: list, multipleDevicesAndHoldersAllowedStatus: string, provider: string, redemptionChannel: string, redemptionIssuers: list, review: record, reviewStatus: string, securityAnimation: record, shortTitle: string, textModulesData: list, title: string, titleImage: record, version: string, viewUnlockRequirement: string, wordMark: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "issuerId" $issuerId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "issuerId" $issuerId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/offerClass" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4109,7 +4109,7 @@ export def "walletobjects-offer-class walletobjectsofferclassinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -4159,7 +4159,7 @@ export def "walletobjects-offer-class walletobjectsofferclassinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/offerClass" $qp)
   let body = {allowMultipleUsersPerObject: $allowMultipleUsersPerObject, callbackOptions: $callbackOptions, classTemplateInfo: $classTemplateInfo, countryCode: $countryCode, details: $details, enableSmartTap: $enableSmartTap, finePrint: $finePrint, helpUri: $helpUri, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, homepageUri: $homepageUri, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, issuerName: $issuerName, kind: $kind, linksModuleData: $linksModuleData, localizedDetails: $localizedDetails, localizedFinePrint: $localizedFinePrint, localizedIssuerName: $localizedIssuerName, localizedProvider: $localizedProvider, localizedShortTitle: $localizedShortTitle, localizedTitle: $localizedTitle, locations: $locations, messages: $messages, multipleDevicesAndHoldersAllowedStatus: $multipleDevicesAndHoldersAllowedStatus, provider: $provider, redemptionChannel: $redemptionChannel, redemptionIssuers: $redemptionIssuers, review: $review, reviewStatus: $reviewStatus, securityAnimation: $securityAnimation, shortTitle: $shortTitle, textModulesData: $textModulesData, title: $title, titleImage: $titleImage, version: $version, viewUnlockRequirement: $viewUnlockRequirement, wordMark: $wordMark} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -4186,7 +4186,7 @@ export def "walletobjects-offer-class walletobjectsofferclassget" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -4196,7 +4196,7 @@ export def "walletobjects-offer-class walletobjectsofferclassget" [
 ]: nothing -> record<allowMultipleUsersPerObject: bool, callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record<firstBottomDetail: record, firstTopDetail: record, secondTopDetail: record>, cardTemplateOverride: record<cardRowTemplateInfos: list>, detailsTemplateOverride: record<detailsItemInfos: list>, listTemplateOverride: record<firstRowOption: record, secondRowOption: record, thirdRowOption: record>>, countryCode: string, details: string, enableSmartTap: bool, finePrint: string, helpUri: record<description: string, id: string, kind: string, localizedDescription: record<defaultValue: record, kind: string, translatedValues: list>, uri: string>, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record<defaultValue: record, kind: string, translatedValues: list>, uri: string>, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, issuerName: string, kind: string, linksModuleData: record<uris: list<record>>, localizedDetails: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedFinePrint: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedIssuerName: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedProvider: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedShortTitle: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedTitle: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, multipleDevicesAndHoldersAllowedStatus: string, provider: string, redemptionChannel: string, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, securityAnimation: record<animationType: string>, shortTitle: string, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, title: string, titleImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, version: string, viewUnlockRequirement: string, wordMark: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/offerClass/($resourceId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4242,7 +4242,7 @@ export def "walletobjects-offer-class walletobjectsofferclasspatch" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -4292,7 +4292,7 @@ export def "walletobjects-offer-class walletobjectsofferclasspatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/offerClass/($resourceId)" $qp)
   let body = {allowMultipleUsersPerObject: $allowMultipleUsersPerObject, callbackOptions: $callbackOptions, classTemplateInfo: $classTemplateInfo, countryCode: $countryCode, details: $details, enableSmartTap: $enableSmartTap, finePrint: $finePrint, helpUri: $helpUri, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, homepageUri: $homepageUri, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, issuerName: $issuerName, kind: $kind, linksModuleData: $linksModuleData, localizedDetails: $localizedDetails, localizedFinePrint: $localizedFinePrint, localizedIssuerName: $localizedIssuerName, localizedProvider: $localizedProvider, localizedShortTitle: $localizedShortTitle, localizedTitle: $localizedTitle, locations: $locations, messages: $messages, multipleDevicesAndHoldersAllowedStatus: $multipleDevicesAndHoldersAllowedStatus, provider: $provider, redemptionChannel: $redemptionChannel, redemptionIssuers: $redemptionIssuers, review: $review, reviewStatus: $reviewStatus, securityAnimation: $securityAnimation, shortTitle: $shortTitle, textModulesData: $textModulesData, title: $title, titleImage: $titleImage, version: $version, viewUnlockRequirement: $viewUnlockRequirement, wordMark: $wordMark} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -4340,7 +4340,7 @@ export def "walletobjects-offer-class walletobjectsofferclassupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -4390,7 +4390,7 @@ export def "walletobjects-offer-class walletobjectsofferclassupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/offerClass/($resourceId)" $qp)
   let body = {allowMultipleUsersPerObject: $allowMultipleUsersPerObject, callbackOptions: $callbackOptions, classTemplateInfo: $classTemplateInfo, countryCode: $countryCode, details: $details, enableSmartTap: $enableSmartTap, finePrint: $finePrint, helpUri: $helpUri, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, homepageUri: $homepageUri, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, issuerName: $issuerName, kind: $kind, linksModuleData: $linksModuleData, localizedDetails: $localizedDetails, localizedFinePrint: $localizedFinePrint, localizedIssuerName: $localizedIssuerName, localizedProvider: $localizedProvider, localizedShortTitle: $localizedShortTitle, localizedTitle: $localizedTitle, locations: $locations, messages: $messages, multipleDevicesAndHoldersAllowedStatus: $multipleDevicesAndHoldersAllowedStatus, provider: $provider, redemptionChannel: $redemptionChannel, redemptionIssuers: $redemptionIssuers, review: $review, reviewStatus: $reviewStatus, securityAnimation: $securityAnimation, shortTitle: $shortTitle, textModulesData: $textModulesData, title: $title, titleImage: $titleImage, version: $version, viewUnlockRequirement: $viewUnlockRequirement, wordMark: $wordMark} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -4418,7 +4418,7 @@ export def "walletobjects-offer-class-add-message walletobjectsofferclassaddmess
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -4430,7 +4430,7 @@ export def "walletobjects-offer-class-add-message walletobjectsofferclassaddmess
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/offerClass/($resourceId)/addMessage" $qp)
   let body = {message: $message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -4456,7 +4456,7 @@ export def "walletobjects-offer-object walletobjectsofferobjectlist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -4469,7 +4469,7 @@ export def "walletobjects-offer-object walletobjectsofferobjectlist" [
 ]: nothing -> record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<appLinkData: record, barcode: record, classId: string, classReference: record, disableExpirationNotification: bool, groupingInfo: record, hasLinkedDevice: bool, hasUsers: bool, heroImage: record, id: string, imageModulesData: list, infoModuleData: record, kind: string, linksModuleData: record, locations: list, messages: list, passConstraints: record, rotatingBarcode: record, smartTapRedemptionValue: string, state: string, textModulesData: list, validTimeInterval: record, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "classId" $classId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "classId" $classId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/offerObject" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4507,7 +4507,7 @@ export def "walletobjects-offer-object walletobjectsofferobjectinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -4541,7 +4541,7 @@ export def "walletobjects-offer-object walletobjectsofferobjectinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/offerObject" $qp)
   let body = {appLinkData: $appLinkData, barcode: $barcode, classId: $classId, classReference: $classReference, disableExpirationNotification: $disableExpirationNotification, groupingInfo: $groupingInfo, hasLinkedDevice: $hasLinkedDevice, hasUsers: $hasUsers, heroImage: $heroImage, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, kind: $kind, linksModuleData: $linksModuleData, locations: $locations, messages: $messages, passConstraints: $passConstraints, rotatingBarcode: $rotatingBarcode, smartTapRedemptionValue: $smartTapRedemptionValue, state: $state, textModulesData: $textModulesData, validTimeInterval: $validTimeInterval, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -4568,7 +4568,7 @@ export def "walletobjects-offer-object walletobjectsofferobjectget" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -4578,7 +4578,7 @@ export def "walletobjects-offer-object walletobjectsofferobjectget" [
 ]: nothing -> record<appLinkData: record<androidAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, iosAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, webAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>>, barcode: record<alternateText: string, kind: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, type: string, value: string>, classId: string, classReference: record<allowMultipleUsersPerObject: bool, callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record, cardTemplateOverride: record, detailsTemplateOverride: record, listTemplateOverride: record>, countryCode: string, details: string, enableSmartTap: bool, finePrint: string, helpUri: record<description: string, id: string, kind: string, localizedDescription: record, uri: string>, heroImage: record<contentDescription: record, kind: string, sourceUri: record>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record, uri: string>, id: string, imageModulesData: list<record>, infoModuleData: record<labelValueRows: list, showLastUpdateTime: bool>, issuerName: string, kind: string, linksModuleData: record<uris: list>, localizedDetails: record<defaultValue: record, kind: string, translatedValues: list>, localizedFinePrint: record<defaultValue: record, kind: string, translatedValues: list>, localizedIssuerName: record<defaultValue: record, kind: string, translatedValues: list>, localizedProvider: record<defaultValue: record, kind: string, translatedValues: list>, localizedShortTitle: record<defaultValue: record, kind: string, translatedValues: list>, localizedTitle: record<defaultValue: record, kind: string, translatedValues: list>, locations: list<record>, messages: list<record>, multipleDevicesAndHoldersAllowedStatus: string, provider: string, redemptionChannel: string, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, securityAnimation: record<animationType: string>, shortTitle: string, textModulesData: list<record>, title: string, titleImage: record<contentDescription: record, kind: string, sourceUri: record>, version: string, viewUnlockRequirement: string, wordMark: record<contentDescription: record, kind: string, sourceUri: record>>, disableExpirationNotification: bool, groupingInfo: record<groupingId: string, sortIndex: int>, hasLinkedDevice: bool, hasUsers: bool, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, kind: string, linksModuleData: record<uris: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, passConstraints: record<screenshotEligibility: string>, rotatingBarcode: record<alternateText: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, totpDetails: record<algorithm: string, parameters: list, periodMillis: string>, type: string, valuePattern: string>, smartTapRedemptionValue: string, state: string, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, validTimeInterval: record<end: record<date: string>, kind: string, start: record<date: string>>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/offerObject/($resourceId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4617,7 +4617,7 @@ export def "walletobjects-offer-object walletobjectsofferobjectpatch" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -4651,7 +4651,7 @@ export def "walletobjects-offer-object walletobjectsofferobjectpatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/offerObject/($resourceId)" $qp)
   let body = {appLinkData: $appLinkData, barcode: $barcode, classId: $classId, classReference: $classReference, disableExpirationNotification: $disableExpirationNotification, groupingInfo: $groupingInfo, hasLinkedDevice: $hasLinkedDevice, hasUsers: $hasUsers, heroImage: $heroImage, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, kind: $kind, linksModuleData: $linksModuleData, locations: $locations, messages: $messages, passConstraints: $passConstraints, rotatingBarcode: $rotatingBarcode, smartTapRedemptionValue: $smartTapRedemptionValue, state: $state, textModulesData: $textModulesData, validTimeInterval: $validTimeInterval, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -4692,7 +4692,7 @@ export def "walletobjects-offer-object walletobjectsofferobjectupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -4726,7 +4726,7 @@ export def "walletobjects-offer-object walletobjectsofferobjectupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/offerObject/($resourceId)" $qp)
   let body = {appLinkData: $appLinkData, barcode: $barcode, classId: $classId, classReference: $classReference, disableExpirationNotification: $disableExpirationNotification, groupingInfo: $groupingInfo, hasLinkedDevice: $hasLinkedDevice, hasUsers: $hasUsers, heroImage: $heroImage, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, kind: $kind, linksModuleData: $linksModuleData, locations: $locations, messages: $messages, passConstraints: $passConstraints, rotatingBarcode: $rotatingBarcode, smartTapRedemptionValue: $smartTapRedemptionValue, state: $state, textModulesData: $textModulesData, validTimeInterval: $validTimeInterval, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -4754,7 +4754,7 @@ export def "walletobjects-offer-object-add-message walletobjectsofferobjectaddme
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -4766,7 +4766,7 @@ export def "walletobjects-offer-object-add-message walletobjectsofferobjectaddme
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/offerObject/($resourceId)/addMessage" $qp)
   let body = {message: $message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -4793,7 +4793,7 @@ export def "walletobjects-permissions walletobjectspermissionsget" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -4803,7 +4803,7 @@ export def "walletobjects-permissions walletobjectspermissionsget" [
 ]: nothing -> record<issuerId: string, permissions: table<emailAddress: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/permissions/($resourceId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4829,7 +4829,7 @@ export def "walletobjects-permissions walletobjectspermissionsupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -4842,7 +4842,7 @@ export def "walletobjects-permissions walletobjectspermissionsupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/permissions/($resourceId)" $qp)
   let body = {issuerId: $issuerId, permissions: $permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -4870,7 +4870,7 @@ export def "walletobjects-private-content-upload-private-data walletobjectswalle
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -4884,7 +4884,7 @@ export def "walletobjects-private-content-upload-private-data walletobjectswalle
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/privateContent/uploadPrivateData" $qp)
   let body = {issuerId: $issuerId, text: $text, uri: $uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -4911,7 +4911,7 @@ export def "walletobjects-private-content-upload-private-image walletobjectsmedi
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -4923,7 +4923,7 @@ export def "walletobjects-private-content-upload-private-image walletobjectsmedi
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/privateContent/($issuerId)/uploadPrivateImage" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -4949,7 +4949,7 @@ export def "walletobjects-smart-tap walletobjectssmarttapinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -4964,7 +4964,7 @@ export def "walletobjects-smart-tap walletobjectssmarttapinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/smartTap" $qp)
   let body = {id: $id, infos: $infos, kind: $kind, merchantId: $merchantId} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -4990,7 +4990,7 @@ export def "walletobjects-transit-class walletobjectstransitclasslist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -5003,7 +5003,7 @@ export def "walletobjects-transit-class walletobjectstransitclasslist" [
 ]: nothing -> record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<activationOptions: record, allowMultipleUsersPerObject: bool, callbackOptions: record, classTemplateInfo: record, countryCode: string, customCarriageLabel: record, customCoachLabel: record, customConcessionCategoryLabel: record, customConfirmationCodeLabel: record, customDiscountMessageLabel: record, customFareClassLabel: record, customFareNameLabel: record, customOtherRestrictionsLabel: record, customPlatformLabel: record, customPurchaseFaceValueLabel: record, customPurchasePriceLabel: record, customPurchaseReceiptNumberLabel: record, customRouteRestrictionsDetailsLabel: record, customRouteRestrictionsLabel: record, customSeatLabel: record, customTicketNumberLabel: record, customTimeRestrictionsLabel: record, customTransitTerminusNameLabel: record, customZoneLabel: record, enableSingleLegItinerary: bool, enableSmartTap: bool, heroImage: record, hexBackgroundColor: string, homepageUri: record, id: string, imageModulesData: list, infoModuleData: record, issuerName: string, languageOverride: string, linksModuleData: record, localizedIssuerName: record, locations: list, logo: record, messages: list, multipleDevicesAndHoldersAllowedStatus: string, redemptionIssuers: list, review: record, reviewStatus: string, securityAnimation: record, textModulesData: list, transitOperatorName: record, transitType: string, version: string, viewUnlockRequirement: string, watermark: record, wordMark: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "issuerId" $issuerId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "issuerId" $issuerId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/transitClass" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5064,7 +5064,7 @@ export def "walletobjects-transit-class walletobjectstransitclassinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -5126,7 +5126,7 @@ export def "walletobjects-transit-class walletobjectstransitclassinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/transitClass" $qp)
   let body = {activationOptions: $activationOptions, allowMultipleUsersPerObject: $allowMultipleUsersPerObject, callbackOptions: $callbackOptions, classTemplateInfo: $classTemplateInfo, countryCode: $countryCode, customCarriageLabel: $customCarriageLabel, customCoachLabel: $customCoachLabel, customConcessionCategoryLabel: $customConcessionCategoryLabel, customConfirmationCodeLabel: $customConfirmationCodeLabel, customDiscountMessageLabel: $customDiscountMessageLabel, customFareClassLabel: $customFareClassLabel, customFareNameLabel: $customFareNameLabel, customOtherRestrictionsLabel: $customOtherRestrictionsLabel, customPlatformLabel: $customPlatformLabel, customPurchaseFaceValueLabel: $customPurchaseFaceValueLabel, customPurchasePriceLabel: $customPurchasePriceLabel, customPurchaseReceiptNumberLabel: $customPurchaseReceiptNumberLabel, customRouteRestrictionsDetailsLabel: $customRouteRestrictionsDetailsLabel, customRouteRestrictionsLabel: $customRouteRestrictionsLabel, customSeatLabel: $customSeatLabel, customTicketNumberLabel: $customTicketNumberLabel, customTimeRestrictionsLabel: $customTimeRestrictionsLabel, customTransitTerminusNameLabel: $customTransitTerminusNameLabel, customZoneLabel: $customZoneLabel, enableSingleLegItinerary: $enableSingleLegItinerary, enableSmartTap: $enableSmartTap, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, homepageUri: $homepageUri, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, issuerName: $issuerName, languageOverride: $languageOverride, linksModuleData: $linksModuleData, localizedIssuerName: $localizedIssuerName, locations: $locations, logo: $logo, messages: $messages, multipleDevicesAndHoldersAllowedStatus: $multipleDevicesAndHoldersAllowedStatus, redemptionIssuers: $redemptionIssuers, review: $review, reviewStatus: $reviewStatus, securityAnimation: $securityAnimation, textModulesData: $textModulesData, transitOperatorName: $transitOperatorName, transitType: $transitType, version: $version, viewUnlockRequirement: $viewUnlockRequirement, watermark: $watermark, wordMark: $wordMark} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -5153,7 +5153,7 @@ export def "walletobjects-transit-class walletobjectstransitclassget" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -5163,7 +5163,7 @@ export def "walletobjects-transit-class walletobjectstransitclassget" [
 ]: nothing -> record<activationOptions: record<activationUrl: string, allowReactivation: bool>, allowMultipleUsersPerObject: bool, callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record<firstBottomDetail: record, firstTopDetail: record, secondTopDetail: record>, cardTemplateOverride: record<cardRowTemplateInfos: list>, detailsTemplateOverride: record<detailsItemInfos: list>, listTemplateOverride: record<firstRowOption: record, secondRowOption: record, thirdRowOption: record>>, countryCode: string, customCarriageLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customCoachLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customConcessionCategoryLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customConfirmationCodeLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customDiscountMessageLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customFareClassLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customFareNameLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customOtherRestrictionsLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customPlatformLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customPurchaseFaceValueLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customPurchasePriceLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customPurchaseReceiptNumberLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customRouteRestrictionsDetailsLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customRouteRestrictionsLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customSeatLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customTicketNumberLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customTimeRestrictionsLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customTransitTerminusNameLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customZoneLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, enableSingleLegItinerary: bool, enableSmartTap: bool, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record<defaultValue: record, kind: string, translatedValues: list>, uri: string>, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, issuerName: string, languageOverride: string, linksModuleData: record<uris: list<record>>, localizedIssuerName: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, logo: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, multipleDevicesAndHoldersAllowedStatus: string, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, securityAnimation: record<animationType: string>, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, transitOperatorName: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, transitType: string, version: string, viewUnlockRequirement: string, watermark: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, wordMark: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/transitClass/($resourceId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5225,7 +5225,7 @@ export def "walletobjects-transit-class walletobjectstransitclasspatch" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -5287,7 +5287,7 @@ export def "walletobjects-transit-class walletobjectstransitclasspatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/transitClass/($resourceId)" $qp)
   let body = {activationOptions: $activationOptions, allowMultipleUsersPerObject: $allowMultipleUsersPerObject, callbackOptions: $callbackOptions, classTemplateInfo: $classTemplateInfo, countryCode: $countryCode, customCarriageLabel: $customCarriageLabel, customCoachLabel: $customCoachLabel, customConcessionCategoryLabel: $customConcessionCategoryLabel, customConfirmationCodeLabel: $customConfirmationCodeLabel, customDiscountMessageLabel: $customDiscountMessageLabel, customFareClassLabel: $customFareClassLabel, customFareNameLabel: $customFareNameLabel, customOtherRestrictionsLabel: $customOtherRestrictionsLabel, customPlatformLabel: $customPlatformLabel, customPurchaseFaceValueLabel: $customPurchaseFaceValueLabel, customPurchasePriceLabel: $customPurchasePriceLabel, customPurchaseReceiptNumberLabel: $customPurchaseReceiptNumberLabel, customRouteRestrictionsDetailsLabel: $customRouteRestrictionsDetailsLabel, customRouteRestrictionsLabel: $customRouteRestrictionsLabel, customSeatLabel: $customSeatLabel, customTicketNumberLabel: $customTicketNumberLabel, customTimeRestrictionsLabel: $customTimeRestrictionsLabel, customTransitTerminusNameLabel: $customTransitTerminusNameLabel, customZoneLabel: $customZoneLabel, enableSingleLegItinerary: $enableSingleLegItinerary, enableSmartTap: $enableSmartTap, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, homepageUri: $homepageUri, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, issuerName: $issuerName, languageOverride: $languageOverride, linksModuleData: $linksModuleData, localizedIssuerName: $localizedIssuerName, locations: $locations, logo: $logo, messages: $messages, multipleDevicesAndHoldersAllowedStatus: $multipleDevicesAndHoldersAllowedStatus, redemptionIssuers: $redemptionIssuers, review: $review, reviewStatus: $reviewStatus, securityAnimation: $securityAnimation, textModulesData: $textModulesData, transitOperatorName: $transitOperatorName, transitType: $transitType, version: $version, viewUnlockRequirement: $viewUnlockRequirement, watermark: $watermark, wordMark: $wordMark} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -5351,7 +5351,7 @@ export def "walletobjects-transit-class walletobjectstransitclassupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -5413,7 +5413,7 @@ export def "walletobjects-transit-class walletobjectstransitclassupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/transitClass/($resourceId)" $qp)
   let body = {activationOptions: $activationOptions, allowMultipleUsersPerObject: $allowMultipleUsersPerObject, callbackOptions: $callbackOptions, classTemplateInfo: $classTemplateInfo, countryCode: $countryCode, customCarriageLabel: $customCarriageLabel, customCoachLabel: $customCoachLabel, customConcessionCategoryLabel: $customConcessionCategoryLabel, customConfirmationCodeLabel: $customConfirmationCodeLabel, customDiscountMessageLabel: $customDiscountMessageLabel, customFareClassLabel: $customFareClassLabel, customFareNameLabel: $customFareNameLabel, customOtherRestrictionsLabel: $customOtherRestrictionsLabel, customPlatformLabel: $customPlatformLabel, customPurchaseFaceValueLabel: $customPurchaseFaceValueLabel, customPurchasePriceLabel: $customPurchasePriceLabel, customPurchaseReceiptNumberLabel: $customPurchaseReceiptNumberLabel, customRouteRestrictionsDetailsLabel: $customRouteRestrictionsDetailsLabel, customRouteRestrictionsLabel: $customRouteRestrictionsLabel, customSeatLabel: $customSeatLabel, customTicketNumberLabel: $customTicketNumberLabel, customTimeRestrictionsLabel: $customTimeRestrictionsLabel, customTransitTerminusNameLabel: $customTransitTerminusNameLabel, customZoneLabel: $customZoneLabel, enableSingleLegItinerary: $enableSingleLegItinerary, enableSmartTap: $enableSmartTap, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, homepageUri: $homepageUri, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, issuerName: $issuerName, languageOverride: $languageOverride, linksModuleData: $linksModuleData, localizedIssuerName: $localizedIssuerName, locations: $locations, logo: $logo, messages: $messages, multipleDevicesAndHoldersAllowedStatus: $multipleDevicesAndHoldersAllowedStatus, redemptionIssuers: $redemptionIssuers, review: $review, reviewStatus: $reviewStatus, securityAnimation: $securityAnimation, textModulesData: $textModulesData, transitOperatorName: $transitOperatorName, transitType: $transitType, version: $version, viewUnlockRequirement: $viewUnlockRequirement, watermark: $watermark, wordMark: $wordMark} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -5441,7 +5441,7 @@ export def "walletobjects-transit-class-add-message walletobjectstransitclassadd
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -5453,7 +5453,7 @@ export def "walletobjects-transit-class-add-message walletobjectstransitclassadd
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/transitClass/($resourceId)/addMessage" $qp)
   let body = {message: $message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -5479,7 +5479,7 @@ export def "walletobjects-transit-object walletobjectstransitobjectlist" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -5492,7 +5492,7 @@ export def "walletobjects-transit-object walletobjectstransitobjectlist" [
 ]: nothing -> record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<activationStatus: record, appLinkData: record, barcode: record, classId: string, classReference: record, concessionCategory: string, customConcessionCategory: record, customTicketStatus: record, deviceContext: record, disableExpirationNotification: bool, groupingInfo: record, hasLinkedDevice: bool, hasUsers: bool, heroImage: record, hexBackgroundColor: string, id: string, imageModulesData: list, infoModuleData: record, linksModuleData: record, locations: list, messages: list, passConstraints: record, passengerNames: string, passengerType: string, purchaseDetails: record, rotatingBarcode: record, smartTapRedemptionValue: string, state: string, textModulesData: list, ticketLeg: record, ticketLegs: list, ticketNumber: string, ticketRestrictions: record, ticketStatus: string, tripId: string, tripType: string, validTimeInterval: record, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "classId" $classId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "classId" $classId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/transitObject" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5538,7 +5538,7 @@ export def "walletobjects-transit-object walletobjectstransitobjectinsert" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -5587,7 +5587,7 @@ export def "walletobjects-transit-object walletobjectstransitobjectinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/transitObject" $qp)
   let body = {activationStatus: $activationStatus, appLinkData: $appLinkData, barcode: $barcode, classId: $classId, classReference: $classReference, concessionCategory: $concessionCategory, customConcessionCategory: $customConcessionCategory, customTicketStatus: $customTicketStatus, deviceContext: $deviceContext, disableExpirationNotification: $disableExpirationNotification, groupingInfo: $groupingInfo, hasLinkedDevice: $hasLinkedDevice, hasUsers: $hasUsers, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, linksModuleData: $linksModuleData, locations: $locations, messages: $messages, passConstraints: $passConstraints, passengerNames: $passengerNames, passengerType: $passengerType, purchaseDetails: $purchaseDetails, rotatingBarcode: $rotatingBarcode, smartTapRedemptionValue: $smartTapRedemptionValue, state: $state, textModulesData: $textModulesData, ticketLeg: $ticketLeg, ticketLegs: $ticketLegs, ticketNumber: $ticketNumber, ticketRestrictions: $ticketRestrictions, ticketStatus: $ticketStatus, tripId: $tripId, tripType: $tripType, validTimeInterval: $validTimeInterval, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -5614,7 +5614,7 @@ export def "walletobjects-transit-object walletobjectstransitobjectget" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -5624,7 +5624,7 @@ export def "walletobjects-transit-object walletobjectstransitobjectget" [
 ]: nothing -> record<activationStatus: record<state: string>, appLinkData: record<androidAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, iosAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, webAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>>, barcode: record<alternateText: string, kind: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, type: string, value: string>, classId: string, classReference: record<activationOptions: record<activationUrl: string, allowReactivation: bool>, allowMultipleUsersPerObject: bool, callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record, cardTemplateOverride: record, detailsTemplateOverride: record, listTemplateOverride: record>, countryCode: string, customCarriageLabel: record<defaultValue: record, kind: string, translatedValues: list>, customCoachLabel: record<defaultValue: record, kind: string, translatedValues: list>, customConcessionCategoryLabel: record<defaultValue: record, kind: string, translatedValues: list>, customConfirmationCodeLabel: record<defaultValue: record, kind: string, translatedValues: list>, customDiscountMessageLabel: record<defaultValue: record, kind: string, translatedValues: list>, customFareClassLabel: record<defaultValue: record, kind: string, translatedValues: list>, customFareNameLabel: record<defaultValue: record, kind: string, translatedValues: list>, customOtherRestrictionsLabel: record<defaultValue: record, kind: string, translatedValues: list>, customPlatformLabel: record<defaultValue: record, kind: string, translatedValues: list>, customPurchaseFaceValueLabel: record<defaultValue: record, kind: string, translatedValues: list>, customPurchasePriceLabel: record<defaultValue: record, kind: string, translatedValues: list>, customPurchaseReceiptNumberLabel: record<defaultValue: record, kind: string, translatedValues: list>, customRouteRestrictionsDetailsLabel: record<defaultValue: record, kind: string, translatedValues: list>, customRouteRestrictionsLabel: record<defaultValue: record, kind: string, translatedValues: list>, customSeatLabel: record<defaultValue: record, kind: string, translatedValues: list>, customTicketNumberLabel: record<defaultValue: record, kind: string, translatedValues: list>, customTimeRestrictionsLabel: record<defaultValue: record, kind: string, translatedValues: list>, customTransitTerminusNameLabel: record<defaultValue: record, kind: string, translatedValues: list>, customZoneLabel: record<defaultValue: record, kind: string, translatedValues: list>, enableSingleLegItinerary: bool, enableSmartTap: bool, heroImage: record<contentDescription: record, kind: string, sourceUri: record>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record, uri: string>, id: string, imageModulesData: list<record>, infoModuleData: record<labelValueRows: list, showLastUpdateTime: bool>, issuerName: string, languageOverride: string, linksModuleData: record<uris: list>, localizedIssuerName: record<defaultValue: record, kind: string, translatedValues: list>, locations: list<record>, logo: record<contentDescription: record, kind: string, sourceUri: record>, messages: list<record>, multipleDevicesAndHoldersAllowedStatus: string, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, securityAnimation: record<animationType: string>, textModulesData: list<record>, transitOperatorName: record<defaultValue: record, kind: string, translatedValues: list>, transitType: string, version: string, viewUnlockRequirement: string, watermark: record<contentDescription: record, kind: string, sourceUri: record>, wordMark: record<contentDescription: record, kind: string, sourceUri: record>>, concessionCategory: string, customConcessionCategory: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customTicketStatus: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, deviceContext: record<deviceToken: string>, disableExpirationNotification: bool, groupingInfo: record<groupingId: string, sortIndex: int>, hasLinkedDevice: bool, hasUsers: bool, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, hexBackgroundColor: string, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, linksModuleData: record<uris: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, passConstraints: record<screenshotEligibility: string>, passengerNames: string, passengerType: string, purchaseDetails: record<accountId: string, confirmationCode: string, purchaseDateTime: string, purchaseReceiptNumber: string, ticketCost: record<discountMessage: record, faceValue: record, purchasePrice: record>>, rotatingBarcode: record<alternateText: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, totpDetails: record<algorithm: string, parameters: list, periodMillis: string>, type: string, valuePattern: string>, smartTapRedemptionValue: string, state: string, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, ticketLeg: record<arrivalDateTime: string, carriage: string, departureDateTime: string, destinationName: record<defaultValue: record, kind: string, translatedValues: list>, destinationStationCode: string, fareName: record<defaultValue: record, kind: string, translatedValues: list>, originName: record<defaultValue: record, kind: string, translatedValues: list>, originStationCode: string, platform: string, ticketSeat: record<coach: string, customFareClass: record, fareClass: string, seat: string, seatAssignment: record>, ticketSeats: list<record>, transitOperatorName: record<defaultValue: record, kind: string, translatedValues: list>, transitTerminusName: record<defaultValue: record, kind: string, translatedValues: list>, zone: string>, ticketLegs: table<arrivalDateTime: string, carriage: string, departureDateTime: string, destinationName: record, destinationStationCode: string, fareName: record, originName: record, originStationCode: string, platform: string, ticketSeat: record, ticketSeats: list, transitOperatorName: record, transitTerminusName: record, zone: string>, ticketNumber: string, ticketRestrictions: record<otherRestrictions: record<defaultValue: record, kind: string, translatedValues: list>, routeRestrictions: record<defaultValue: record, kind: string, translatedValues: list>, routeRestrictionsDetails: record<defaultValue: record, kind: string, translatedValues: list>, timeRestrictions: record<defaultValue: record, kind: string, translatedValues: list>>, ticketStatus: string, tripId: string, tripType: string, validTimeInterval: record<end: record<date: string>, kind: string, start: record<date: string>>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/transitObject/($resourceId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5671,7 +5671,7 @@ export def "walletobjects-transit-object walletobjectstransitobjectpatch" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -5720,7 +5720,7 @@ export def "walletobjects-transit-object walletobjectstransitobjectpatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/transitObject/($resourceId)" $qp)
   let body = {activationStatus: $activationStatus, appLinkData: $appLinkData, barcode: $barcode, classId: $classId, classReference: $classReference, concessionCategory: $concessionCategory, customConcessionCategory: $customConcessionCategory, customTicketStatus: $customTicketStatus, deviceContext: $deviceContext, disableExpirationNotification: $disableExpirationNotification, groupingInfo: $groupingInfo, hasLinkedDevice: $hasLinkedDevice, hasUsers: $hasUsers, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, linksModuleData: $linksModuleData, locations: $locations, messages: $messages, passConstraints: $passConstraints, passengerNames: $passengerNames, passengerType: $passengerType, purchaseDetails: $purchaseDetails, rotatingBarcode: $rotatingBarcode, smartTapRedemptionValue: $smartTapRedemptionValue, state: $state, textModulesData: $textModulesData, ticketLeg: $ticketLeg, ticketLegs: $ticketLegs, ticketNumber: $ticketNumber, ticketRestrictions: $ticketRestrictions, ticketStatus: $ticketStatus, tripId: $tripId, tripType: $tripType, validTimeInterval: $validTimeInterval, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -5769,7 +5769,7 @@ export def "walletobjects-transit-object walletobjectstransitobjectupdate" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -5818,7 +5818,7 @@ export def "walletobjects-transit-object walletobjectstransitobjectupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/transitObject/($resourceId)" $qp)
   let body = {activationStatus: $activationStatus, appLinkData: $appLinkData, barcode: $barcode, classId: $classId, classReference: $classReference, concessionCategory: $concessionCategory, customConcessionCategory: $customConcessionCategory, customTicketStatus: $customTicketStatus, deviceContext: $deviceContext, disableExpirationNotification: $disableExpirationNotification, groupingInfo: $groupingInfo, hasLinkedDevice: $hasLinkedDevice, hasUsers: $hasUsers, heroImage: $heroImage, hexBackgroundColor: $hexBackgroundColor, id: $id, imageModulesData: $imageModulesData, infoModuleData: $infoModuleData, linksModuleData: $linksModuleData, locations: $locations, messages: $messages, passConstraints: $passConstraints, passengerNames: $passengerNames, passengerType: $passengerType, purchaseDetails: $purchaseDetails, rotatingBarcode: $rotatingBarcode, smartTapRedemptionValue: $smartTapRedemptionValue, state: $state, textModulesData: $textModulesData, ticketLeg: $ticketLeg, ticketLegs: $ticketLegs, ticketNumber: $ticketNumber, ticketRestrictions: $ticketRestrictions, ticketStatus: $ticketStatus, tripId: $tripId, tripType: $tripType, validTimeInterval: $validTimeInterval, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -5846,7 +5846,7 @@ export def "walletobjects-transit-object-add-message walletobjectstransitobjecta
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -5858,7 +5858,7 @@ export def "walletobjects-transit-object-add-message walletobjectstransitobjecta
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/walletobjects/v1/transitObject/($resourceId)/addMessage" $qp)
   let body = {message: $message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }

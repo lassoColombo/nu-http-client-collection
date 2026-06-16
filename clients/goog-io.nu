@@ -216,14 +216,14 @@ export def "serp serp" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-query: string
+  query: string
   website: string
 ]: any -> record<position: int, query: string, searched_results: int, website: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/serp/")
-  let body = {query: $body_query, website: $website} | compact
+  let body = {query: $query, website: $website} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

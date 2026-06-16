@@ -1434,13 +1434,13 @@ export def "spaces-directory get" [
   --sortBy: string@sortBy-completer # sort the spaces by LAST_CONTENT, NAME, NUMBER_OF_USERS or CREATION_DATE (default: LAST_CONTENT)
   --sortOrder: string@sortOrder-completer # ascending or descending (default: ASCENDING)
   --filter: string@filter-completer # filter for spaces (JOINED, REQUESTED, OPEN, CLOSED or NOT_JOINED_REQUESTED) (default: NONE)
-  --qp-query: string # some sort of query
+  --query: string # some sort of query
   --pagePointer: string # page pointer, start with nothing and for next query use returned pointer
   --numberOfResults: float # number of results to return, 25 by default. (format: int32, default: 25)
 ]: nothing -> record<hasMore: bool, searchPointer: string, spaces: table<accessModeType: string, creationTime: float, creatorId: string, defaultRole: string, description: string, largePictureBase64: string, largePictureContentType: string, largePictureId: string, lastContentCreationTime: float, lastContentCreatorId: string, modificationTime: float, name: string, numberOfExternalParticipants: float, numberOfParticipants: float, numberOfPinnedTopics: float, numberOfReplies: float, numberOfTopics: float, ownerId: string, smallPictureBase64: string, smallPictureContentType: string, smallPictureId: string, spaceId: string, status: string, tags: list, tenantId: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "pagePointer" $pagePointer "scalar") (serialize-qp "numberOfResults" $numberOfResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "pagePointer" $pagePointer "scalar") (serialize-qp "numberOfResults" $numberOfResults "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/spaces/directory" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2064,13 +2064,13 @@ export def "spaces-participants get" [
   --sortOrder: string@sortOrder-completer # ascending or descending (default: ASCENDING)
   --filterType: string@filterType-completer # filtertype for participants (ACCESS_TYPE, ROLE or STATE)
   --filterValue: string # value for the filter
-  --qp-query: string # some sort of query
+  --query: string # some sort of query
   --searchPointer: string # The search pointer (leave empty initially).
   --numberOfResults: float # number of results to return, 25 by default. (format: int32, default: 25)
 ]: nothing -> record<hasMore: bool, participants: table<creationTime: float, firstName: string, lastName: string, modificationTime: float, numberOfReplies: float, numberOfTopics: float, role: string, smallImageUri: string, state: string, tenantId: string, userId: string>, searchPointer: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "filterType" $filterType "scalar") (serialize-qp "filterValue" $filterValue "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "searchPointer" $searchPointer "scalar") (serialize-qp "numberOfResults" $numberOfResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "filterType" $filterType "scalar") (serialize-qp "filterValue" $filterValue "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "searchPointer" $searchPointer "scalar") (serialize-qp "numberOfResults" $numberOfResults "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/spaces/($id)/participants" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2143,11 +2143,11 @@ export def "spaces-search-participants-to-add searchParticipantsToAdd" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # The query 
+  --query: string # The query 
 ]: nothing -> table<department: string, firstName: string, isMember: bool, jobTitle: string, lastName: string, smallImageUri: string, tenantId: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/spaces/($id)/searchParticipantsToAdd" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2169,11 +2169,11 @@ export def "spaces-search-space-participants searchSpaceParticipants" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # The query to search with. If searchpointer/hasMotre is returned, refine query.
+  --query: string # The query to search with. If searchpointer/hasMotre is returned, refine query.
 ]: nothing -> table<hasMore: bool, participants: list<record>, searchPointer: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/spaces/($id)/searchSpaceParticipants" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

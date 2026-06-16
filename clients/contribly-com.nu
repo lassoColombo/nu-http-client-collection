@@ -781,7 +781,7 @@ export def "forms post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --callToAction: string
   --cssUrl: string
-  --body-fields: list # item shape: {description?: string, label?: string, name?: string, options?: list, public?: bool, required?: bool, type?: string}
+  --fields: list # item shape: {description?: string, label?: string, name?: string, options?: list, public?: bool, required?: bool, type?: string}
   --heading: string
   --name: string
   --noCss: oneof<nothing, bool>
@@ -791,7 +791,7 @@ export def "forms post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/forms")
-  let body = {callToAction: $callToAction, cssUrl: $cssUrl, fields: $body_fields, heading: $heading, name: $name, noCss: $noCss, tags: $tags} | compact
+  let body = {callToAction: $callToAction, cssUrl: $cssUrl, fields: $fields, heading: $heading, name: $name, noCss: $noCss, tags: $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

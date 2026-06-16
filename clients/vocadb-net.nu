@@ -169,14 +169,14 @@ export def "activity-entries get" [
   --entryType: string@entryType-completer
   --maxResults: int # format: int32, default: 50
   --getTotalCount: oneof<nothing, bool> # default: false
-  --qp-fields: string@fields-completer
+  --fields: string@fields-completer
   --entryFields: string@entryFields-completer
   --lang: string@lang-completer
   --sortRule: string@sortRule-completer
 ]: nothing -> record<items: table<archivedVersion: record, author: record, createDate: string, editEvent: string, entry: record>, term: string, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "before" $before "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "userId" $userId "scalar") (serialize-qp "editEvent" $editEvent "scalar") (serialize-qp "entryType" $entryType "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "entryFields" $entryFields "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "sortRule" $sortRule "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "before" $before "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "userId" $userId "scalar") (serialize-qp "editEvent" $editEvent "scalar") (serialize-qp "entryType" $entryType "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "entryFields" $entryFields "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "sortRule" $sortRule "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/activityEntries" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -194,7 +194,7 @@ export def "albums list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
+  --query: string # default: 
   --discTypes: string@discTypes-completer
   --tagName: list
   --tagId: list
@@ -215,12 +215,12 @@ export def "albums list" [
   --preferAccurateMatches: oneof<nothing, bool> # default: false
   --deleted: oneof<nothing, bool> # default: false
   --nameMatchMode: string@nameMatchMode-completer
-  --qp-fields: string@fields-completer-1
+  --fields: string@fields-completer-1
   --lang: string@lang-completer
 ]: nothing -> record<items: table<additionalNames: string, artistString: string, artists: list, barcode: string, catalogNumber: string, createDate: string, defaultName: string, defaultNameLanguage: string, deleted: bool, description: string, discType: string, discs: list, id: int, identifiers: list, mainPicture: record, mergedTo: int, name: string, names: list, pvs: list, ratingAverage: float, ratingCount: int, releaseDate: record, releaseEvent: record, status: string, tags: list, tracks: list, version: int, webLinks: list>, term: string, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "discTypes" $discTypes "scalar") (serialize-qp "tagName[]" $tagName "multi") (serialize-qp "tagId[]" $tagId "multi") (serialize-qp "childTags" $childTags "scalar") (serialize-qp "artistId[]" $artistId "multi") (serialize-qp "artistParticipationStatus" $artistParticipationStatus "scalar") (serialize-qp "childVoicebanks" $childVoicebanks "scalar") (serialize-qp "includeMembers" $includeMembers "scalar") (serialize-qp "barcode" $barcode "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "releaseDateAfter" $releaseDateAfter "scalar") (serialize-qp "releaseDateBefore" $releaseDateBefore "scalar") (serialize-qp "advancedFilters" $advancedFilters "multi") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "preferAccurateMatches" $preferAccurateMatches "scalar") (serialize-qp "deleted" $deleted "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "discTypes" $discTypes "scalar") (serialize-qp "tagName[]" $tagName "multi") (serialize-qp "tagId[]" $tagId "multi") (serialize-qp "childTags" $childTags "scalar") (serialize-qp "artistId[]" $artistId "multi") (serialize-qp "artistParticipationStatus" $artistParticipationStatus "scalar") (serialize-qp "childVoicebanks" $childVoicebanks "scalar") (serialize-qp "includeMembers" $includeMembers "scalar") (serialize-qp "barcode" $barcode "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "releaseDateAfter" $releaseDateAfter "scalar") (serialize-qp "releaseDateBefore" $releaseDateBefore "scalar") (serialize-qp "advancedFilters" $advancedFilters "multi") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "preferAccurateMatches" $preferAccurateMatches "scalar") (serialize-qp "deleted" $deleted "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/albums" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -290,13 +290,13 @@ export def "albums-names get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
+  --query: string # default: 
   --nameMatchMode: string@nameMatchMode-completer
   --maxResults: int # format: int32, default: 15
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/albums/names" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -315,11 +315,11 @@ export def "albums-new get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --languagePreference: string@languagePreference-completer
-  --qp-fields: string@fields-completer-1
+  --fields: string@fields-completer-1
 ]: nothing -> table<additionalNames: string, artistString: string, artists: list<record>, barcode: string, catalogNumber: string, createDate: string, defaultName: string, defaultNameLanguage: string, deleted: bool, description: string, discType: string, discs: list<record>, id: int, identifiers: list<record>, mainPicture: record<mime: string, name: string, urlOriginal: string, urlSmallThumb: string, urlThumb: string, urlTinyThumb: string>, mergedTo: int, name: string, names: list<record>, pvs: list<record>, ratingAverage: float, ratingCount: int, releaseDate: record<day: int, formatted: string, isEmpty: bool, month: int, year: int>, releaseEvent: record<additionalNames: string, artists: list, category: string, date: string, description: string, endDate: string, id: int, mainPicture: record, name: string, names: list, pvs: list, series: record, seriesId: int, seriesNumber: int, seriesSuffix: string, songList: record, status: string, tags: list, urlSlug: string, venue: record, venueName: string, version: int, webLinks: list>, status: string, tags: list<record>, tracks: list<record>, version: int, webLinks: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "languagePreference" $languagePreference "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "languagePreference" $languagePreference "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/albums/new" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -339,11 +339,11 @@ export def "albums-top get" [
   --accept: string@accept-completer # Response content type
   --ignoreIds: list
   --languagePreference: string@languagePreference-completer
-  --qp-fields: string@fields-completer-1
+  --fields: string@fields-completer-1
 ]: nothing -> table<additionalNames: string, artistString: string, artists: list<record>, barcode: string, catalogNumber: string, createDate: string, defaultName: string, defaultNameLanguage: string, deleted: bool, description: string, discType: string, discs: list<record>, id: int, identifiers: list<record>, mainPicture: record<mime: string, name: string, urlOriginal: string, urlSmallThumb: string, urlThumb: string, urlTinyThumb: string>, mergedTo: int, name: string, names: list<record>, pvs: list<record>, ratingAverage: float, ratingCount: int, releaseDate: record<day: int, formatted: string, isEmpty: bool, month: int, year: int>, releaseEvent: record<additionalNames: string, artists: list, category: string, date: string, description: string, endDate: string, id: int, mainPicture: record, name: string, names: list, pvs: list, series: record, seriesId: int, seriesNumber: int, seriesSuffix: string, songList: record, status: string, tags: list, urlSlug: string, venue: record, venueName: string, version: int, webLinks: list>, status: string, tags: list<record>, tracks: list<record>, version: int, webLinks: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ignoreIds[]" $ignoreIds "multi") (serialize-qp "languagePreference" $languagePreference "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ignoreIds[]" $ignoreIds "multi") (serialize-qp "languagePreference" $languagePreference "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/albums/top" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -384,13 +384,13 @@ export def "albums get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string@fields-completer-1
+  --fields: string@fields-completer-1
   --songFields: string@songFields-completer
   --lang: string@lang-completer
 ]: nothing -> record<additionalNames: string, artistString: string, artists: table<artist: record, categories: string, effectiveRoles: string, isSupport: bool, name: string, roles: string>, barcode: string, catalogNumber: string, createDate: string, defaultName: string, defaultNameLanguage: string, deleted: bool, description: string, discType: string, discs: table<discNumber: int, id: int, mediaType: string, name: string>, id: int, identifiers: table<value: string>, mainPicture: record<mime: string, name: string, urlOriginal: string, urlSmallThumb: string, urlThumb: string, urlTinyThumb: string>, mergedTo: int, name: string, names: table<language: string, value: string>, pvs: table<author: string, createdBy: int, disabled: bool, extendedMetadata: record, id: int, length: int, name: string, publishDate: string, pvId: string, pvType: string, service: string, thumbUrl: string, url: string>, ratingAverage: float, ratingCount: int, releaseDate: record<day: int, formatted: string, isEmpty: bool, month: int, year: int>, releaseEvent: record<additionalNames: string, artists: list<record>, category: string, date: string, description: string, endDate: string, id: int, mainPicture: record<mime: string, name: string, urlOriginal: string, urlSmallThumb: string, urlThumb: string, urlTinyThumb: string>, name: string, names: list<record>, pvs: list<record>, series: record<additionalNames: string, category: string, deleted: bool, description: string, id: int, name: string, pictureMime: string, status: string, urlSlug: string, version: int, webLinks: list>, seriesId: int, seriesNumber: int, seriesSuffix: string, songList: record<featuredCategory: string, id: int, name: string>, status: string, tags: list<record>, urlSlug: string, venue: record<additionalNames: string, address: string, addressCountryCode: string, coordinates: record, deleted: bool, description: string, events: list, id: int, name: string, names: list, status: string, version: int, webLinks: list>, venueName: string, version: int, webLinks: list<record>>, status: string, tags: table<count: int, tag: record>, tracks: table<discNumber: int, id: int, name: string, rating: string, song: record, trackNumber: int>, version: int, webLinks: table<category: string, description: string, descriptionOrUrl: string, disabled: bool, id: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "songFields" $songFields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "songFields" $songFields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/albums/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -540,12 +540,12 @@ export def "albums-tracks get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string@fields-completer-2
+  --fields: string@fields-completer-2
   --lang: string@lang-completer
 ]: nothing -> table<discNumber: int, id: int, name: string, rating: string, song: record<additionalNames: string, albums: list, artistString: string, artists: list, createDate: string, defaultName: string, defaultNameLanguage: string, deleted: bool, favoritedTimes: int, id: int, lengthSeconds: int, lyrics: list, mainPicture: record, maxMilliBpm: int, mergedTo: int, minMilliBpm: int, name: string, names: list, originalVersionId: int, publishDate: string, pvServices: string, pvs: list, ratingScore: int, releaseEvent: record, songType: string, status: string, tags: list, thumbUrl: string, version: int, webLinks: list>, trackNumber: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/albums/($id)/tracks" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -611,7 +611,7 @@ export def "artists list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
+  --query: string # default: 
   --artistTypes: string
   --allowBaseVoicebanks: oneof<nothing, bool> # default: true
   --tagName: list
@@ -626,12 +626,12 @@ export def "artists list" [
   --qp-sort: string@sort-completer-1
   --preferAccurateMatches: oneof<nothing, bool> # default: false
   --nameMatchMode: string@nameMatchMode-completer
-  --qp-fields: string@fields-completer-3
+  --fields: string@fields-completer-3
   --lang: string@lang-completer
 ]: nothing -> record<items: table<additionalNames: string, artistLinks: list, artistLinksReverse: list, artistType: string, baseVoicebank: record, createDate: string, defaultName: string, defaultNameLanguage: string, deleted: bool, description: string, id: int, mainPicture: record, mergedTo: int, name: string, names: list, pictureMime: string, relations: record, releaseDate: string, status: string, tags: list, version: int, webLinks: list>, term: string, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "artistTypes" $artistTypes "scalar") (serialize-qp "allowBaseVoicebanks" $allowBaseVoicebanks "scalar") (serialize-qp "tagName[]" $tagName "multi") (serialize-qp "tagId[]" $tagId "multi") (serialize-qp "childTags" $childTags "scalar") (serialize-qp "followedByUserId" $followedByUserId "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "advancedFilters" $advancedFilters "multi") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "preferAccurateMatches" $preferAccurateMatches "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "artistTypes" $artistTypes "scalar") (serialize-qp "allowBaseVoicebanks" $allowBaseVoicebanks "scalar") (serialize-qp "tagName[]" $tagName "multi") (serialize-qp "tagId[]" $tagId "multi") (serialize-qp "childTags" $childTags "scalar") (serialize-qp "followedByUserId" $followedByUserId "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "advancedFilters" $advancedFilters "multi") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "preferAccurateMatches" $preferAccurateMatches "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/artists" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -701,13 +701,13 @@ export def "artists-names get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
+  --query: string # default: 
   --nameMatchMode: string@nameMatchMode-completer
   --maxResults: int # format: int32, default: 15
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/artists/names" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -748,13 +748,13 @@ export def "artists get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string@fields-completer-3
+  --fields: string@fields-completer-3
   --relations: string@relations-completer
   --lang: string@lang-completer
 ]: nothing -> record<additionalNames: string, artistLinks: table<artist: record, linkType: string>, artistLinksReverse: table<artist: record, linkType: string>, artistType: string, baseVoicebank: record<additionalNames: string, artistType: string, deleted: bool, id: int, name: string, pictureMime: string, releaseDate: string, status: string, version: int>, createDate: string, defaultName: string, defaultNameLanguage: string, deleted: bool, description: string, id: int, mainPicture: record<mime: string, name: string, urlOriginal: string, urlSmallThumb: string, urlThumb: string, urlTinyThumb: string>, mergedTo: int, name: string, names: table<language: string, value: string>, pictureMime: string, relations: record<latestAlbums: list<record>, latestEvents: list<record>, latestSongs: list<record>, popularAlbums: list<record>, popularSongs: list<record>>, releaseDate: string, status: string, tags: table<count: int, tag: record>, version: int, webLinks: table<category: string, description: string, descriptionOrUrl: string, disabled: bool, id: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "relations" $relations "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "relations" $relations "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/artists/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -832,14 +832,14 @@ export def "comments list" [
   --entryType: string@entryType-completer
   --maxResults: int # format: int32, default: 50
   --getTotalCount: oneof<nothing, bool> # default: false
-  --qp-fields: string@fields-completer-4
+  --fields: string@fields-completer-4
   --entryFields: string@entryFields-completer
   --lang: string@lang-completer
   --sortRule: string@sortRule-completer
 ]: nothing -> record<items: table<author: record, authorName: string, created: string, entry: record, id: int, message: string>, term: string, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "before" $before "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "userId" $userId "scalar") (serialize-qp "entryType" $entryType "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "entryFields" $entryFields "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "sortRule" $sortRule "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "before" $before "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "userId" $userId "scalar") (serialize-qp "entryType" $entryType "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "entryFields" $entryFields "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "sortRule" $sortRule "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/comments" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1019,11 +1019,11 @@ export def "discussions-folders get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string@fields-completer-5
+  --fields: string@fields-completer-5
 ]: nothing -> table<description: string, id: int, lastTopicAuthor: record<active: bool, groupId: string, id: int, knownLanguages: list, mainPicture: record, memberSince: string, name: string, oldUsernames: list, verifiedArtist: bool>, lastTopicDate: string, name: string, topicCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/discussions/folders" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1076,11 +1076,11 @@ export def "discussions-folders-topics get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string@fields-completer-6
+  --fields: string@fields-completer-6
 ]: nothing -> table<author: record<active: bool, groupId: string, id: int, knownLanguages: list, mainPicture: record, memberSince: string, name: string, oldUsernames: list, verifiedArtist: bool>, commentCount: int, comments: list<record>, content: string, created: string, folderId: int, id: int, lastComment: record<author: record, authorName: string, created: string, entry: record, id: int, message: string>, locked: bool, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/discussions/folders/($folderId)/topics" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1141,11 +1141,11 @@ export def "discussions-topics list" [
   --maxResults: int # format: int32, default: 10
   --getTotalCount: oneof<nothing, bool> # default: false
   --qp-sort: string@sort-completer-2
-  --qp-fields: string@fields-completer-6
+  --fields: string@fields-completer-6
 ]: nothing -> record<items: table<author: record, commentCount: int, comments: list, content: string, created: string, folderId: int, id: int, lastComment: record, locked: bool, name: string>, term: string, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "folderId" $folderId "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "folderId" $folderId "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/discussions/topics" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1184,11 +1184,11 @@ export def "discussions-topics get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string@fields-completer-6
+  --fields: string@fields-completer-6
 ]: nothing -> record<author: record<active: bool, groupId: string, id: int, knownLanguages: list<record>, mainPicture: record<mime: string, name: string, urlOriginal: string, urlSmallThumb: string, urlThumb: string, urlTinyThumb: string>, memberSince: string, name: string, oldUsernames: list<record>, verifiedArtist: bool>, commentCount: int, comments: table<author: record, authorName: string, created: string, entry: record, id: int, message: string>, content: string, created: string, folderId: int, id: int, lastComment: record<author: record<active: bool, groupId: string, id: int, knownLanguages: list, mainPicture: record, memberSince: string, name: string, oldUsernames: list, verifiedArtist: bool>, authorName: string, created: string, entry: record<activityDate: string, additionalNames: string, artistString: string, artistType: string, createDate: string, defaultName: string, defaultNameLanguage: string, description: string, discType: string, entryType: string, eventCategory: string, id: int, mainPicture: record, name: string, names: list, pvs: list, releaseEventSeriesName: string, songListFeaturedCategory: string, songType: string, status: string, tagCategoryName: string, tags: list, urlSlug: string, version: int, webLinks: list>, id: int, message: string>, locked: bool, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/discussions/topics/($topicId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1276,7 +1276,7 @@ export def "entries get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
+  --query: string # default: 
   --tagName: list
   --tagId: list
   --childTags: oneof<nothing, bool> # default: false
@@ -1287,12 +1287,12 @@ export def "entries get" [
   --getTotalCount: oneof<nothing, bool> # default: false
   --qp-sort: string@sort-completer-3
   --nameMatchMode: string@nameMatchMode-completer
-  --qp-fields: string@fields-completer-7
+  --fields: string@fields-completer-7
   --lang: string@lang-completer
 ]: nothing -> record<items: table<activityDate: string, additionalNames: string, artistString: string, artistType: string, createDate: string, defaultName: string, defaultNameLanguage: string, description: string, discType: string, entryType: string, eventCategory: string, id: int, mainPicture: record, name: string, names: list, pvs: list, releaseEventSeriesName: string, songListFeaturedCategory: string, songType: string, status: string, tagCategoryName: string, tags: list, urlSlug: string, version: int, webLinks: list>, term: string, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "tagName[]" $tagName "multi") (serialize-qp "tagId[]" $tagId "multi") (serialize-qp "childTags" $childTags "scalar") (serialize-qp "entryTypes" $entryTypes "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "tagName[]" $tagName "multi") (serialize-qp "tagId[]" $tagId "multi") (serialize-qp "childTags" $childTags "scalar") (serialize-qp "entryTypes" $entryTypes "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/entries" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1310,13 +1310,13 @@ export def "entries-names get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
+  --query: string # default: 
   --nameMatchMode: string@nameMatchMode-completer
   --maxResults: int # format: int32, default: 10
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/entries/names" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1336,11 +1336,11 @@ export def "entry-types-tag get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string@fields-completer-8
+  --fields: string@fields-completer-8
 ]: nothing -> record<additionalNames: string, aliasedTo: record<additionalNames: string, categoryName: string, id: int, name: string, urlSlug: string>, categoryName: string, createDate: string, defaultNameLanguage: string, description: string, id: int, mainPicture: record<mime: string, name: string, urlOriginal: string, urlSmallThumb: string, urlThumb: string, urlTinyThumb: string>, name: string, names: table<id: int, language: string, value: string>, parent: record<additionalNames: string, categoryName: string, id: int, name: string, urlSlug: string>, relatedTags: table<additionalNames: string, categoryName: string, id: int, name: string, urlSlug: string>, status: string, targets: int, translatedDescription: record<english: string, original: string>, urlSlug: string, usageCount: int, version: int, webLinks: table<category: string, description: string, descriptionOrUrl: string, disabled: bool, id: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/entry-types/($entryType)/($subType)/tag" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1385,8 +1385,8 @@ export def "release-event-series list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
-  --qp-fields: string@fields-completer-9
+  --query: string # default: 
+  --fields: string@fields-completer-9
   --start: int # format: int32, default: 0
   --maxResults: int # format: int32, default: 10
   --getTotalCount: oneof<nothing, bool> # default: false
@@ -1395,7 +1395,7 @@ export def "release-event-series list" [
 ]: nothing -> record<items: table<additionalNames: string, category: string, description: string, events: list, id: int, mainPicture: record, name: string, names: list, status: string, urlSlug: string, version: int, webLinks: list>, term: string, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/releaseEventSeries" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1437,12 +1437,12 @@ export def "release-event-series get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string@fields-completer-9
+  --fields: string@fields-completer-9
   --lang: string@lang-completer
 ]: nothing -> record<additionalNames: string, category: string, description: string, events: table<additionalNames: string, artists: list, category: string, date: string, description: string, endDate: string, id: int, mainPicture: record, name: string, names: list, pvs: list, series: record, seriesId: int, seriesNumber: int, seriesSuffix: string, songList: record, status: string, tags: list, urlSlug: string, venue: record, venueName: string, version: int, webLinks: list>, id: int, mainPicture: record<mime: string, name: string, urlOriginal: string, urlSmallThumb: string, urlThumb: string, urlTinyThumb: string>, name: string, names: table<language: string, value: string>, status: string, urlSlug: string, version: int, webLinks: table<category: string, description: string, descriptionOrUrl: string, disabled: bool, id: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/releaseEventSeries/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1481,7 +1481,7 @@ export def "release-events list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
+  --query: string # default: 
   --nameMatchMode: string@nameMatchMode-completer
   --seriesId: int # format: int32, default: 0
   --afterDate: string # format: date-time
@@ -1498,13 +1498,13 @@ export def "release-events list" [
   --maxResults: int # format: int32, default: 10
   --getTotalCount: oneof<nothing, bool> # default: false
   --qp-sort: string@sort-completer-4
-  --qp-fields: string@fields-completer-10
+  --fields: string@fields-completer-10
   --lang: string@lang-completer
   --sortDirection: string@sortDirection-completer
 ]: nothing -> record<items: table<additionalNames: string, artists: list, category: string, date: string, description: string, endDate: string, id: int, mainPicture: record, name: string, names: list, pvs: list, series: record, seriesId: int, seriesNumber: int, seriesSuffix: string, songList: record, status: string, tags: list, urlSlug: string, venue: record, venueName: string, version: int, webLinks: list>, term: string, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "seriesId" $seriesId "scalar") (serialize-qp "afterDate" $afterDate "scalar") (serialize-qp "beforeDate" $beforeDate "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "userCollectionId" $userCollectionId "scalar") (serialize-qp "tagId[]" $tagId "multi") (serialize-qp "childTags" $childTags "scalar") (serialize-qp "artistId[]" $artistId "multi") (serialize-qp "childVoicebanks" $childVoicebanks "scalar") (serialize-qp "includeMembers" $includeMembers "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "sortDirection" $sortDirection "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "seriesId" $seriesId "scalar") (serialize-qp "afterDate" $afterDate "scalar") (serialize-qp "beforeDate" $beforeDate "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "userCollectionId" $userCollectionId "scalar") (serialize-qp "tagId[]" $tagId "multi") (serialize-qp "childTags" $childTags "scalar") (serialize-qp "artistId[]" $artistId "multi") (serialize-qp "childVoicebanks" $childVoicebanks "scalar") (serialize-qp "includeMembers" $includeMembers "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "sortDirection" $sortDirection "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/releaseEvents" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1522,12 +1522,12 @@ export def "release-events-names get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
+  --query: string # default: 
   --maxResults: int # format: int32, default: 10
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/releaseEvents/names" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1546,12 +1546,12 @@ export def "release-events-albums get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string@fields-completer-1
+  --fields: string@fields-completer-1
   --lang: string@lang-completer
 ]: nothing -> table<additionalNames: string, artistString: string, artists: list<record>, barcode: string, catalogNumber: string, createDate: string, defaultName: string, defaultNameLanguage: string, deleted: bool, description: string, discType: string, discs: list<record>, id: int, identifiers: list<record>, mainPicture: record<mime: string, name: string, urlOriginal: string, urlSmallThumb: string, urlThumb: string, urlTinyThumb: string>, mergedTo: int, name: string, names: list<record>, pvs: list<record>, ratingAverage: float, ratingCount: int, releaseDate: record<day: int, formatted: string, isEmpty: bool, month: int, year: int>, releaseEvent: record<additionalNames: string, artists: list, category: string, date: string, description: string, endDate: string, id: int, mainPicture: record, name: string, names: list, pvs: list, series: record, seriesId: int, seriesNumber: int, seriesSuffix: string, songList: record, status: string, tags: list, urlSlug: string, venue: record, venueName: string, version: int, webLinks: list>, status: string, tags: list<record>, tracks: list<record>, version: int, webLinks: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/releaseEvents/($eventId)/albums" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1570,12 +1570,12 @@ export def "release-events-published-songs get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string@fields-completer-2
+  --fields: string@fields-completer-2
   --lang: string@lang-completer
 ]: nothing -> table<additionalNames: string, albums: list<record>, artistString: string, artists: list<record>, createDate: string, defaultName: string, defaultNameLanguage: string, deleted: bool, favoritedTimes: int, id: int, lengthSeconds: int, lyrics: list<record>, mainPicture: record<mime: string, name: string, urlOriginal: string, urlSmallThumb: string, urlThumb: string, urlTinyThumb: string>, maxMilliBpm: int, mergedTo: int, minMilliBpm: int, name: string, names: list<record>, originalVersionId: int, publishDate: string, pvServices: string, pvs: list<record>, ratingScore: int, releaseEvent: record<additionalNames: string, artists: list, category: string, date: string, description: string, endDate: string, id: int, mainPicture: record, name: string, names: list, pvs: list, series: record, seriesId: int, seriesNumber: int, seriesSuffix: string, songList: record, status: string, tags: list, urlSlug: string, venue: record, venueName: string, version: int, webLinks: list>, songType: string, status: string, tags: list<record>, thumbUrl: string, version: int, webLinks: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/releaseEvents/($eventId)/published-songs" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1641,12 +1641,12 @@ export def "release-events get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string@fields-completer-10
+  --fields: string@fields-completer-10
   --lang: string@lang-completer
 ]: nothing -> record<additionalNames: string, artists: table<artist: record, effectiveRoles: string, id: int, name: string, roles: string>, category: string, date: string, description: string, endDate: string, id: int, mainPicture: record<mime: string, name: string, urlOriginal: string, urlSmallThumb: string, urlThumb: string, urlTinyThumb: string>, name: string, names: table<language: string, value: string>, pvs: table<author: string, createdBy: int, disabled: bool, extendedMetadata: record, id: int, length: int, name: string, publishDate: string, pvId: string, pvType: string, service: string, thumbUrl: string, url: string>, series: record<additionalNames: string, category: string, deleted: bool, description: string, id: int, name: string, pictureMime: string, status: string, urlSlug: string, version: int, webLinks: list<record>>, seriesId: int, seriesNumber: int, seriesSuffix: string, songList: record<featuredCategory: string, id: int, name: string>, status: string, tags: table<count: int, tag: record>, urlSlug: string, venue: record<additionalNames: string, address: string, addressCountryCode: string, coordinates: record<formatted: string, hasValue: bool, latitude: float, longitude: float>, deleted: bool, description: string, events: list<record>, id: int, name: string, names: list<record>, status: string, version: int, webLinks: list<record>>, venueName: string, version: int, webLinks: table<category: string, description: string, descriptionOrUrl: string, disabled: bool, id: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/releaseEvents/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1775,7 +1775,7 @@ export def "song-lists-featured get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
+  --query: string # default: 
   --tagId: list
   --childTags: oneof<nothing, bool> # default: false
   --nameMatchMode: string@nameMatchMode-completer
@@ -1784,12 +1784,12 @@ export def "song-lists-featured get" [
   --maxResults: int # format: int32, default: 10
   --getTotalCount: oneof<nothing, bool> # default: false
   --qp-sort: string@sort-completer-5
-  --qp-fields: string@fields-completer-11
+  --fields: string@fields-completer-11
   --lang: string@lang-completer
 ]: nothing -> record<items: table<author: record, deleted: bool, description: string, eventDate: string, events: list, featuredCategory: string, id: int, latestComments: list, mainPicture: record, name: string, status: string, tags: list>, term: string, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "tagId[]" $tagId "multi") (serialize-qp "childTags" $childTags "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "featuredCategory" $featuredCategory "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "tagId[]" $tagId "multi") (serialize-qp "childTags" $childTags "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "featuredCategory" $featuredCategory "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/songLists/featured" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1807,14 +1807,14 @@ export def "song-lists-featured-names get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
+  --query: string # default: 
   --nameMatchMode: string@nameMatchMode-completer
   --featuredCategory: string@featuredCategory-completer
   --maxResults: int # format: int32, default: 10
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "featuredCategory" $featuredCategory "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "featuredCategory" $featuredCategory "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/songLists/featured/names" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1910,7 +1910,7 @@ export def "song-lists-songs get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
+  --query: string # default: 
   --songTypes: string
   --pvServices: string@pvServices-completer
   --tagId: list
@@ -1922,12 +1922,12 @@ export def "song-lists-songs get" [
   --getTotalCount: oneof<nothing, bool> # default: false
   --qp-sort: string@sort-completer-6
   --nameMatchMode: string@nameMatchMode-completer
-  --qp-fields: string@fields-completer-2
+  --fields: string@fields-completer-2
   --lang: string@lang-completer
 ]: nothing -> record<items: table<notes: string, order: int, song: record>, term: string, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "songTypes" $songTypes "scalar") (serialize-qp "pvServices" $pvServices "scalar") (serialize-qp "tagId[]" $tagId "multi") (serialize-qp "artistId[]" $artistId "multi") (serialize-qp "childVoicebanks" $childVoicebanks "scalar") (serialize-qp "advancedFilters" $advancedFilters "multi") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "songTypes" $songTypes "scalar") (serialize-qp "pvServices" $pvServices "scalar") (serialize-qp "tagId[]" $tagId "multi") (serialize-qp "artistId[]" $artistId "multi") (serialize-qp "childVoicebanks" $childVoicebanks "scalar") (serialize-qp "advancedFilters" $advancedFilters "multi") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/songLists/($listId)/songs" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1945,7 +1945,7 @@ export def "songs list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
+  --query: string # default: 
   --songTypes: string
   --afterDate: string # format: date-time
   --beforeDate: string # format: date-time
@@ -1972,7 +1972,7 @@ export def "songs list" [
   --qp-sort: string@sort-completer-6
   --preferAccurateMatches: oneof<nothing, bool> # default: false
   --nameMatchMode: string@nameMatchMode-completer
-  --qp-fields: string@fields-completer-2
+  --fields: string@fields-completer-2
   --lang: string@lang-completer
   --minMilliBpm: int # format: int32
   --maxMilliBpm: int # format: int32
@@ -1981,7 +1981,7 @@ export def "songs list" [
 ]: nothing -> record<items: table<additionalNames: string, albums: list, artistString: string, artists: list, createDate: string, defaultName: string, defaultNameLanguage: string, deleted: bool, favoritedTimes: int, id: int, lengthSeconds: int, lyrics: list, mainPicture: record, maxMilliBpm: int, mergedTo: int, minMilliBpm: int, name: string, names: list, originalVersionId: int, publishDate: string, pvServices: string, pvs: list, ratingScore: int, releaseEvent: record, songType: string, status: string, tags: list, thumbUrl: string, version: int, webLinks: list>, term: string, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "songTypes" $songTypes "scalar") (serialize-qp "afterDate" $afterDate "scalar") (serialize-qp "beforeDate" $beforeDate "scalar") (serialize-qp "tagName[]" $tagName "multi") (serialize-qp "tagId[]" $tagId "multi") (serialize-qp "childTags" $childTags "scalar") (serialize-qp "unifyTypesAndTags" $unifyTypesAndTags "scalar") (serialize-qp "artistId[]" $artistId "multi") (serialize-qp "artistParticipationStatus" $artistParticipationStatus "scalar") (serialize-qp "childVoicebanks" $childVoicebanks "scalar") (serialize-qp "includeMembers" $includeMembers "scalar") (serialize-qp "onlyWithPvs" $onlyWithPvs "scalar") (serialize-qp "pvServices" $pvServices "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "minScore" $minScore "scalar") (serialize-qp "userCollectionId" $userCollectionId "scalar") (serialize-qp "releaseEventId" $releaseEventId "scalar") (serialize-qp "parentSongId" $parentSongId "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "advancedFilters" $advancedFilters "multi") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "preferAccurateMatches" $preferAccurateMatches "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "minMilliBpm" $minMilliBpm "scalar") (serialize-qp "maxMilliBpm" $maxMilliBpm "scalar") (serialize-qp "minLength" $minLength "scalar") (serialize-qp "maxLength" $maxLength "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "songTypes" $songTypes "scalar") (serialize-qp "afterDate" $afterDate "scalar") (serialize-qp "beforeDate" $beforeDate "scalar") (serialize-qp "tagName[]" $tagName "multi") (serialize-qp "tagId[]" $tagId "multi") (serialize-qp "childTags" $childTags "scalar") (serialize-qp "unifyTypesAndTags" $unifyTypesAndTags "scalar") (serialize-qp "artistId[]" $artistId "multi") (serialize-qp "artistParticipationStatus" $artistParticipationStatus "scalar") (serialize-qp "childVoicebanks" $childVoicebanks "scalar") (serialize-qp "includeMembers" $includeMembers "scalar") (serialize-qp "onlyWithPvs" $onlyWithPvs "scalar") (serialize-qp "pvServices" $pvServices "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "minScore" $minScore "scalar") (serialize-qp "userCollectionId" $userCollectionId "scalar") (serialize-qp "releaseEventId" $releaseEventId "scalar") (serialize-qp "parentSongId" $parentSongId "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "advancedFilters" $advancedFilters "multi") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "preferAccurateMatches" $preferAccurateMatches "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "minMilliBpm" $minMilliBpm "scalar") (serialize-qp "maxMilliBpm" $maxMilliBpm "scalar") (serialize-qp "minLength" $minLength "scalar") (serialize-qp "maxLength" $maxLength "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/songs" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2001,12 +2001,12 @@ export def "songs-by-pv get" [
   --accept: string@accept-completer # Response content type
   --pvService: string@pvService-completer
   --pvId: string
-  --qp-fields: string@fields-completer-2
+  --fields: string@fields-completer-2
   --lang: string@lang-completer
 ]: nothing -> record<additionalNames: string, albums: table<additionalNames: string, artistString: string, coverPictureMime: string, createDate: string, deleted: bool, discType: string, id: int, name: string, ratingAverage: float, ratingCount: int, releaseDate: record, releaseEvent: record, status: string, version: int>, artistString: string, artists: table<artist: record, categories: string, effectiveRoles: string, id: int, isCustomName: bool, isSupport: bool, name: string, roles: string>, createDate: string, defaultName: string, defaultNameLanguage: string, deleted: bool, favoritedTimes: int, id: int, lengthSeconds: int, lyrics: table<cultureCode: string, id: int, source: string, translationType: string, url: string, value: string>, mainPicture: record<mime: string, name: string, urlOriginal: string, urlSmallThumb: string, urlThumb: string, urlTinyThumb: string>, maxMilliBpm: int, mergedTo: int, minMilliBpm: int, name: string, names: table<language: string, value: string>, originalVersionId: int, publishDate: string, pvServices: string, pvs: table<author: string, createdBy: int, disabled: bool, extendedMetadata: record, id: int, length: int, name: string, publishDate: string, pvId: string, pvType: string, service: string, thumbUrl: string, url: string>, ratingScore: int, releaseEvent: record<additionalNames: string, artists: list<record>, category: string, date: string, description: string, endDate: string, id: int, mainPicture: record<mime: string, name: string, urlOriginal: string, urlSmallThumb: string, urlThumb: string, urlTinyThumb: string>, name: string, names: list<record>, pvs: list<record>, series: record<additionalNames: string, category: string, deleted: bool, description: string, id: int, name: string, pictureMime: string, status: string, urlSlug: string, version: int, webLinks: list>, seriesId: int, seriesNumber: int, seriesSuffix: string, songList: record<featuredCategory: string, id: int, name: string>, status: string, tags: list<record>, urlSlug: string, venue: record<additionalNames: string, address: string, addressCountryCode: string, coordinates: record, deleted: bool, description: string, events: list, id: int, name: string, names: list, status: string, version: int, webLinks: list>, venueName: string, version: int, webLinks: list<record>>, songType: string, status: string, tags: table<count: int, tag: record>, thumbUrl: string, version: int, webLinks: table<category: string, description: string, descriptionOrUrl: string, disabled: bool, id: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pvService" $pvService "scalar") (serialize-qp "pvId" $pvId "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pvService" $pvService "scalar") (serialize-qp "pvId" $pvId "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/songs/byPv" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2077,11 +2077,11 @@ export def "songs-highlighted get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --languagePreference: string@languagePreference-completer
-  --qp-fields: string@fields-completer-2
+  --fields: string@fields-completer-2
 ]: nothing -> table<additionalNames: string, albums: list<record>, artistString: string, artists: list<record>, createDate: string, defaultName: string, defaultNameLanguage: string, deleted: bool, favoritedTimes: int, id: int, lengthSeconds: int, lyrics: list<record>, mainPicture: record<mime: string, name: string, urlOriginal: string, urlSmallThumb: string, urlThumb: string, urlTinyThumb: string>, maxMilliBpm: int, mergedTo: int, minMilliBpm: int, name: string, names: list<record>, originalVersionId: int, publishDate: string, pvServices: string, pvs: list<record>, ratingScore: int, releaseEvent: record<additionalNames: string, artists: list, category: string, date: string, description: string, endDate: string, id: int, mainPicture: record, name: string, names: list, pvs: list, series: record, seriesId: int, seriesNumber: int, seriesSuffix: string, songList: record, status: string, tags: list, urlSlug: string, venue: record, venueName: string, version: int, webLinks: list>, songType: string, status: string, tags: list<record>, thumbUrl: string, version: int, webLinks: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "languagePreference" $languagePreference "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "languagePreference" $languagePreference "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/songs/highlighted" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2120,13 +2120,13 @@ export def "songs-names get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
+  --query: string # default: 
   --nameMatchMode: string@nameMatchMode-completer
   --maxResults: int # format: int32, default: 15
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/songs/names" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2149,12 +2149,12 @@ export def "songs-top-rated get" [
   --filterBy: string@filterBy-completer
   --vocalist: string@vocalist-completer
   --maxResults: int # format: int32, default: 25
-  --qp-fields: string@fields-completer-2
+  --fields: string@fields-completer-2
   --languagePreference: string@languagePreference-completer
 ]: nothing -> table<additionalNames: string, albums: list<record>, artistString: string, artists: list<record>, createDate: string, defaultName: string, defaultNameLanguage: string, deleted: bool, favoritedTimes: int, id: int, lengthSeconds: int, lyrics: list<record>, mainPicture: record<mime: string, name: string, urlOriginal: string, urlSmallThumb: string, urlThumb: string, urlTinyThumb: string>, maxMilliBpm: int, mergedTo: int, minMilliBpm: int, name: string, names: list<record>, originalVersionId: int, publishDate: string, pvServices: string, pvs: list<record>, ratingScore: int, releaseEvent: record<additionalNames: string, artists: list, category: string, date: string, description: string, endDate: string, id: int, mainPicture: record, name: string, names: list, pvs: list, series: record, seriesId: int, seriesNumber: int, seriesSuffix: string, songList: record, status: string, tags: list, urlSlug: string, venue: record, venueName: string, version: int, webLinks: list>, songType: string, status: string, tags: list<record>, thumbUrl: string, version: int, webLinks: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "durationHours" $durationHours "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "filterBy" $filterBy "scalar") (serialize-qp "vocalist" $vocalist "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "languagePreference" $languagePreference "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "durationHours" $durationHours "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "filterBy" $filterBy "scalar") (serialize-qp "vocalist" $vocalist "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "languagePreference" $languagePreference "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/songs/top-rated" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2195,12 +2195,12 @@ export def "songs get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string@fields-completer-2
+  --fields: string@fields-completer-2
   --lang: string@lang-completer
 ]: nothing -> record<additionalNames: string, albums: table<additionalNames: string, artistString: string, coverPictureMime: string, createDate: string, deleted: bool, discType: string, id: int, name: string, ratingAverage: float, ratingCount: int, releaseDate: record, releaseEvent: record, status: string, version: int>, artistString: string, artists: table<artist: record, categories: string, effectiveRoles: string, id: int, isCustomName: bool, isSupport: bool, name: string, roles: string>, createDate: string, defaultName: string, defaultNameLanguage: string, deleted: bool, favoritedTimes: int, id: int, lengthSeconds: int, lyrics: table<cultureCode: string, id: int, source: string, translationType: string, url: string, value: string>, mainPicture: record<mime: string, name: string, urlOriginal: string, urlSmallThumb: string, urlThumb: string, urlTinyThumb: string>, maxMilliBpm: int, mergedTo: int, minMilliBpm: int, name: string, names: table<language: string, value: string>, originalVersionId: int, publishDate: string, pvServices: string, pvs: table<author: string, createdBy: int, disabled: bool, extendedMetadata: record, id: int, length: int, name: string, publishDate: string, pvId: string, pvType: string, service: string, thumbUrl: string, url: string>, ratingScore: int, releaseEvent: record<additionalNames: string, artists: list<record>, category: string, date: string, description: string, endDate: string, id: int, mainPicture: record<mime: string, name: string, urlOriginal: string, urlSmallThumb: string, urlThumb: string, urlTinyThumb: string>, name: string, names: list<record>, pvs: list<record>, series: record<additionalNames: string, category: string, deleted: bool, description: string, id: int, name: string, pictureMime: string, status: string, urlSlug: string, version: int, webLinks: list>, seriesId: int, seriesNumber: int, seriesSuffix: string, songList: record<featuredCategory: string, id: int, name: string>, status: string, tags: list<record>, urlSlug: string, venue: record<additionalNames: string, address: string, addressCountryCode: string, coordinates: record, deleted: bool, description: string, events: list, id: int, name: string, names: list, status: string, version: int, webLinks: list>, venueName: string, version: int, webLinks: list<record>>, songType: string, status: string, tags: table<count: int, tag: record>, thumbUrl: string, version: int, webLinks: table<category: string, description: string, descriptionOrUrl: string, disabled: bool, id: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/songs/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2273,12 +2273,12 @@ export def "songs-derived get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string@fields-completer-2
+  --fields: string@fields-completer-2
   --lang: string@lang-completer
 ]: nothing -> table<additionalNames: string, albums: list<record>, artistString: string, artists: list<record>, createDate: string, defaultName: string, defaultNameLanguage: string, deleted: bool, favoritedTimes: int, id: int, lengthSeconds: int, lyrics: list<record>, mainPicture: record<mime: string, name: string, urlOriginal: string, urlSmallThumb: string, urlThumb: string, urlTinyThumb: string>, maxMilliBpm: int, mergedTo: int, minMilliBpm: int, name: string, names: list<record>, originalVersionId: int, publishDate: string, pvServices: string, pvs: list<record>, ratingScore: int, releaseEvent: record<additionalNames: string, artists: list, category: string, date: string, description: string, endDate: string, id: int, mainPicture: record, name: string, names: list, pvs: list, series: record, seriesId: int, seriesNumber: int, seriesSuffix: string, songList: record, status: string, tags: list, urlSlug: string, venue: record, venueName: string, version: int, webLinks: list>, songType: string, status: string, tags: list<record>, thumbUrl: string, version: int, webLinks: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/songs/($id)/derived" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2345,12 +2345,12 @@ export def "songs-related get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string@fields-completer-2
+  --fields: string@fields-completer-2
   --lang: string@lang-completer
 ]: nothing -> record<artistMatches: table<additionalNames: string, albums: list, artistString: string, artists: list, createDate: string, defaultName: string, defaultNameLanguage: string, deleted: bool, favoritedTimes: int, id: int, lengthSeconds: int, lyrics: list, mainPicture: record, maxMilliBpm: int, mergedTo: int, minMilliBpm: int, name: string, names: list, originalVersionId: int, publishDate: string, pvServices: string, pvs: list, ratingScore: int, releaseEvent: record, songType: string, status: string, tags: list, thumbUrl: string, version: int, webLinks: list>, likeMatches: table<additionalNames: string, albums: list, artistString: string, artists: list, createDate: string, defaultName: string, defaultNameLanguage: string, deleted: bool, favoritedTimes: int, id: int, lengthSeconds: int, lyrics: list, mainPicture: record, maxMilliBpm: int, mergedTo: int, minMilliBpm: int, name: string, names: list, originalVersionId: int, publishDate: string, pvServices: string, pvs: list, ratingScore: int, releaseEvent: record, songType: string, status: string, tags: list, thumbUrl: string, version: int, webLinks: list>, tagMatches: table<additionalNames: string, albums: list, artistString: string, artists: list, createDate: string, defaultName: string, defaultNameLanguage: string, deleted: bool, favoritedTimes: int, id: int, lengthSeconds: int, lyrics: list, mainPicture: record, maxMilliBpm: int, mergedTo: int, minMilliBpm: int, name: string, names: list, originalVersionId: int, publishDate: string, pvServices: string, pvs: list, ratingScore: int, releaseEvent: record, songType: string, status: string, tags: list, thumbUrl: string, version: int, webLinks: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/songs/($id)/related" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2368,7 +2368,7 @@ export def "tags list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
+  --query: string # default: 
   --allowChildren: oneof<nothing, bool> # default: true
   --categoryName: string # default: 
   --start: int # format: int32, default: 0
@@ -2377,13 +2377,13 @@ export def "tags list" [
   --nameMatchMode: string@nameMatchMode-completer
   --qp-sort: string@sort-completer-7
   --preferAccurateMatches: oneof<nothing, bool> # default: false
-  --qp-fields: string@fields-completer-8
+  --fields: string@fields-completer-8
   --lang: string@lang-completer
   --target: string@target-completer
 ]: nothing -> record<items: table<additionalNames: string, aliasedTo: record, categoryName: string, createDate: string, defaultNameLanguage: string, description: string, id: int, mainPicture: record, name: string, names: list, parent: record, relatedTags: list, status: string, targets: int, translatedDescription: record, urlSlug: string, usageCount: int, version: int, webLinks: list>, term: string, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "allowChildren" $allowChildren "scalar") (serialize-qp "categoryName" $categoryName "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "preferAccurateMatches" $preferAccurateMatches "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "target" $target "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "allowChildren" $allowChildren "scalar") (serialize-qp "categoryName" $categoryName "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "preferAccurateMatches" $preferAccurateMatches "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "target" $target "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/tags" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2427,12 +2427,12 @@ export def "tags-by-name get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string@fields-completer-8
+  --fields: string@fields-completer-8
   --lang: string@lang-completer
 ]: nothing -> record<additionalNames: string, aliasedTo: record<additionalNames: string, categoryName: string, id: int, name: string, urlSlug: string>, categoryName: string, createDate: string, defaultNameLanguage: string, description: string, id: int, mainPicture: record<mime: string, name: string, urlOriginal: string, urlSmallThumb: string, urlThumb: string, urlTinyThumb: string>, name: string, names: table<id: int, language: string, value: string>, parent: record<additionalNames: string, categoryName: string, id: int, name: string, urlSlug: string>, relatedTags: table<additionalNames: string, categoryName: string, id: int, name: string, urlSlug: string>, status: string, targets: int, translatedDescription: record<english: string, original: string>, urlSlug: string, usageCount: int, version: int, webLinks: table<category: string, description: string, descriptionOrUrl: string, disabled: bool, id: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/tags/byName/($name)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2450,12 +2450,12 @@ export def "tags-category-names get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
+  --query: string # default: 
   --nameMatchMode: string@nameMatchMode-completer
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/tags/categoryNames" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2525,13 +2525,13 @@ export def "tags-names get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
+  --query: string # default: 
   --allowAliases: oneof<nothing, bool> # default: true
   --maxResults: int # format: int32, default: 10
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "allowAliases" $allowAliases "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "allowAliases" $allowAliases "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/tags/names" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2598,12 +2598,12 @@ export def "tags get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string@fields-completer-8
+  --fields: string@fields-completer-8
   --lang: string@lang-completer
 ]: nothing -> record<additionalNames: string, aliasedTo: record<additionalNames: string, categoryName: string, id: int, name: string, urlSlug: string>, categoryName: string, createDate: string, defaultNameLanguage: string, description: string, id: int, mainPicture: record<mime: string, name: string, urlOriginal: string, urlSmallThumb: string, urlThumb: string, urlTinyThumb: string>, name: string, names: table<id: int, language: string, value: string>, parent: record<additionalNames: string, categoryName: string, id: int, name: string, urlSlug: string>, relatedTags: table<additionalNames: string, categoryName: string, id: int, name: string, urlSlug: string>, status: string, targets: int, translatedDescription: record<english: string, original: string>, urlSlug: string, usageCount: int, version: int, webLinks: table<category: string, description: string, descriptionOrUrl: string, disabled: bool, id: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/tags/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2622,12 +2622,12 @@ export def "tags-children get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string@fields-completer-8
+  --fields: string@fields-completer-8
   --lang: string@lang-completer
 ]: nothing -> table<additionalNames: string, aliasedTo: record<additionalNames: string, categoryName: string, id: int, name: string, urlSlug: string>, categoryName: string, createDate: string, defaultNameLanguage: string, description: string, id: int, mainPicture: record<mime: string, name: string, urlOriginal: string, urlSmallThumb: string, urlThumb: string, urlTinyThumb: string>, name: string, names: list<record>, parent: record<additionalNames: string, categoryName: string, id: int, name: string, urlSlug: string>, relatedTags: list<record>, status: string, targets: int, translatedDescription: record<english: string, original: string>, urlSlug: string, usageCount: int, version: int, webLinks: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/tags/($tagId)/children" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2723,7 +2723,7 @@ export def "users list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
+  --query: string # default: 
   --groups: string@groups-completer
   --joinDateAfter: string # format: date-time
   --joinDateBefore: string # format: date-time
@@ -2735,11 +2735,11 @@ export def "users list" [
   --includeDisabled: oneof<nothing, bool> # default: false
   --onlyVerified: oneof<nothing, bool> # default: false
   --knowsLanguage: string
-  --qp-fields: string@fields-completer-12
+  --fields: string@fields-completer-12
 ]: nothing -> record<items: table<active: bool, groupId: string, id: int, knownLanguages: list, mainPicture: record, memberSince: string, name: string, oldUsernames: list, verifiedArtist: bool>, term: string, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "groups" $groups "scalar") (serialize-qp "joinDateAfter" $joinDateAfter "scalar") (serialize-qp "joinDateBefore" $joinDateBefore "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDisabled" $includeDisabled "scalar") (serialize-qp "onlyVerified" $onlyVerified "scalar") (serialize-qp "knowsLanguage" $knowsLanguage "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "groups" $groups "scalar") (serialize-qp "joinDateAfter" $joinDateAfter "scalar") (serialize-qp "joinDateBefore" $joinDateBefore "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDisabled" $includeDisabled "scalar") (serialize-qp "onlyVerified" $onlyVerified "scalar") (serialize-qp "knowsLanguage" $knowsLanguage "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/users" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2757,11 +2757,11 @@ export def "users-current get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string@fields-completer-12
+  --fields: string@fields-completer-12
 ]: nothing -> record<active: bool, groupId: string, id: int, knownLanguages: table<cultureCode: string, proficiency: string>, mainPicture: record<mime: string, name: string, urlOriginal: string, urlSmallThumb: string, urlThumb: string, urlTinyThumb: string>, memberSince: string, name: string, oldUsernames: table<date: string, oldName: string>, verifiedArtist: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/users/current" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2971,14 +2971,14 @@ export def "users-names get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
+  --query: string # default: 
   --nameMatchMode: string@nameMatchMode-completer
   --maxResults: int # format: int32, default: 10
   --includeDisabled: oneof<nothing, bool> # default: false
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "includeDisabled" $includeDisabled "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "includeDisabled" $includeDisabled "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/users/names" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3049,11 +3049,11 @@ export def "users get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string@fields-completer-12
+  --fields: string@fields-completer-12
 ]: nothing -> record<active: bool, groupId: string, id: int, knownLanguages: table<cultureCode: string, proficiency: string>, mainPicture: record<mime: string, name: string, urlOriginal: string, urlSmallThumb: string, urlThumb: string, urlTinyThumb: string>, memberSince: string, name: string, oldUsernames: table<date: string, oldName: string>, verifiedArtist: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/users/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3094,7 +3094,7 @@ export def "users-albums get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
+  --query: string # default: 
   --tagId: int # format: int32
   --tag: string
   --artistId: int # format: int32
@@ -3107,13 +3107,13 @@ export def "users-albums get" [
   --getTotalCount: oneof<nothing, bool> # default: false
   --qp-sort: string@sort-completer
   --nameMatchMode: string@nameMatchMode-completer
-  --qp-fields: string@fields-completer-1
+  --fields: string@fields-completer-1
   --lang: string@lang-completer
   --mediaType: string@mediaType-completer
 ]: nothing -> record<items: table<album: record, mediaType: string, purchaseStatus: string, rating: int, user: record>, term: string, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "tagId" $tagId "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "artistId" $artistId "scalar") (serialize-qp "purchaseStatuses" $purchaseStatuses "scalar") (serialize-qp "releaseEventId" $releaseEventId "scalar") (serialize-qp "albumTypes" $albumTypes "scalar") (serialize-qp "advancedFilters" $advancedFilters "multi") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "mediaType" $mediaType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "tagId" $tagId "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "artistId" $artistId "scalar") (serialize-qp "purchaseStatuses" $purchaseStatuses "scalar") (serialize-qp "releaseEventId" $releaseEventId "scalar") (serialize-qp "albumTypes" $albumTypes "scalar") (serialize-qp "advancedFilters" $advancedFilters "multi") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "mediaType" $mediaType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/users/($id)/albums" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3155,7 +3155,7 @@ export def "users-followed-artists list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
+  --query: string # default: 
   --tagId: list
   --artistType: string@artistType-completer
   --start: int # format: int32, default: 0
@@ -3163,12 +3163,12 @@ export def "users-followed-artists list" [
   --getTotalCount: oneof<nothing, bool> # default: false
   --qp-sort: string@sort-completer-1
   --nameMatchMode: string@nameMatchMode-completer
-  --qp-fields: string@fields-completer-3
+  --fields: string@fields-completer-3
   --lang: string@lang-completer
 ]: nothing -> record<items: table<artist: record, id: int>, term: string, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "tagId[]" $tagId "multi") (serialize-qp "artistType" $artistType "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "tagId[]" $tagId "multi") (serialize-qp "artistType" $artistType "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/users/($id)/followedArtists" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3353,7 +3353,7 @@ export def "users-rated-songs list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
+  --query: string # default: 
   --tagName: string
   --tagId: list
   --artistId: list
@@ -3369,12 +3369,12 @@ export def "users-rated-songs list" [
   --getTotalCount: oneof<nothing, bool> # default: false
   --qp-sort: string@sort-completer-9
   --nameMatchMode: string@nameMatchMode-completer
-  --qp-fields: string@fields-completer-2
+  --fields: string@fields-completer-2
   --lang: string@lang-completer
 ]: nothing -> record<items: table<date: string, rating: string, song: record, user: record>, term: string, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "tagName" $tagName "scalar") (serialize-qp "tagId[]" $tagId "multi") (serialize-qp "artistId[]" $artistId "multi") (serialize-qp "childVoicebanks" $childVoicebanks "scalar") (serialize-qp "artistGrouping" $artistGrouping "scalar") (serialize-qp "rating" $rating "scalar") (serialize-qp "songListId" $songListId "scalar") (serialize-qp "groupByRating" $groupByRating "scalar") (serialize-qp "pvServices" $pvServices "scalar") (serialize-qp "advancedFilters" $advancedFilters "multi") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "tagName" $tagName "scalar") (serialize-qp "tagId[]" $tagId "multi") (serialize-qp "artistId[]" $artistId "multi") (serialize-qp "childVoicebanks" $childVoicebanks "scalar") (serialize-qp "artistGrouping" $artistGrouping "scalar") (serialize-qp "rating" $rating "scalar") (serialize-qp "songListId" $songListId "scalar") (serialize-qp "groupByRating" $groupByRating "scalar") (serialize-qp "pvServices" $pvServices "scalar") (serialize-qp "advancedFilters" $advancedFilters "multi") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/users/($id)/ratedSongs" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3465,7 +3465,7 @@ export def "users-song-lists get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
+  --query: string # default: 
   --tagId: list
   --childTags: oneof<nothing, bool> # default: false
   --nameMatchMode: string@nameMatchMode-completer
@@ -3473,11 +3473,11 @@ export def "users-song-lists get" [
   --maxResults: int # format: int32, default: 10
   --getTotalCount: oneof<nothing, bool> # default: false
   --qp-sort: string@sort-completer-5
-  --qp-fields: string@fields-completer-11
+  --fields: string@fields-completer-11
 ]: nothing -> record<items: table<author: record, deleted: bool, description: string, eventDate: string, events: list, featuredCategory: string, id: int, latestComments: list, mainPicture: record, name: string, status: string, tags: list>, term: string, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "tagId[]" $tagId "multi") (serialize-qp "childTags" $childTags "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "tagId[]" $tagId "multi") (serialize-qp "childTags" $childTags "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/users/($id)/songLists" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3495,8 +3495,8 @@ export def "venues get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # default: 
-  --qp-fields: string@fields-completer-13
+  --query: string # default: 
+  --fields: string@fields-completer-13
   --start: int # format: int32, default: 0
   --maxResults: int # format: int32, default: 10
   --getTotalCount: oneof<nothing, bool> # default: false
@@ -3510,7 +3510,7 @@ export def "venues get" [
 ]: nothing -> record<items: table<additionalNames: string, address: string, addressCountryCode: string, coordinates: record, deleted: bool, description: string, events: list, id: int, name: string, names: list, status: string, version: int, webLinks: list>, term: string, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "sortRule" $sortRule "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "getTotalCount" $getTotalCount "scalar") (serialize-qp "nameMatchMode" $nameMatchMode "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "sortRule" $sortRule "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/venues" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

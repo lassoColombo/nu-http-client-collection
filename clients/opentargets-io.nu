@@ -543,7 +543,7 @@ export def "platform-public-association-filter get" [
   --uniprotkw: string # A UniProt keyword (meaning all the targets linked to that keyword).
   --direct: oneof<nothing, bool> # If `true`, it returns associations that have at least one direct evidence connecting the target and the disease. If `false` it only returns associations for which there is no direct evidence connecting the target and the disease, but only evidence connecting the target to a children of the disease in the EFO ontology.
   --datastructure: string # Type of data structure to return. Can be 'full', 'simple', 'ids', or 'count'.
-  --qp-fields: string # Fields you want to retrieve. This will get priority over the data structure requested.
+  --fields: string # Fields you want to retrieve. This will get priority over the data structure requested.
   --facets: oneof<nothing, bool> # Returns facets (default: false)
   --scorevalue-min: float # Filter by minimum score value. The default is 0, but using 0.2 is a good trade-off to filter lower quality data points. (format: float, default: 0)
   --scorevalue-max: float # Filter by maximum score value. (format: float)
@@ -556,7 +556,7 @@ export def "platform-public-association-filter get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "target" $target "scalar") (serialize-qp "disease" $disease "scalar") (serialize-qp "therapeutic_area" $therapeutic_area "scalar") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "datatype" $datatype "scalar") (serialize-qp "pathway" $pathway "scalar") (serialize-qp "target_class" $target_class "scalar") (serialize-qp "uniprotkw" $uniprotkw "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "datastructure" $datastructure "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "scorevalue_min" $scorevalue_min "scalar") (serialize-qp "scorevalue_max" $scorevalue_max "scalar") (serialize-qp "scorevalue_types" $scorevalue_types "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "target" $target "scalar") (serialize-qp "disease" $disease "scalar") (serialize-qp "therapeutic_area" $therapeutic_area "scalar") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "datatype" $datatype "scalar") (serialize-qp "pathway" $pathway "scalar") (serialize-qp "target_class" $target_class "scalar") (serialize-qp "uniprotkw" $uniprotkw "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "datastructure" $datastructure "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "scorevalue_min" $scorevalue_min "scalar") (serialize-qp "scorevalue_max" $scorevalue_max "scalar") (serialize-qp "scorevalue_types" $scorevalue_types "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/platform/public/association/filter" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -657,7 +657,7 @@ export def "platform-public-evidence-filter get" [
   --pathway: string # A pathway identifier (meaning all the targets linked to that pathway).
   --uniprotkw: string # A UniProt keyword (meaning all the targets linked to that keyword).
   --datastructure: string # Type of data structure to return. Can be 'full', 'simple', 'ids', or 'count'.
-  --qp-fields: string # The fields you want to retrieve. This will get priority over the data structure requested.
+  --fields: string # The fields you want to retrieve. This will get priority over the data structure requested.
   --scorevalue-min: float # Filter by minimum score value. The default is 0, but using 0.2 is a good trade-off to filter lower quality data points. (format: float, default: 0)
   --scorevalue-max: float # Filter by maximum score value. (format: float)
   --qp-sort: string # Sort by the given field. The default is 'scores.association_score' in descending order. Use '~' prefix to do ascending order e.g. '~scores.association_score'. It supports multiple entries.
@@ -667,7 +667,7 @@ export def "platform-public-evidence-filter get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "target" $target "scalar") (serialize-qp "disease" $disease "scalar") (serialize-qp "data source" $data source "scalar") (serialize-qp "datatype" $datatype "scalar") (serialize-qp "pathway" $pathway "scalar") (serialize-qp "uniprotkw" $uniprotkw "scalar") (serialize-qp "datastructure" $datastructure "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "scorevalue_min" $scorevalue_min "scalar") (serialize-qp "scorevalue_max" $scorevalue_max "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "target" $target "scalar") (serialize-qp "disease" $disease "scalar") (serialize-qp "data source" $data source "scalar") (serialize-qp "datatype" $datatype "scalar") (serialize-qp "pathway" $pathway "scalar") (serialize-qp "uniprotkw" $uniprotkw "scalar") (serialize-qp "datastructure" $datastructure "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "scorevalue_min" $scorevalue_min "scalar") (serialize-qp "scorevalue_max" $scorevalue_max "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/platform/public/evidence/filter" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

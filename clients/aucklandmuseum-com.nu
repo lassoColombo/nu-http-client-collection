@@ -210,13 +210,13 @@ export def "sparql get-sparql" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-  --qp-query: string # sparql query
+  --query: string # sparql query
   --callback: string # The [JSON-P](http://json-p.org/) callback parameter (default: callback)
   --infer: oneof<nothing, bool> # Whether to get inferred results in the response (default: true)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "infer" $infer "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "infer" $infer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sparql" $qp)
   let accept_val = ($accept | default "application/sparql-results+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -237,14 +237,14 @@ export def "sparql post-sparql" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-3 # Response content type
-  --body-query: string # sparql query
+  query: string # sparql query
   --infer: oneof<nothing, bool> # Whether to get inferred results in the response
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sparql")
-  let body = {query: $body_query, infer: $infer} | compact
+  let body = {query: $query, infer: $infer} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/sparql-results+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

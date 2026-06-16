@@ -226,12 +226,12 @@ export def "trivia-search get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # Text to search for in the trivia (format: string)
+  --query: string # Text to search for in the trivia (format: string)
   --category: string # Category to get the trivia from (format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-fungenerators-api-secret"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "category" $category "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "category" $category "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/trivia/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -183,11 +183,11 @@ export def "bike-point-search Search" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # The search term e.g. "St. James"
+  --query: string # The search term e.g. "St. James"
 ]: nothing -> table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/BikePoint/Search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1493,11 +1493,11 @@ export def "search Get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # The search query
+  --query: string # The search query
 ]: nothing -> record<from: int, matches: table<id: string, lat: float, lon: float, name: string, url: string>, maxScore: float, page: int, pageSize: int, provider: string, query: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1518,11 +1518,11 @@ export def "search-bus-schedules BusSchedules" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # The search query
+  --query: string # The search query
 ]: nothing -> record<from: int, matches: table<id: string, lat: float, lon: float, name: string, url: string>, maxScore: float, page: int, pageSize: int, provider: string, query: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Search/BusSchedules" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1764,7 +1764,7 @@ export def "stop-point-search get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # The query string, case-insensitive. Leading and trailing wildcards are applied automatically.
+  --query: string # The query string, case-insensitive. Leading and trailing wildcards are applied automatically.
   --modes: list # An optional, parameter separated list of the modes to filter by
   --faresOnly: oneof<nothing, bool> # True to only return stations in that have Fares data available for single fares to another station.
   --maxResults: int # An optional result limit, defaulting to and with a maximum of 50. Since children of the stop point heirarchy are returned for matches,             it is possible that the flattened result set will contain more than 50 items. (format: int32)
@@ -1774,7 +1774,7 @@ export def "stop-point-search get" [
 ]: nothing -> record<from: int, matches: table<id: string, lat: float, lon: float, name: string, url: string>, maxScore: float, page: int, pageSize: int, provider: string, query: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "modes" $modes "multi") (serialize-qp "faresOnly" $faresOnly "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "lines" $lines "multi") (serialize-qp "includeHubs" $includeHubs "scalar") (serialize-qp "tflOperatedNationalRailStationsOnly" $tflOperatedNationalRailStationsOnly "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "modes" $modes "multi") (serialize-qp "faresOnly" $faresOnly "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "lines" $lines "multi") (serialize-qp "includeHubs" $includeHubs "scalar") (serialize-qp "tflOperatedNationalRailStationsOnly" $tflOperatedNationalRailStationsOnly "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/StopPoint/Search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

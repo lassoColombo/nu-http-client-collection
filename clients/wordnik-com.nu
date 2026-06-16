@@ -476,7 +476,7 @@ export def "wordsjson-reverse-dictionary reverseDictionary" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search term
+  --query: string # Search term
   --findSenseForWord: string # Restricts words and finds closest sense
   --includeSourceDictionaries: string@includeSourceDictionaries-completer # Only include these comma-delimited source dictionaries
   --excludeSourceDictionaries: string@excludeSourceDictionaries-completer # Exclude these comma-delimited source dictionaries
@@ -495,7 +495,7 @@ export def "wordsjson-reverse-dictionary reverseDictionary" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "findSenseForWord" $findSenseForWord "scalar") (serialize-qp "includeSourceDictionaries" $includeSourceDictionaries "scalar") (serialize-qp "excludeSourceDictionaries" $excludeSourceDictionaries "scalar") (serialize-qp "includePartOfSpeech" $includePartOfSpeech "scalar") (serialize-qp "excludePartOfSpeech" $excludePartOfSpeech "scalar") (serialize-qp "minCorpusCount" $minCorpusCount "scalar") (serialize-qp "maxCorpusCount" $maxCorpusCount "scalar") (serialize-qp "minLength" $minLength "scalar") (serialize-qp "maxLength" $maxLength "scalar") (serialize-qp "expandTerms" $expandTerms "scalar") (serialize-qp "includeTags" $includeTags "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "findSenseForWord" $findSenseForWord "scalar") (serialize-qp "includeSourceDictionaries" $includeSourceDictionaries "scalar") (serialize-qp "excludeSourceDictionaries" $excludeSourceDictionaries "scalar") (serialize-qp "includePartOfSpeech" $includePartOfSpeech "scalar") (serialize-qp "excludePartOfSpeech" $excludePartOfSpeech "scalar") (serialize-qp "minCorpusCount" $minCorpusCount "scalar") (serialize-qp "maxCorpusCount" $maxCorpusCount "scalar") (serialize-qp "minLength" $minLength "scalar") (serialize-qp "maxLength" $maxLength "scalar") (serialize-qp "expandTerms" $expandTerms "scalar") (serialize-qp "includeTags" $includeTags "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/words.json/reverseDictionary" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

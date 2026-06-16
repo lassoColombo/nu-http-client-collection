@@ -128,7 +128,7 @@ export def "search search" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # The scientific name to search for. For example: "Bellis perennis", "Prionus" or "Bolinus brandaris". This is an exact search so wildcard characters are not supported.
+  --query: string # The scientific name to search for. For example: "Bellis perennis", "Prionus" or "Bolinus brandaris". This is an exact search so wildcard characters are not supported.
   --providers: string # A list of provider id strings concatenated by comma characters. The default : "pesi,bgbm-cdm-server[col]" will be used if this parameter is not set. A list of all available provider ids can be obtained from the '/capabilities' service end point. Providers can be nested, that is a parent provider can have sub providers. If the id of the parent provider is supplied all subproviders will be queried. The query can also be restriced to one or more subproviders by using the following syntax: parent-id[sub-id-1,sub-id2,...] (default: pesi,eunis,bgbm-cdm-server[col])
   --searchMode: string@searchMode-completer # Specifies the searchMode. Possible search modes are: scientificNameExact, scientificNameLike (begins with), vernacularNameExact, vernacularNameLike (contains), findByIdentifier. If the a provider does not support the chosen searchMode it will be skipped and the status message in the tnrClientStatus will be set to 'unsupported search mode' in this case. (default: scientificNameExact)
   --addSynonymy: oneof<nothing, bool> # Indicates whether the synonymy of the accepted taxon should be included into the response. Turning this option on may cause an increased response time. (default: false)
@@ -136,7 +136,7 @@ export def "search search" [
 ]: nothing -> record<query: table<clientStatus: list, request: record, response: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "providers" $providers "scalar") (serialize-qp "searchMode" $searchMode "scalar") (serialize-qp "addSynonymy" $addSynonymy "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "providers" $providers "scalar") (serialize-qp "searchMode" $searchMode "scalar") (serialize-qp "addSynonymy" $addSynonymy "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

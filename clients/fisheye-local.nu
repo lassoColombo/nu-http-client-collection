@@ -378,13 +378,13 @@ export def "rest-service-fe-search-v1-cross-repository-query get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # text to search for in commit message and p4 jobId. Must not be empty.
+  --query: string # text to search for in commit message and p4 jobId. Must not be empty.
   --repository: string # restrict search to only these repositories (by their keys)
   --expand: string # expand query parameter to specify the maximum number of results. Format is changesets[n:m].revisions[n:m],reviews         the default number of changesets returned is 30, the maximum returned is 100
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service-fe/search-v1/crossRepositoryQuery" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -405,12 +405,12 @@ export def "rest-service-fe-search-v1-query get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # FishEye query to execute
+  --query: string # FishEye query to execute
   --maxReturn: string # maximum number of results (which can be left unspecified, but in that case,  the maximum number of results will set to 3000 results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "maxReturn" $maxReturn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "maxReturn" $maxReturn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/rest-service-fe/search-v1/query/($repository)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -431,12 +431,12 @@ export def "rest-service-fe-search-v1-query-as-rows get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # FishEye query to execute (which must contain a "return" statement)
+  --query: string # FishEye query to execute (which must contain a "return" statement)
   --maxReturn: string # maximum number of results (which can be left unspecified, but in that case,  the maximum number of results will set to 3000 results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "maxReturn" $maxReturn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "maxReturn" $maxReturn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/rest-service-fe/search-v1/queryAsRows/($repository)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

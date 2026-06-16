@@ -226,12 +226,12 @@ export def "categories-channels channels" [
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-1 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/categories/($category)/channels" $qp)
   let accept_val = "application/vnd.vimeo.channel+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -255,12 +255,12 @@ export def "categories-groups groups" [
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-2 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/categories/($category)/groups" $qp)
   let accept_val = "application/vnd.vimeo.group+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -286,12 +286,12 @@ export def "categories-videos videos" [
   --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-3 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/categories/($category)/videos" $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -339,12 +339,12 @@ export def "channels channels" [
   --filter: string@filter-completer-1 # The attribute by which to filter the results.
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-4 # The way to sort the results.  Option descriptions:  * `relevant` - Relevant sorting is available only for search queries.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels" $qp)
   let accept_val = "application/vnd.vimeo.channel+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -589,12 +589,12 @@ export def "channels-moderators moderators-by-channel_id-1" [
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/channels/($channel_id)/moderators" $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -967,12 +967,12 @@ export def "channels-users subscribers" [
   --filter: string@filter-completer-2 # The attribute by which to filter the results.
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/channels/($channel_id)/users" $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1026,12 +1026,12 @@ export def "channels-videos videos" [
   --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-6 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "containing_uri" $containing_uri "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "containing_uri" $containing_uri "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/channels/($channel_id)/videos" $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1210,12 +1210,12 @@ export def "channels-videos-credits alt1-by-channel_id-video_id" [
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/channels/($channel_id)/videos/($video_id)/credits" $qp)
   let accept_val = "application/vnd.vimeo.credit+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1495,12 +1495,12 @@ export def "groups groups" [
   --filter: string@filter-completer-1 # The attribute by which to filter the results.
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-4 # The way to sort the results.  Option descriptions:  * `relevant` - Relevant sorting is available only for search queries.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/groups" $qp)
   let accept_val = "application/vnd.vimeo.group+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1596,12 +1596,12 @@ export def "groups-users members" [
   --filter: string@filter-completer-2 # The attribute by which to filter the results.
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/groups/($group_id)/users" $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1627,12 +1627,12 @@ export def "groups-videos videos" [
   --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-7 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/groups/($group_id)/videos" $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1798,12 +1798,12 @@ export def "me-albums alt1" [
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-8 # The way to sort the results.
 ]: nothing -> table<allow_continuous_play: bool, allow_downloads: bool, allow_share: bool, brand_color: string, created_time: string, custom_logo: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, description: string, domain: string, duration: float, embed: record<html: string>, embed_brand_color: bool, embed_custom_logo: bool, hide_nav: bool, hide_vimeo_logo: bool, layout: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<password: string, view: string>, resource_key: string, review_mode: bool, sort: string, theme: string, uri: string, url: string, use_custom_domain: bool, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, web_brand_color: bool, web_custom_logo: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/albums" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1928,13 +1928,13 @@ export def "me-albums-videos alt1-by-album_id" [
   --page: float # The page number of the results to show. (e.g. 1)
   --password: string # The password of the album. (e.g. hunter1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-9 # The way to sort the results.
   --weak-search: oneof<nothing, bool> # Whether to include private videos in the search. Please note that a separate search service provides this functionality. The service performs a partial text search on the video's name. (e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "containing_uri" $containing_uri "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "weak_search" $weak_search "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "containing_uri" $containing_uri "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "weak_search" $weak_search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/me/albums/($album_id)/videos" $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2088,12 +2088,12 @@ export def "me-appearances alt1" [
   --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-7 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/appearances" $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2213,12 +2213,12 @@ export def "me-channels alt1" [
   --filter: string@filter-completer-5 # The attribute by which to filter the results.
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-1 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/channels" $qp)
   let accept_val = "application/vnd.vimeo.channel+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2404,12 +2404,12 @@ export def "me-followers alt1" [
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/followers" $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2433,12 +2433,12 @@ export def "me-following alt1" [
   --filter: string@filter-completer-6 # The attribute by which to filter the results.
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/following" $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2557,12 +2557,12 @@ export def "me-groups alt1" [
   --filter: string@filter-completer-5 # The attribute by which to filter the results.
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-2 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/groups" $qp)
   let accept_val = "application/vnd.vimeo.group+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2655,12 +2655,12 @@ export def "me-likes alt1" [
   --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-7 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/likes" $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2990,12 +2990,12 @@ export def "me-portfolios list" [
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/portfolios" $qp)
   let accept_val = "application/vnd.vimeo.portfolio+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3502,12 +3502,12 @@ export def "me-videos alt1" [
   --filter-playable: oneof<nothing, bool> # Whether to filter by all playable videos or by all videos that are not  playable. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-16 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "containing_uri" $containing_uri "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "filter_playable" $filter_playable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "containing_uri" $containing_uri "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "filter_playable" $filter_playable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/videos" $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3650,12 +3650,12 @@ export def "me-watchlater alt1" [
   --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-7 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/watchlater" $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3891,12 +3891,12 @@ export def "ondemand-genres-pages vods" [
   --filter: string@filter-completer-10 # The attribute by which to filter the results.
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-17 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/ondemand/genres/($genre_id)/pages" $qp)
   let accept_val = "application/vnd.vimeo.ondemand.page+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4942,12 +4942,12 @@ export def "users users" [
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-4 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users" $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5020,12 +5020,12 @@ export def "users-albums albums" [
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-8 # The way to sort the results.
 ]: nothing -> table<allow_continuous_play: bool, allow_downloads: bool, allow_share: bool, brand_color: string, created_time: string, custom_logo: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, description: string, domain: string, duration: float, embed: record<html: string>, embed_brand_color: bool, embed_custom_logo: bool, hide_nav: bool, hide_vimeo_logo: bool, layout: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<password: string, view: string>, resource_key: string, review_mode: bool, sort: string, theme: string, uri: string, url: string, use_custom_domain: bool, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, web_brand_color: bool, web_custom_logo: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/users/($user_id)/albums" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5413,13 +5413,13 @@ export def "users-albums-videos videos" [
   --page: float # The page number of the results to show. (e.g. 1)
   --password: string # The password of the album. (e.g. hunter1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-9 # The way to sort the results.
   --weak-search: oneof<nothing, bool> # Whether to include private videos in the search. Please note that a separate search service provides this functionality. The service performs a partial text search on the video's name. (e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "containing_uri" $containing_uri "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "weak_search" $weak_search "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "containing_uri" $containing_uri "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "weak_search" $weak_search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/users/($user_id)/albums/($album_id)/videos" $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5579,12 +5579,12 @@ export def "users-appearances appearances" [
   --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-7 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/users/($user_id)/appearances" $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5709,12 +5709,12 @@ export def "users-channels subscriptions" [
   --filter: string@filter-completer-5 # The attribute by which to filter the results.
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-1 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/users/($user_id)/channels" $qp)
   let accept_val = "application/vnd.vimeo.channel+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5908,12 +5908,12 @@ export def "users-followers followers" [
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/users/($user_id)/followers" $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5938,12 +5938,12 @@ export def "users-following list" [
   --filter: string@filter-completer-6 # The attribute by which to filter the results.
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/users/($user_id)/following" $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6067,12 +6067,12 @@ export def "users-groups groups" [
   --filter: string@filter-completer-5 # The attribute by which to filter the results.
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-2 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/users/($user_id)/groups" $qp)
   let accept_val = "application/vnd.vimeo.group+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6169,12 +6169,12 @@ export def "users-likes likes" [
   --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-7 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/users/($user_id)/likes" $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6487,12 +6487,12 @@ export def "users-portfolios portfolios" [
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/users/($user_id)/portfolios" $qp)
   let accept_val = "application/vnd.vimeo.portfolio+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7070,12 +7070,12 @@ export def "users-videos videos" [
   --filter-playable: oneof<nothing, bool> # Whether to filter by all playable videos or by all videos that are not  playable. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-16 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "containing_uri" $containing_uri "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "filter_playable" $filter_playable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "containing_uri" $containing_uri "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "filter_playable" $filter_playable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/users/($user_id)/videos" $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7151,12 +7151,12 @@ export def "users-watchlater list" [
   --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-7 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/users/($user_id)/watchlater" $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7253,13 +7253,13 @@ export def "videos videos" [
   --links: string # A comma-separated list of video URLs to find. (e.g. https://vimeo.com/122375452,https://vimeo.com/273576296)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # Search query. (e.g. staff picks)
+  --query: string # Search query. (e.g. staff picks)
   --qp-sort: string@sort-completer-22 # The way to sort the results.
   --uris: string # The comma-separated list of videos to find. (e.g. /videos/122375452,/videos/273576296)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "links" $links "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "uris" $uris "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "links" $links "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "uris" $uris "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/videos" $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7609,12 +7609,12 @@ export def "videos-credits credits" [
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-  --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
+  --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/videos/($video_id)/credits" $qp)
   let accept_val = "application/vnd.vimeo.credit+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

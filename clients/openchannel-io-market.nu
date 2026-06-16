@@ -104,7 +104,7 @@ export def "apps list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A query document. Example: {'name':'MyApp'} matches all the apps that have the name 'MyApp'
+  --query: string # A query document. Example: {'name':'MyApp'} matches all the apps that have the name 'MyApp'
   --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
   --pageNumber: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
@@ -113,7 +113,7 @@ export def "apps list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "userId" $userId "scalar") (serialize-qp "isOwner" $isOwner "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "userId" $userId "scalar") (serialize-qp "isOwner" $isOwner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -188,9 +188,9 @@ export def "apps-text-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A query document. Example: {'name':'MyApp'} matches all the documents that have the name 'MyApp'
+  --query: string # A query document. Example: {'name':'MyApp'} matches all the documents that have the name 'MyApp'
   --text: string # The text to search for.
-  --qp-fields: string # A JSON array containing all the fields to be searched through. Example: ['name', 'customData.description']
+  --fields: string # A JSON array containing all the fields to be searched through. Example: ['name', 'customData.description']
   --pageNumber: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
   --userId: string # The unique id of the user requesting this resource
@@ -198,7 +198,7 @@ export def "apps-text-search get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "userId" $userId "scalar") (serialize-qp "isOwned" $isOwned "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "userId" $userId "scalar") (serialize-qp "isOwned" $isOwned "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps/textSearch" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -217,7 +217,7 @@ export def "apps-versions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A query document. Example: {'name':'MyApp'} matches all the apps that have the name 'MyApp'
+  --query: string # A query document. Example: {'name':'MyApp'} matches all the apps that have the name 'MyApp'
   --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
   --pageNumber: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
@@ -225,7 +225,7 @@ export def "apps-versions get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "developerId" $developerId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "developerId" $developerId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps/versions" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -548,14 +548,14 @@ export def "developer-accounts list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A query document. Example: {'name':'NASA'} matches all the developerAccounts that have the name 'NASA'
+  --query: string # A query document. Example: {'name':'NASA'} matches all the developerAccounts that have the name 'NASA'
   --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
   --pageNumber: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/developerAccounts" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -672,14 +672,14 @@ export def "developers list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A query document. Example: {'name':'John'} matches all the developers that have the name 'John'
+  --query: string # A query document. Example: {'name':'John'} matches all the developers that have the name 'John'
   --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
   --pageNumber: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/developers" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -820,14 +820,14 @@ export def "files get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A query document. Example: {'name':'file.txt'} matches all the files that have the name 'file.txt'
+  --query: string # A query document. Example: {'name':'file.txt'} matches all the files that have the name 'file.txt'
   --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
   --pageNumber: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/files" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -966,14 +966,14 @@ export def "ownership list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A query document. Example: {'userId':'12'} matches all the ownership records that have the userId '12'.
+  --query: string # A query document. Example: {'userId':'12'} matches all the ownership records that have the userId '12'.
   --qp-sort: string # A sort document. Example: {'date':1} sorts the results by date in ascending order
   --pageNumber: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ownership" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1191,14 +1191,14 @@ export def "reviews list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A query document. Example: {'rating': 500} matches all the reviews that have a rating of 500. 
+  --query: string # A query document. Example: {'rating': 500} matches all the reviews that have a rating of 500. 
   --qp-sort: string # A sort document. Example: {'rating':1} sorts the results by rating in ascending order
   --pageNumber: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reviews" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1385,11 +1385,11 @@ export def "stats-series get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # The start date for this series (in millis) (format: int64)
   --end: int # The end date for this series (in millis) (format: int64)
-  --qp-query: string # A query document. Example: {'developerId': '112'} matches all the apps that have the developer with id 112
+  --query: string # A query document. Example: {'developerId': '112'} matches all the apps that have the developer with id 112
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/stats/series/($period)/($fields)" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1408,14 +1408,14 @@ export def "stats-total get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # A comma seperated list of all the fields to be returned in the total (available by default: dislikes, likes, reviews, totalSales, developerSales, marketplaceSales, downloads, ownerships, views)
-  --qp-query: string # A query document. Example: {'developerId': '112'} matches all the apps that have the developer with id 112
+  --fields: string # A comma seperated list of all the fields to be returned in the total (available by default: dislikes, likes, reviews, totalSales, developerSales, marketplaceSales, downloads, ownerships, views)
+  --query: string # A query document. Example: {'developerId': '112'} matches all the apps that have the developer with id 112
   --start: int # The start date for this total (in millis) (format: int64)
   --end: int # The end date for this total (in millis) (format: int64)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/total" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1604,14 +1604,14 @@ export def "transactions list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A query document. Example: {'userId':'1'} matches all the transactions that have the userId '1'.
+  --query: string # A query document. Example: {'userId':'1'} matches all the transactions that have the userId '1'.
   --qp-sort: string # A sort document. Example: {'date':1} sorts the results by total in ascending order
   --pageNumber: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/transactions" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1698,14 +1698,14 @@ export def "user-accounts list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A query document. Example: {'name':'NASA'} matches all the userAccounts that have the name 'NASA'
+  --query: string # A query document. Example: {'name':'NASA'} matches all the userAccounts that have the name 'NASA'
   --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
   --pageNumber: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/userAccounts" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1822,14 +1822,14 @@ export def "users list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A query document. Example: {'name':'John'} matches all the users that have the name 'John'
+  --query: string # A query document. Example: {'name':'John'} matches all the users that have the name 'John'
   --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
   --pageNumber: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

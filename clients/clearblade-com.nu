@@ -178,12 +178,12 @@ export def "admin-audit GetAudit" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Query object used to filter the items. See query model at in the description for example.
+  --query: string # Query object used to filter the items. See query model at in the description for example.
   --ClearBlade-DevToken: string # Developer Token obtained through admin authentication.
 ]: nothing -> table<action_type: string, asset_class: string, asset_id: string, changes: string, email: string, id: int, response_time: int, system_key: string, time: string, user_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/audit" $qp)
   let extra_headers = {"ClearBlade-DevToken": $ClearBlade_DevToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -231,12 +231,12 @@ export def "admin-audit GetAuditDev" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Query object used to filter the items. See query model at in the description for example.
+  --query: string # Query object used to filter the items. See query model at in the description for example.
   --ClearBlade-DevToken: string # Developer Token obtained through admin authentication.
 ]: nothing -> table<action_type: string, asset_class: string, asset_id: string, changes: string, email: string, id: int, response_time: int, system_key: string, time: string, user_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/admin/audit/($systemKey)" $qp)
   let extra_headers = {"ClearBlade-DevToken": $ClearBlade_DevToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -586,12 +586,12 @@ export def "admin-devices DeleteDevicesAdmin" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Tags to filter devices by. See the query model below for an example.
+  --query: string # Tags to filter devices by. See the query model below for an example.
   --ClearBlade-DevToken: string # Token obtained through user authentication.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/admin/devices/($systemKey)" $qp)
   let extra_headers = {"ClearBlade-DevToken": $ClearBlade_DevToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -614,12 +614,12 @@ export def "admin-devices GetSystemDevices" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Tags to filter devices by. See the query model below for an example. All devices are returned if a query is not specified.
+  --query: string # Tags to filter devices by. See the query model below for an example. All devices are returned if a query is not specified.
   --ClearBlade-DevToken: string # Developer Token obtained through admin authentication.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/admin/devices/($systemKey)" $qp)
   let extra_headers = {"ClearBlade-DevToken": $ClearBlade_DevToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -646,13 +646,13 @@ export def "admin-devices UpdateDevicesAdmin" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ClearBlade-DevToken: string # Token obtained through user authentication.
   --set: record # shape: {[columnName]?: any}
-  --body-query: list # item shape: {EQ?: list, GT?: list, GTE?: list, LT?: list, LTE?: list, NEQ?: list, RE?: list}
+  --query: list # item shape: {EQ?: list, GT?: list, GTE?: list, LT?: list, LTE?: list, NEQ?: list, RE?: list}
 ]: any -> record<DATA: list<record>, TOTAL: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/admin/devices/($systemKey)")
-  let body = {$set: $set, query: $body_query} | compact
+  let body = {$set: $set, query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"ClearBlade-DevToken": $ClearBlade_DevToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1192,12 +1192,12 @@ export def "admin-platform-systems GetSystemUpdates" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Query object used to filter the items. See query model at in the description for example.
+  --query: string # Query object used to filter the items. See query model at in the description for example.
   --Clearblade-DevToken: string # Developer Token obtained through admin authentication.
 ]: nothing -> table<developers: list<any>, disabled: bool, diskUsage: int, lastUpdated: int, name: string, numAPIReqsMonth: int, numAPIReqsTotal: int, numAPIReqsYear: int, numDeployments: int, numDevices: int, numDevs: int, numEdges: int, numLibraries: int, numPub: int, numPubMonth: int, numPubYear: int, numRecMonth: int, numRecTotal: int, numRecYear: int, numRoles: int, numServices: int, numUsers: int, owner: string, system_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/platform/systems" $qp)
   let extra_headers = {"Clearblade-DevToken": $Clearblade_DevToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1220,12 +1220,12 @@ export def "admin-platform-systems GetSystemUpdatesDev" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Query object used to filter the items. See query model at in the description for example.
+  --query: string # Query object used to filter the items. See query model at in the description for example.
   --clearblade-devtoken: string # Developer Token obtained through admin authentication.
 ]: nothing -> table<developers: list<any>, disabled: bool, diskUsage: int, lastUpdated: int, name: string, numAPIReqsMonth: int, numAPIReqsTotal: int, numAPIReqsYear: int, numDeployments: int, numDevices: int, numDevs: int, numEdges: int, numLibraries: int, numPub: int, numPubMonth: int, numPubYear: int, numRecMonth: int, numRecTotal: int, numRecYear: int, numRoles: int, numServices: int, numUsers: int, owner: string, system_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/admin/platform/systems/($systemKey)" $qp)
   let extra_headers = {"clearblade-devtoken": $clearblade_devtoken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2164,12 +2164,12 @@ export def "admin-user GetUserList" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Tags to filter users. Check 'users' model at the bottom of this page.
+  --query: string # Tags to filter users. Check 'users' model at the bottom of this page.
   --ClearBlade-DevToken: string # Developer Token obtained through admin authentication.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/admin/user/($systemKey)" $qp)
   let extra_headers = {"ClearBlade-DevToken": $ClearBlade_DevToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2312,12 +2312,12 @@ export def "admin-user-roles DeleteRoles" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Role identification key.
+  --query: string # Role identification key.
   --ClearBlade-DevToken: string # Developer Token obtained through admin authentication.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/admin/user/($systemKey)/roles" $qp)
   let extra_headers = {"ClearBlade-DevToken": $ClearBlade_DevToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2340,12 +2340,12 @@ export def "admin-user-roles GetRoles" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Refer to the example query above.
+  --query: string # Refer to the example query above.
   --ClearBlade-DevToken: string # Developer Token obtained through admin authentication.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/admin/user/($systemKey)/roles" $qp)
   let extra_headers = {"ClearBlade-DevToken": $ClearBlade_DevToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2636,12 +2636,12 @@ export def "admin-v-4-session-device DeleteDeviceSession" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Query object used to filter the items. See query model at in the description for example.
+  --query: string # Query object used to filter the items. See query model at in the description for example.
   --ClearBlade-DevToken: string # Developer Token obtained through admin authentication.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/admin/v/4/session/($systemKey)/device" $qp)
   let extra_headers = {"ClearBlade-DevToken": $ClearBlade_DevToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2664,12 +2664,12 @@ export def "admin-v-4-session-device GetDeviceSession" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Query object used to filter the items. See query model at in the description for example.
+  --query: string # Query object used to filter the items. See query model at in the description for example.
   --ClearBlade-DevToken: string # Developer Token obtained through admin authentication.
 ]: nothing -> table<device_key: string, issued: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/admin/v/4/session/($systemKey)/device" $qp)
   let extra_headers = {"ClearBlade-DevToken": $ClearBlade_DevToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2692,12 +2692,12 @@ export def "admin-v-4-session-device-count GetDeviceSessionCount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Query object used to filter the items. See query model at in the description for example.
+  --query: string # Query object used to filter the items. See query model at in the description for example.
   --ClearBlade-DevToken: string # Developer Token obtained through admin authentication.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/admin/v/4/session/($systemKey)/device/count" $qp)
   let extra_headers = {"ClearBlade-DevToken": $ClearBlade_DevToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2720,12 +2720,12 @@ export def "admin-v-4-session-user DeleteUserSession" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Query object used to filter the items. See query model at in the description for example.
+  --query: string # Query object used to filter the items. See query model at in the description for example.
   --ClearBlade-DevToken: string # Developer Token obtained through admin authentication.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/admin/v/4/session/($systemKey)/user" $qp)
   let extra_headers = {"ClearBlade-DevToken": $ClearBlade_DevToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2748,12 +2748,12 @@ export def "admin-v-4-session-user GetUserSession" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Query object used to filter the items. See query model at in the description for example.
+  --query: string # Query object used to filter the items. See query model at in the description for example.
   --ClearBlade-DevToken: string # Developer Token obtained through admin authentication.
 ]: nothing -> table<issued: int, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/admin/v/4/session/($systemKey)/user" $qp)
   let extra_headers = {"ClearBlade-DevToken": $ClearBlade_DevToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2776,12 +2776,12 @@ export def "admin-v-4-session-user-count GetUserSessionCount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Query object used to filter the items. See query model at in the description for example.
+  --query: string # Query object used to filter the items. See query model at in the description for example.
   --ClearBlade-DevToken: string # Developer Token obtained through admin authentication.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/admin/v/4/session/($systemKey)/user/count" $qp)
   let extra_headers = {"ClearBlade-DevToken": $ClearBlade_DevToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3270,12 +3270,12 @@ export def "v-1-collection DeleteCollectionData" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Query to limit scope of deletion.
+  --query: string # Query to limit scope of deletion.
   --ClearBlade-UserToken: string # Token obtained through user authentication.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v/1/collection/($systemKey)/($collectionName)" $qp)
   let extra_headers = {"ClearBlade-UserToken": $ClearBlade_UserToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3299,12 +3299,12 @@ export def "v-1-collection GetCollectionData" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Query object used to filter the items. See query model below for example.
+  --query: string # Query object used to filter the items. See query model below for example.
   --ClearBlade-UserToken: string # Token obtained through user authentication.
 ]: nothing -> record<CURRENTPAGE: int, DATA: list<record>, NEXTPAGEURL: string, PREVPAGEURL: int, TOTAL: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v/1/collection/($systemKey)/($collectionName)" $qp)
   let extra_headers = {"ClearBlade-UserToken": $ClearBlade_UserToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3362,13 +3362,13 @@ export def "v-1-collection UpdateCollectionData" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ClearBlade-UserToken: string # Token obtained through user authentication.
   --set: record # shape: {columnName?: any}
-  --body-query: any # shape: {FILTERS?: list}
+  --query: any # shape: {FILTERS?: list}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v/1/collection/($systemKey)/($collectionName)")
-  let body = {$set: $set, query: $body_query} | compact
+  let body = {$set: $set, query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"ClearBlade-UserToken": $ClearBlade_UserToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3391,12 +3391,12 @@ export def "v-1-data DeleteCollectionDataAlt" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Query to limit scope of deletion.
+  --query: string # Query to limit scope of deletion.
   --ClearBlade-UserToken: string # Token obtained through user authentication.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v/1/data/($collectionID)" $qp)
   let extra_headers = {"ClearBlade-UserToken": $ClearBlade_UserToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3419,12 +3419,12 @@ export def "v-1-data GetCollectionDataAlt" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Query object used to filter the items. See query model below for example.
+  --query: string # Query object used to filter the items. See query model below for example.
   --ClearBlade-UserToken: string # Token obtained through user authentication.
 ]: nothing -> record<CURRENTPAGE: int, DATA: list<record>, NEXTPAGEURL: string, PREVPAGEURL: int, TOTAL: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v/1/data/($collectionID)" $qp)
   let extra_headers = {"ClearBlade-UserToken": $ClearBlade_UserToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3480,13 +3480,13 @@ export def "v-1-data UpdateCollectionDataAlt" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ClearBlade-UserToken: string # Token obtained through user authentication.
   --set: record # shape: {columnName?: any}
-  --body-query: any # shape: {FILTERS?: list}
+  --query: any # shape: {FILTERS?: list}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v/1/data/($collectionID)")
-  let body = {$set: $set, query: $body_query} | compact
+  let body = {$set: $set, query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"ClearBlade-UserToken": $ClearBlade_UserToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3632,12 +3632,12 @@ export def "v-1-user GetUsers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Query object used to filter the user list. See the query model below for an example.
+  --query: string # Query object used to filter the user list. See the query model below for an example.
   --ClearBlade-UserToken: string # Token obtained through user authentication.
 ]: nothing -> record<Data: table<creation_date: string, email: string, user_id: string>, Total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v/1/user" $qp)
   let extra_headers = {"ClearBlade-UserToken": $ClearBlade_UserToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3915,12 +3915,12 @@ export def "v-2-devices DeleteDevices" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Tags to filter devices by. See the query model below for an example.
+  --query: string # Tags to filter devices by. See the query model below for an example.
   --ClearBlade-UserToken: string # Token obtained through user authentication.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v/2/devices/($SystemKey)" $qp)
   let extra_headers = {"ClearBlade-UserToken": $ClearBlade_UserToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3943,12 +3943,12 @@ export def "v-2-devices GetDevices" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Tags to filter devices by. See the query model below for an example.
+  --query: string # Tags to filter devices by. See the query model below for an example.
   --ClearBlade-UserToken: string # Token obtained through user authentication.
 ]: nothing -> record<allow_certificate_auth: bool, allow_key_auth: bool, certificate: string, created_date: int, description: string, device_key: string, enabled: bool, last_active_date: int, name: string, state: string, system_key: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v/2/devices/($SystemKey)" $qp)
   let extra_headers = {"ClearBlade-UserToken": $ClearBlade_UserToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3975,13 +3975,13 @@ export def "v-2-devices UpdateDevices" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ClearBlade-UserToken: string # Token obtained through user authentication.
   --set: record # shape: {[columnName]?: any}
-  --body-query: list # item shape: {EQ?: list, GT?: list, GTE?: list, LT?: list, LTE?: list, NEQ?: list, RE?: list}
+  --query: list # item shape: {EQ?: list, GT?: list, GTE?: list, LT?: list, LTE?: list, NEQ?: list, RE?: list}
 ]: any -> record<DATA: list<record>, TOTAL: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v/2/devices/($SystemKey)")
-  let body = {$set: $set, query: $body_query} | compact
+  let body = {$set: $set, query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"ClearBlade-UserToken": $ClearBlade_UserToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4816,12 +4816,12 @@ export def "v-3-deployments GetAllDeployments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Tags to filter deployments by. See the query model above for an example.
+  --query: string # Tags to filter deployments by. See the query model above for an example.
   --ClearBlade-UserToken: string # User Token obtained through user authentication.
 ]: nothing -> table<description: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v/3/($systemKey)/deployments" $qp)
   let extra_headers = {"ClearBlade-UserToken": $ClearBlade_UserToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -5640,12 +5640,12 @@ export def "v-4-message-topics GetTopics" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Query object used to filter the items. See query model in the description for example.
+  --query: string # Query object used to filter the items. See query model in the description for example.
   --ClearBlade-DevToken: string # Dev Token obtained through authentication.
 ]: nothing -> table<ip: string, payload: string, payloadsize: int, pk: string, qos: int, time: int, topicid: string, userid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v/4/message/($systemKey)/topics" $qp)
   let extra_headers = {"ClearBlade-DevToken": $ClearBlade_DevToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -6095,12 +6095,12 @@ export def "v-4-code-failed GetFailedServiceQuery" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Uses query to limit scope of list of failed services. Check FailQuery Model at the bottom of this page.
+  --query: string # Uses query to limit scope of list of failed services. Check FailQuery Model at the bottom of this page.
   --ClearBlade-DevToken: string # Dev Token obtained through authentication.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v/4/($systemKey)/code/failed" $qp)
   let extra_headers = {"ClearBlade-DevToken": $ClearBlade_DevToken} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

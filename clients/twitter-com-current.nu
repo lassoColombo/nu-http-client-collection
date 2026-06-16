@@ -734,7 +734,7 @@ export def "2-spaces-search searchSpaces" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # The search query. (e.g. crypto)
+  --query: string # The search query. (e.g. crypto)
   --state: string@state-completer # The state of Spaces to search for. (default: all)
   --max-results: int # The number of results to return. (format: int32, default: 100)
   --spacefields: list # A comma separated list of Space fields to display. (e.g. [created_at, creator_id, ended_at, host_ids, id, invited_user_ids, is_ticketed, lang, participant_count, scheduled_start, speaker_ids, started_at, state, subscriber_count, title, topic_ids, updated_at])
@@ -744,7 +744,7 @@ export def "2-spaces-search searchSpaces" [
 ]: nothing -> record<data: table<created_at: string, creator_id: string, ended_at: string, host_ids: list, id: string, invited_user_ids: list, is_ticketed: bool, lang: string, participant_count: int, scheduled_start: string, speaker_ids: list, started_at: string, state: string, subscriber_count: int, title: string, topics: list, updated_at: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "space.fields" $spacefields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "topic.fields" $topicfields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "space.fields" $spacefields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "topic.fields" $topicfields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/spaces/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -962,7 +962,7 @@ export def "2-tweets-counts-all tweetCountsFullArchiveSearch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # One query/rule/filter for matching Tweets. Refer to https://t.co/rulelength to identify the max query length. (e.g. (from:TwitterDev OR from:TwitterAPI) has:media -is:retweet)
+  --query: string # One query/rule/filter for matching Tweets. Refer to https://t.co/rulelength to identify the max query length. (e.g. (from:TwitterDev OR from:TwitterAPI) has:media -is:retweet)
   --start-time: string # YYYY-MM-DDTHH:mm:ssZ. The oldest UTC timestamp (from most recent 7 days) from which the Tweets will be provided. Timestamp is in second granularity and is inclusive (i.e. 12:00:01 includes the first second of the minute). (format: date-time)
   --end-time: string # YYYY-MM-DDTHH:mm:ssZ. The newest, most recent UTC timestamp to which the Tweets will be provided. Timestamp is in second granularity and is exclusive (i.e. 12:00:01 excludes the first second of the minute). (format: date-time)
   --since-id: string # Returns results with a Tweet ID greater than (that is, more recent than) the specified ID. (e.g. 1346889436626259968)
@@ -974,7 +974,7 @@ export def "2-tweets-counts-all tweetCountsFullArchiveSearch" [
 ]: nothing -> record<data: table<end: string, start: string, tweet_count: int>, errors: table<detail: string, status: int, title: string, type: string>, meta: record<newest_id: string, next_token: string, oldest_id: string, total_tweet_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "granularity" $granularity "scalar") (serialize-qp "search_count.fields" $search_countfields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "granularity" $granularity "scalar") (serialize-qp "search_count.fields" $search_countfields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/counts/all" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -996,7 +996,7 @@ export def "2-tweets-counts-recent tweetCountsRecentSearch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # One query/rule/filter for matching Tweets. Refer to https://t.co/rulelength to identify the max query length. (e.g. (from:TwitterDev OR from:TwitterAPI) has:media -is:retweet)
+  --query: string # One query/rule/filter for matching Tweets. Refer to https://t.co/rulelength to identify the max query length. (e.g. (from:TwitterDev OR from:TwitterAPI) has:media -is:retweet)
   --start-time: string # YYYY-MM-DDTHH:mm:ssZ. The oldest UTC timestamp (from most recent 7 days) from which the Tweets will be provided. Timestamp is in second granularity and is inclusive (i.e. 12:00:01 includes the first second of the minute). (format: date-time)
   --end-time: string # YYYY-MM-DDTHH:mm:ssZ. The newest, most recent UTC timestamp to which the Tweets will be provided. Timestamp is in second granularity and is exclusive (i.e. 12:00:01 excludes the first second of the minute). (format: date-time)
   --since-id: string # Returns results with a Tweet ID greater than (that is, more recent than) the specified ID. (e.g. 1346889436626259968)
@@ -1008,7 +1008,7 @@ export def "2-tweets-counts-recent tweetCountsRecentSearch" [
 ]: nothing -> record<data: table<end: string, start: string, tweet_count: int>, errors: table<detail: string, status: int, title: string, type: string>, meta: record<newest_id: string, next_token: string, oldest_id: string, total_tweet_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "granularity" $granularity "scalar") (serialize-qp "search_count.fields" $search_countfields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "granularity" $granularity "scalar") (serialize-qp "search_count.fields" $search_countfields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/counts/recent" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1157,7 +1157,7 @@ export def "2-tweets-search-all tweetsFullarchiveSearch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # One query/rule/filter for matching Tweets. Refer to https://t.co/rulelength to identify the max query length. (e.g. (from:TwitterDev OR from:TwitterAPI) has:media -is:retweet)
+  --query: string # One query/rule/filter for matching Tweets. Refer to https://t.co/rulelength to identify the max query length. (e.g. (from:TwitterDev OR from:TwitterAPI) has:media -is:retweet)
   --start-time: string # YYYY-MM-DDTHH:mm:ssZ. The oldest UTC timestamp from which the Tweets will be provided. Timestamp is in second granularity and is inclusive (i.e. 12:00:01 includes the first second of the minute). (format: date-time)
   --end-time: string # YYYY-MM-DDTHH:mm:ssZ. The newest, most recent UTC timestamp to which the Tweets will be provided. Timestamp is in second granularity and is exclusive (i.e. 12:00:01 excludes the first second of the minute). (format: date-time)
   --since-id: string # Returns results with a Tweet ID greater than (that is, more recent than) the specified ID. (e.g. 1346889436626259968)
@@ -1175,7 +1175,7 @@ export def "2-tweets-search-all tweetsFullarchiveSearch" [
 ]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<newest_id: string, next_token: string, oldest_id: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "tweet.fields" $tweetfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $mediafields "csv") (serialize-qp "poll.fields" $pollfields "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "place.fields" $placefields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "tweet.fields" $tweetfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $mediafields "csv") (serialize-qp "poll.fields" $pollfields "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "place.fields" $placefields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/search/all" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1197,7 +1197,7 @@ export def "2-tweets-search-recent tweetsRecentSearch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # One query/rule/filter for matching Tweets. Refer to https://t.co/rulelength to identify the max query length. (e.g. (from:TwitterDev OR from:TwitterAPI) has:media -is:retweet)
+  --query: string # One query/rule/filter for matching Tweets. Refer to https://t.co/rulelength to identify the max query length. (e.g. (from:TwitterDev OR from:TwitterAPI) has:media -is:retweet)
   --start-time: string # YYYY-MM-DDTHH:mm:ssZ. The oldest UTC timestamp from which the Tweets will be provided. Timestamp is in second granularity and is inclusive (i.e. 12:00:01 includes the first second of the minute). (format: date-time)
   --end-time: string # YYYY-MM-DDTHH:mm:ssZ. The newest, most recent UTC timestamp to which the Tweets will be provided. Timestamp is in second granularity and is exclusive (i.e. 12:00:01 excludes the first second of the minute). (format: date-time)
   --since-id: string # Returns results with a Tweet ID greater than (that is, more recent than) the specified ID. (e.g. 1346889436626259968)
@@ -1215,7 +1215,7 @@ export def "2-tweets-search-recent tweetsRecentSearch" [
 ]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<newest_id: string, next_token: string, oldest_id: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "tweet.fields" $tweetfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $mediafields "csv") (serialize-qp "poll.fields" $pollfields "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "place.fields" $placefields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "tweet.fields" $tweetfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $mediafields "csv") (serialize-qp "poll.fields" $pollfields "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "place.fields" $placefields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/search/recent" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

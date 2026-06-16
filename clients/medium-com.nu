@@ -456,11 +456,11 @@ export def "search-articles-query-query get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search query (e.g. startup)
+  --query: string # Search query (e.g. startup)
 ]: nothing -> record<articles: list<string>, search_query: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/search/articles?query=($query)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -480,11 +480,11 @@ export def "search-lists-query-query get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search query (e.g. artificial intelligence)
+  --query: string # Search query (e.g. artificial intelligence)
 ]: nothing -> record<lists: list<string>, search_query: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/search/lists?query=($query)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -504,11 +504,11 @@ export def "search-publications-query-query get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search query (e.g. mental health)
+  --query: string # Search query (e.g. mental health)
 ]: nothing -> record<publications: list<string>, search_query: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/search/publications?query=($query)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -528,11 +528,11 @@ export def "search-tags-query-query get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search query (e.g. blockchain)
+  --query: string # Search query (e.g. blockchain)
 ]: nothing -> record<search_query: string, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/search/tags?query=($query)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -552,11 +552,11 @@ export def "search-users-query-query get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search query (e.g. data engineer)
+  --query: string # Search query (e.g. data engineer)
 ]: nothing -> record<search_query: string, users: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/search/users?query=($query)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

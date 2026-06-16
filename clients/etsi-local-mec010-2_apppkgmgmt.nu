@@ -109,13 +109,13 @@ export def "app-packages packagesGET" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Attribute-based filtering parameters according to ETSI GS MEC 009
   --all-fields: string # Include all complex attributes in the response.
-  --qp-fields: string # Complex attributes of AppPkgInfo to be included into the response
+  --fields: string # Complex attributes of AppPkgInfo to be included into the response
   --exclude-fields: string # Complex attributes of AppPkgInfo to be excluded from the response.
   --exclude-default: string # Indicates to exclude the following complex attributes of AppPkgInfo from the response.
 ]: nothing -> table<_links: record<appD: record, appPkgContent: record, self: record>, additionalArtifacts: any, appDId: string, appDVersion: string, appName: string, appProvider: string, appSoftwareVersion: string, checksum: record<algorithm: string, hash: string>, id: string, onboardingState: string, operationalState: string, softwareImages: any, usageState: string, userDefinedData: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "all_fields" $all_fields "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "exclude_fields" $exclude_fields "scalar") (serialize-qp "exclude_default" $exclude_default "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "all_fields" $all_fields "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "exclude_fields" $exclude_fields "scalar") (serialize-qp "exclude_default" $exclude_default "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/app_packages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -244,13 +244,13 @@ export def "app-packages-appd appPkgIdGET" [
   --accept: string@accept-completer # Response content type
   --filter: string # Attribute-based filtering parameters according to ETSI GS MEC 009
   --all-fields: string # Include all complex attributes in the response.
-  --qp-fields: string # Complex attributes of AppPkgInfo to be included into the response
+  --fields: string # Complex attributes of AppPkgInfo to be included into the response
   --exclude-fields: string # Complex attributes of AppPkgInfo to be excluded from the response.
   --exclude-default: string # Indicates to exclude the following complex attributes of AppPkgInfo from the response.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "all_fields" $all_fields "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "exclude_fields" $exclude_fields "scalar") (serialize-qp "exclude_default" $exclude_default "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "all_fields" $all_fields "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "exclude_fields" $exclude_fields "scalar") (serialize-qp "exclude_default" $exclude_default "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/app_packages/($appPkgId)/appd" $qp)
   let accept_val = ($accept | default "application/zip")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -323,13 +323,13 @@ export def "onboarded-app-packages-appd appDGET" [
   --accept: string@accept-completer # Response content type
   --filter: string # Attribute-based filtering parameters according to ETSI GS MEC 009
   --all-fields: string # Include all complex attributes in the response.
-  --qp-fields: string # Complex attributes of AppPkgInfo to be included into the response
+  --fields: string # Complex attributes of AppPkgInfo to be included into the response
   --exclude-fields: string # Complex attributes of AppPkgInfo to be excluded from the response.
   --exclude-default: string # Indicates to exclude the following complex attributes of AppPkgInfo from the response.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "all_fields" $all_fields "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "exclude_fields" $exclude_fields "scalar") (serialize-qp "exclude_default" $exclude_default "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "all_fields" $all_fields "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "exclude_fields" $exclude_fields "scalar") (serialize-qp "exclude_default" $exclude_default "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/onboarded_app_packages/($appDId)/appd" $qp)
   let accept_val = ($accept | default "application/zip")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

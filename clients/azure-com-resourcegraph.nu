@@ -132,7 +132,7 @@ export def "providers-microsoft-resource-graph-resources Resources" [
   --api-version: string # API version.
   --facets: list # An array of facet requests to be computed against the query result. — item shape: {expression: string, options?: any}
   --options: any # The options for query evaluation — shape: {$skip?: int, $skipToken?: string, $top?: int, resultFormat?: "table"|"objectArray"}
-  --body-query: string # The resources query.
+  query: string # The resources query.
   subscriptions: list # Azure subscriptions against which to execute the query.
 ]: any -> record<_skipToken: string, count: int, data: any, facets: table<expression: string, resultType: string>, resultTruncated: string, totalRecords: int> {
   let input = $in
@@ -140,7 +140,7 @@ export def "providers-microsoft-resource-graph-resources Resources" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.ResourceGraph/resources" $qp)
-  let body = {facets: $facets, options: $options, query: $body_query, subscriptions: $subscriptions} | compact
+  let body = {facets: $facets, options: $options, query: $query, subscriptions: $subscriptions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

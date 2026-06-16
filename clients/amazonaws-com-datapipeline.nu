@@ -587,7 +587,7 @@ export def "x-amz-target-data-pipeline-query-objects QueryObjects" [
   --X-Amz-SignedHeaders: string
   --X-Amz-Target: string@X-Amz-Target-completer-12
   pipelineId: any
-  --body-query: any
+  --query: any
   sphere: any
   --marker: any
   --limit: any
@@ -597,7 +597,7 @@ export def "x-amz-target-data-pipeline-query-objects QueryObjects" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=DataPipeline.QueryObjects" $qp)
-  let body = {pipelineId: $pipelineId, query: $body_query, sphere: $sphere, marker: $marker, limit: $limit} | compact
+  let body = {pipelineId: $pipelineId, query: $query, sphere: $sphere, marker: $marker, limit: $limit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -665,13 +665,13 @@ export def "x-amz-target-data-pipeline-report-task-progress ReportTaskProgress" 
   --X-Amz-SignedHeaders: string
   --X-Amz-Target: string@X-Amz-Target-completer-14
   taskId: any
-  --body-fields: any
+  --fields: any
 ]: any -> record<canceled: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DataPipeline.ReportTaskProgress")
-  let body = {taskId: $taskId, fields: $body_fields} | compact
+  let body = {taskId: $taskId, fields: $fields} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

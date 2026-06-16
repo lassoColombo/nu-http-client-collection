@@ -1523,14 +1523,14 @@ export def "2-groups-picker findGroups" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # a String to match groups agains
+  --query: string # a String to match groups agains
   --exclude: string
   --maxResults: int # format: int32
   --userName: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "userName" $userName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "userName" $userName "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/groups/picker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1550,7 +1550,7 @@ export def "2-groupuserpicker findUsersAndGroups" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A string used to search username, Name or e-mail address
+  --query: string # A string used to search username, Name or e-mail address
   --maxResults: int # the maximum number of users to return (defaults to 50). The maximum allowed value is 1000. If                     you specify a value that is higher than this number, your search results will be truncated. (format: int32)
   --showAvatar: oneof<nothing, bool>
   --fieldId: string # The custom field id, if this request comes from a custom field, such as a user picker. Optional.
@@ -1559,7 +1559,7 @@ export def "2-groupuserpicker findUsersAndGroups" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "showAvatar" $showAvatar "scalar") (serialize-qp "fieldId" $fieldId "scalar") (serialize-qp "projectId" $projectId "scalar") (serialize-qp "issueTypeId" $issueTypeId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "showAvatar" $showAvatar "scalar") (serialize-qp "fieldId" $fieldId "scalar") (serialize-qp "projectId" $projectId "scalar") (serialize-qp "issueTypeId" $issueTypeId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/groupuserpicker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1672,7 +1672,7 @@ export def "2-issue-picker get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # the query.
+  --query: string # the query.
   --currentJQL: string # the JQL in context of which the request is executed. Only issues which match this JQL query will be included in results.
   --currentIssueKey: string # the key of the issue in context of which the request is executed. The issue which is in context will not be included in the auto-completion result, even if it matches the query.
   --currentProjectId: string # the id of the project in context of which the request is executed. Suggested issues will be only from this project.
@@ -1681,7 +1681,7 @@ export def "2-issue-picker get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "currentJQL" $currentJQL "scalar") (serialize-qp "currentIssueKey" $currentIssueKey "scalar") (serialize-qp "currentProjectId" $currentProjectId "scalar") (serialize-qp "showSubTasks" $showSubTasks "scalar") (serialize-qp "showSubTaskParent" $showSubTaskParent "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "currentJQL" $currentJQL "scalar") (serialize-qp "currentIssueKey" $currentIssueKey "scalar") (serialize-qp "currentProjectId" $currentProjectId "scalar") (serialize-qp "showSubTasks" $showSubTasks "scalar") (serialize-qp "showSubTaskParent" $showSubTaskParent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/issue/picker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1727,13 +1727,13 @@ export def "2-issue get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # the list of fields to return for the issue. By default, all fields are returned.
+  --fields: string # the list of fields to return for the issue. By default, all fields are returned.
   --expand: string
   --properties: string # the list of properties to return for the issue. By default no properties are returned.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "properties" $properties "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "properties" $properties "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5469,12 +5469,12 @@ export def "2-search search" [
   --startAt: int # the index of the first issue to return (0-based) (format: int32)
   --maxResults: int # the maximum number of issues to return (defaults to 50). The maximum allowable value is                       dictated by the JIRA property 'jira.search.views.default.max'. If you specify a value that is higher than this                       number, your search results will be truncated. (format: int32)
   --validateQuery: oneof<nothing, bool> # whether to validate the JQL query (default: true)
-  --qp-fields: string # the list of fields to return for each issue. By default, all navigable fields are returned.
+  --fields: string # the list of fields to return for each issue. By default, all navigable fields are returned.
   --expand: string # A comma-separated list of the parameters to expand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jql" $jql "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "validateQuery" $validateQuery "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jql" $jql "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "validateQuery" $validateQuery "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6288,14 +6288,14 @@ export def "2-user-picker findUsersForPicker" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A string used to search username, Name or e-mail address
+  --query: string # A string used to search username, Name or e-mail address
   --maxResults: int # the maximum number of users to return (defaults to 50). The maximum allowed value is 1000.                    If you specify a value that is higher than this number, your search results will be truncated. (format: int32)
   --showAvatar: oneof<nothing, bool>
   --exclude: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "showAvatar" $showAvatar "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "showAvatar" $showAvatar "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/user/picker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

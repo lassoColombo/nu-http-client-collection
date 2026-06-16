@@ -4843,13 +4843,13 @@ export def "webhookcreatejson WebhookCreate" [
   --action: string # Specify what action (event) will trigger the webhook (e.g add, delete, or update)
   --callback: string # Callback url that returns shipping rates. It should be able to accept POST requests with json data.
   --label: string # The name you give to the webhook
-  --qp-fields: string # Fields the webhook should send (default: force_all)
+  --fields: string # Fields the webhook should send (default: force_all)
   --active: oneof<nothing, bool> # Webhook status (default: true)
   --store-id: string # Defines store id where the webhook should be assigned
 ]: nothing -> record<result: record<id: string>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "entity" $entity "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "entity" $entity "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhook.create.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4948,12 +4948,12 @@ export def "webhookupdatejson WebhookUpdate" [
   --id: string # Webhook id
   --callback: string # Callback url that returns shipping rates. It should be able to accept POST requests with json data.
   --label: string # The name you give to the webhook
-  --qp-fields: string # Fields the webhook should send
+  --fields: string # Fields the webhook should send
   --active: oneof<nothing, bool> # Webhook status
 ]: nothing -> record<result: record<updated: string>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "active" $active "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "active" $active "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhook.update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

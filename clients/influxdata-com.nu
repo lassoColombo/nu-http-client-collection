@@ -3164,7 +3164,7 @@ export def "query PostQuery" [
   --extern: record # Represents a source from a single file — shape: {body?: list, imports?: list, name?: string, package?: record, type?: string}
   --now: string # Specifies the time that should be reported as "now" in the query. Default is the server's now time. (format: date-time)
   --params: record # Enumeration of key/value pairs that respresent parameters to be injected into query (can only specify either this field or extern and not both)
-  --body-query: string # Query script to execute.
+  --query: string # Query script to execute.
   --type: string@type-completer # The type of query. Must be "flux".
   --bucket: string # Bucket is to be used instead of the database and retention policy specified in the InfluxQL query.
 ]: any -> record<code: string, err: string, message: string, op: string> {
@@ -3173,7 +3173,7 @@ export def "query PostQuery" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org" $org "scalar") (serialize-qp "orgID" $orgID "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/query" $qp)
-  let body = {dialect: $dialect, extern: $extern, now: $now, params: $params, query: $body_query, type: $type, bucket: $bucket} | compact
+  let body = {dialect: $dialect, extern: $extern, now: $now, params: $params, query: $query, type: $type, bucket: $bucket} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span, "Accept-Encoding": $Accept_Encoding, "Content-Type": $Content_Type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3203,14 +3203,14 @@ export def "query-analyze PostQueryAnalyze" [
   --extern: record # Represents a source from a single file — shape: {body?: list, imports?: list, name?: string, package?: record, type?: string}
   --now: string # Specifies the time that should be reported as "now" in the query. Default is the server's now time. (format: date-time)
   --params: record # Enumeration of key/value pairs that respresent parameters to be injected into query (can only specify either this field or extern and not both)
-  --body-query: string # Query script to execute.
+  query: string # Query script to execute.
   --type: string@type-completer # The type of query. Must be "flux".
 ]: any -> record<errors: table<character: int, column: int, line: int, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/query/analyze")
-  let body = {dialect: $dialect, extern: $extern, now: $now, params: $params, query: $body_query, type: $type} | compact
+  let body = {dialect: $dialect, extern: $extern, now: $now, params: $params, query: $query, type: $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span, "Content-Type": $Content_Type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3234,13 +3234,13 @@ export def "query-ast PostQueryAst" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --Content-Type: string@Content-Type-completer-1
-  --body-query: string # Flux query script to be analyzed
+  query: string # Flux query script to be analyzed
 ]: any -> record<ast: record<files: list<record>, package: string, path: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/query/ast")
-  let body = {query: $body_query} | compact
+  let body = {query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span, "Content-Type": $Content_Type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

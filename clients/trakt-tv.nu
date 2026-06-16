@@ -2265,7 +2265,7 @@ export def "search Get-text-query-results" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search all text based fields. (e.g. tron)
+  --query: string # Search all text based fields. (e.g. tron)
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
   --body: record
@@ -2273,7 +2273,7 @@ export def "search Get-text-query-results" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/search/($type)" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact

@@ -138,12 +138,12 @@ export def "food-converse-suggest get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A (partial) query from the user. The endpoint will return if it matches topics it can talk about. (e.g. tell)
+  --query: string # A (partial) query from the user. The endpoint will return if it matches topics it can talk about. (e.g. tell)
   --number: float # The number of suggestions to return (between 1 and 25). (e.g. 5)
 ]: nothing -> record<suggests: record<_: list<record>>, words: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/converse/suggest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -164,7 +164,7 @@ export def "food-custom-foods-search searchCustomFoods" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The (natural language) search query. (e.g. burger)
+  --query: string # The (natural language) search query. (e.g. burger)
   --username: string # The username. (e.g. dsky)
   --hash: string # The private hash for the username. (e.g. 4b5v4398573406)
   --offset: int # The number of results to skip (between 0 and 900).
@@ -172,7 +172,7 @@ export def "food-custom-foods-search searchCustomFoods" [
 ]: nothing -> record<customFoods: table<id: int, imageUrl: string, price: float, servings: float, title: string>, number: int, offset: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "hash" $hash "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "hash" $hash "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/customFoods/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -272,7 +272,7 @@ export def "food-ingredients-autocomplete autocompleteIngredientSearch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The (natural language) search query. (e.g. burger)
+  --query: string # The (natural language) search query. (e.g. burger)
   --number: int # The maximum number of items to return (between 1 and 100). Defaults to 10. (default: 10, e.g. 10)
   --metaInformation: oneof<nothing, bool> # Whether to return more meta information about the ingredients. (e.g. false)
   --intolerances: string # A comma-separated list of intolerances. All recipes returned must not contain ingredients that are not suitable for people with the intolerances entered. See a full list of supported intolerances. (e.g. egg)
@@ -280,7 +280,7 @@ export def "food-ingredients-autocomplete autocompleteIngredientSearch" [
 ]: nothing -> table<aisle: string, id: int, image: string, name: string, possibleUnits: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "metaInformation" $metaInformation "scalar") (serialize-qp "intolerances" $intolerances "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "metaInformation" $metaInformation "scalar") (serialize-qp "intolerances" $intolerances "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/ingredients/autocomplete" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -358,7 +358,7 @@ export def "food-ingredients-search ingredientSearch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The (natural language) search query. (e.g. burger)
+  --query: string # The (natural language) search query. (e.g. burger)
   --addChildren: oneof<nothing, bool> # Whether to add children of found foods. (e.g. true)
   --minProteinPercent: float # The minimum percentage of protein the food must have (between 0 and 100). (e.g. 10)
   --maxProteinPercent: float # The maximum percentage of protein the food can have (between 0 and 100). (e.g. 90)
@@ -376,7 +376,7 @@ export def "food-ingredients-search ingredientSearch" [
 ]: nothing -> record<number: int, offset: int, results: table<id: int, image: string, name: string>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "addChildren" $addChildren "scalar") (serialize-qp "minProteinPercent" $minProteinPercent "scalar") (serialize-qp "maxProteinPercent" $maxProteinPercent "scalar") (serialize-qp "minFatPercent" $minFatPercent "scalar") (serialize-qp "maxFatPercent" $maxFatPercent "scalar") (serialize-qp "minCarbsPercent" $minCarbsPercent "scalar") (serialize-qp "maxCarbsPercent" $maxCarbsPercent "scalar") (serialize-qp "metaInformation" $metaInformation "scalar") (serialize-qp "intolerances" $intolerances "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sortDirection" $sortDirection "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "addChildren" $addChildren "scalar") (serialize-qp "minProteinPercent" $minProteinPercent "scalar") (serialize-qp "maxProteinPercent" $maxProteinPercent "scalar") (serialize-qp "minFatPercent" $minFatPercent "scalar") (serialize-qp "maxFatPercent" $maxFatPercent "scalar") (serialize-qp "minCarbsPercent" $minCarbsPercent "scalar") (serialize-qp "maxCarbsPercent" $maxCarbsPercent "scalar") (serialize-qp "metaInformation" $metaInformation "scalar") (serialize-qp "intolerances" $intolerances "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sortDirection" $sortDirection "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/ingredients/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -526,7 +526,7 @@ export def "food-menu-items-search searchMenuItems" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The (natural language) search query. (e.g. burger)
+  --query: string # The (natural language) search query. (e.g. burger)
   --minCalories: float # The minimum amount of calories the menu item must have. (e.g. 50)
   --maxCalories: float # The maximum amount of calories the menu item can have. (e.g. 800)
   --minCarbs: float # The minimum amount of carbohydrates in grams the menu item must have. (e.g. 10)
@@ -541,7 +541,7 @@ export def "food-menu-items-search searchMenuItems" [
 ]: nothing -> record<menuItems: table<id: int, image: string, imageType: string, restaurantChain: string, servings: record, title: string>, number: int, offset: int, totalMenuItems: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "minCalories" $minCalories "scalar") (serialize-qp "maxCalories" $maxCalories "scalar") (serialize-qp "minCarbs" $minCarbs "scalar") (serialize-qp "maxCarbs" $maxCarbs "scalar") (serialize-qp "minProtein" $minProtein "scalar") (serialize-qp "maxProtein" $maxProtein "scalar") (serialize-qp "minFat" $minFat "scalar") (serialize-qp "maxFat" $maxFat "scalar") (serialize-qp "addMenuItemInformation" $addMenuItemInformation "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "minCalories" $minCalories "scalar") (serialize-qp "maxCalories" $maxCalories "scalar") (serialize-qp "minCarbs" $minCarbs "scalar") (serialize-qp "maxCarbs" $maxCarbs "scalar") (serialize-qp "minProtein" $minProtein "scalar") (serialize-qp "maxProtein" $maxProtein "scalar") (serialize-qp "minFat" $minFat "scalar") (serialize-qp "maxFat" $maxFat "scalar") (serialize-qp "addMenuItemInformation" $addMenuItemInformation "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/menuItems/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -562,12 +562,12 @@ export def "food-menu-items-suggest autocompleteMenuItemSearch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The (partial) search query. (e.g. chicke)
+  --query: string # The (partial) search query. (e.g. chicke)
   --number: float # The number of results to return (between 1 and 25). (e.g. 10)
 ]: nothing -> record<results: table<id: int, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/menuItems/suggest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -782,7 +782,7 @@ export def "food-products-search searchGroceryProducts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The (natural language) search query. (e.g. burger)
+  --query: string # The (natural language) search query. (e.g. burger)
   --minCalories: float # The minimum amount of calories the product must have. (e.g. 50)
   --maxCalories: float # The maximum amount of calories the product can have. (e.g. 800)
   --minCarbs: float # The minimum amount of carbohydrates in grams the product must have. (e.g. 10)
@@ -797,7 +797,7 @@ export def "food-products-search searchGroceryProducts" [
 ]: nothing -> record<number: int, offset: int, products: table<id: int, imageType: string, title: string>, totalProducts: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "minCalories" $minCalories "scalar") (serialize-qp "maxCalories" $maxCalories "scalar") (serialize-qp "minCarbs" $minCarbs "scalar") (serialize-qp "maxCarbs" $maxCarbs "scalar") (serialize-qp "minProtein" $minProtein "scalar") (serialize-qp "maxProtein" $maxProtein "scalar") (serialize-qp "minFat" $minFat "scalar") (serialize-qp "maxFat" $maxFat "scalar") (serialize-qp "addProductInformation" $addProductInformation "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "minCalories" $minCalories "scalar") (serialize-qp "maxCalories" $maxCalories "scalar") (serialize-qp "minCarbs" $minCarbs "scalar") (serialize-qp "maxCarbs" $maxCarbs "scalar") (serialize-qp "minProtein" $minProtein "scalar") (serialize-qp "maxProtein" $maxProtein "scalar") (serialize-qp "minFat" $minFat "scalar") (serialize-qp "maxFat" $maxFat "scalar") (serialize-qp "addProductInformation" $addProductInformation "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/products/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -818,12 +818,12 @@ export def "food-products-suggest autocompleteProductSearch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The (partial) search query. (e.g. chicke)
+  --query: string # The (partial) search query. (e.g. chicke)
   --number: int # The number of results to return (between 1 and 25). (e.g. 10)
 ]: nothing -> record<results: table<id: int, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/products/suggest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1027,7 +1027,7 @@ export def "food-restaurants-search searchRestaurants" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The search query. (e.g. beach cafe)
+  --query: string # The search query. (e.g. beach cafe)
   --lat: float # The latitude of the user's location. (e.g. 37.7786357)
   --lng: float # The longitude of the user's location.". (e.g. -122.3918135)
   --distance: float # The distance around the location in miles. (e.g. 2)
@@ -1040,7 +1040,7 @@ export def "food-restaurants-search searchRestaurants" [
 ]: nothing -> record<restaurants: table<_id: string, address: record, aggregated_rating_count: int, cuisines: list, delivery_enabled: bool, description: string, dollar_signs: int, food_photos: list, is_open: bool, local_hours: record, logo_photos: list, miles: float, name: string, offers_first_party_delivery: bool, offers_third_party_delivery: bool, phone_number: int, pickup_enabled: bool, store_photos: list, type: string, weighted_rating_value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "distance" $distance "scalar") (serialize-qp "budget" $budget "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "min-rating" $min_rating "scalar") (serialize-qp "is-open" $is_open "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "distance" $distance "scalar") (serialize-qp "budget" $budget "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "min-rating" $min_rating "scalar") (serialize-qp "is-open" $is_open "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/restaurants/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1061,13 +1061,13 @@ export def "food-search searchAllFood" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The search query. (e.g. apple)
+  --query: string # The search query. (e.g. apple)
   --offset: int # The number of results to skip (between 0 and 900).
   --number: int # The maximum number of items to return (between 1 and 100). Defaults to 10. (default: 10, e.g. 10)
 ]: nothing -> record<limit: int, offset: int, query: string, searchResults: table<name: string, results: list, totalResults: int>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1088,11 +1088,11 @@ export def "food-site-search searchSiteContent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The query to search for. You can also use partial queries such as "spagh" to already find spaghetti recipes, articles, grocery products, and other content. (e.g. past)
+  --query: string # The query to search for. You can also use partial queries such as "spagh" to already find spaghetti recipes, articles, grocery products, and other content. (e.g. past)
 ]: nothing -> record<Articles: table<dataPoints: list, image: string, link: string, name: string>, Grocery_Products: table<dataPoints: list, image: string, link: string, name: string>, Menu_Items: table<dataPoints: list, image: string, link: string, name: string>, Recipes: table<dataPoints: list, image: string, link: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/site/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1136,7 +1136,7 @@ export def "food-videos-search searchFoodVideos" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The (natural language) search query. (e.g. burger)
+  --query: string # The (natural language) search query. (e.g. burger)
   --type: string # The type of the recipes. See a full list of supported meal types. (e.g. main course)
   --cuisine: string # The cuisine(s) of the recipes. One or more, comma separated. See a full list of supported cuisines. (e.g. italian)
   --diet: string # The diet for which the recipes must be suitable. See a full list of supported diets. (e.g. vegetarian)
@@ -1149,7 +1149,7 @@ export def "food-videos-search searchFoodVideos" [
 ]: nothing -> record<totalResults: int, videos: table<length: int, rating: float, shortTitle: string, thumbnail: string, title: string, views: int, youTubeId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "diet" $diet "scalar") (serialize-qp "includeIngredients" $includeIngredients "scalar") (serialize-qp "excludeIngredients" $excludeIngredients "scalar") (serialize-qp "minLength" $minLength "scalar") (serialize-qp "maxLength" $maxLength "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "diet" $diet "scalar") (serialize-qp "includeIngredients" $includeIngredients "scalar") (serialize-qp "excludeIngredients" $excludeIngredients "scalar") (serialize-qp "minLength" $minLength "scalar") (serialize-qp "maxLength" $maxLength "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/videos/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1721,12 +1721,12 @@ export def "recipes-autocomplete autocompleteRecipeSearch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The (natural language) search query. (e.g. burger)
+  --query: string # The (natural language) search query. (e.g. burger)
   --number: int # The maximum number of items to return (between 1 and 100). Defaults to 10. (default: 10, e.g. 10)
 ]: nothing -> table<id: int, imageType: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/autocomplete" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1747,7 +1747,7 @@ export def "recipes-complex-search searchRecipes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The (natural language) search query. (e.g. burger)
+  --query: string # The (natural language) search query. (e.g. burger)
   --cuisine: string # The cuisine(s) of the recipes. One or more, comma separated (will be interpreted as 'OR'). See a full list of supported cuisines. (e.g. italian)
   --excludeCuisine: string # The cuisine(s) the recipes must not match. One or more, comma separated (will be interpreted as 'AND'). See a full list of supported cuisines. (e.g. greek)
   --diet: string # The diet for which the recipes must be suitable. See a full list of supported diets. (e.g. vegetarian)
@@ -1846,7 +1846,7 @@ export def "recipes-complex-search searchRecipes" [
 ]: nothing -> record<number: int, offset: int, results: table<calories: float, carbs: string, fat: string, id: int, image: string, imageType: string, protein: string, title: string>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "excludeCuisine" $excludeCuisine "scalar") (serialize-qp "diet" $diet "scalar") (serialize-qp "intolerances" $intolerances "scalar") (serialize-qp "equipment" $equipment "scalar") (serialize-qp "includeIngredients" $includeIngredients "scalar") (serialize-qp "excludeIngredients" $excludeIngredients "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "instructionsRequired" $instructionsRequired "scalar") (serialize-qp "fillIngredients" $fillIngredients "scalar") (serialize-qp "addRecipeInformation" $addRecipeInformation "scalar") (serialize-qp "addRecipeNutrition" $addRecipeNutrition "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "recipeBoxId" $recipeBoxId "scalar") (serialize-qp "titleMatch" $titleMatch "scalar") (serialize-qp "maxReadyTime" $maxReadyTime "scalar") (serialize-qp "ignorePantry" $ignorePantry "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sortDirection" $sortDirection "scalar") (serialize-qp "minCarbs" $minCarbs "scalar") (serialize-qp "maxCarbs" $maxCarbs "scalar") (serialize-qp "minProtein" $minProtein "scalar") (serialize-qp "maxProtein" $maxProtein "scalar") (serialize-qp "minCalories" $minCalories "scalar") (serialize-qp "maxCalories" $maxCalories "scalar") (serialize-qp "minFat" $minFat "scalar") (serialize-qp "maxFat" $maxFat "scalar") (serialize-qp "minAlcohol" $minAlcohol "scalar") (serialize-qp "maxAlcohol" $maxAlcohol "scalar") (serialize-qp "minCaffeine" $minCaffeine "scalar") (serialize-qp "maxCaffeine" $maxCaffeine "scalar") (serialize-qp "minCopper" $minCopper "scalar") (serialize-qp "maxCopper" $maxCopper "scalar") (serialize-qp "minCalcium" $minCalcium "scalar") (serialize-qp "maxCalcium" $maxCalcium "scalar") (serialize-qp "minCholine" $minCholine "scalar") (serialize-qp "maxCholine" $maxCholine "scalar") (serialize-qp "minCholesterol" $minCholesterol "scalar") (serialize-qp "maxCholesterol" $maxCholesterol "scalar") (serialize-qp "minFluoride" $minFluoride "scalar") (serialize-qp "maxFluoride" $maxFluoride "scalar") (serialize-qp "minSaturatedFat" $minSaturatedFat "scalar") (serialize-qp "maxSaturatedFat" $maxSaturatedFat "scalar") (serialize-qp "minVitaminA" $minVitaminA "scalar") (serialize-qp "maxVitaminA" $maxVitaminA "scalar") (serialize-qp "minVitaminC" $minVitaminC "scalar") (serialize-qp "maxVitaminC" $maxVitaminC "scalar") (serialize-qp "minVitaminD" $minVitaminD "scalar") (serialize-qp "maxVitaminD" $maxVitaminD "scalar") (serialize-qp "minVitaminE" $minVitaminE "scalar") (serialize-qp "maxVitaminE" $maxVitaminE "scalar") (serialize-qp "minVitaminK" $minVitaminK "scalar") (serialize-qp "maxVitaminK" $maxVitaminK "scalar") (serialize-qp "minVitaminB1" $minVitaminB1 "scalar") (serialize-qp "maxVitaminB1" $maxVitaminB1 "scalar") (serialize-qp "minVitaminB2" $minVitaminB2 "scalar") (serialize-qp "maxVitaminB2" $maxVitaminB2 "scalar") (serialize-qp "minVitaminB5" $minVitaminB5 "scalar") (serialize-qp "maxVitaminB5" $maxVitaminB5 "scalar") (serialize-qp "minVitaminB3" $minVitaminB3 "scalar") (serialize-qp "maxVitaminB3" $maxVitaminB3 "scalar") (serialize-qp "minVitaminB6" $minVitaminB6 "scalar") (serialize-qp "maxVitaminB6" $maxVitaminB6 "scalar") (serialize-qp "minVitaminB12" $minVitaminB12 "scalar") (serialize-qp "maxVitaminB12" $maxVitaminB12 "scalar") (serialize-qp "minFiber" $minFiber "scalar") (serialize-qp "maxFiber" $maxFiber "scalar") (serialize-qp "minFolate" $minFolate "scalar") (serialize-qp "maxFolate" $maxFolate "scalar") (serialize-qp "minFolicAcid" $minFolicAcid "scalar") (serialize-qp "maxFolicAcid" $maxFolicAcid "scalar") (serialize-qp "minIodine" $minIodine "scalar") (serialize-qp "maxIodine" $maxIodine "scalar") (serialize-qp "minIron" $minIron "scalar") (serialize-qp "maxIron" $maxIron "scalar") (serialize-qp "minMagnesium" $minMagnesium "scalar") (serialize-qp "maxMagnesium" $maxMagnesium "scalar") (serialize-qp "minManganese" $minManganese "scalar") (serialize-qp "maxManganese" $maxManganese "scalar") (serialize-qp "minPhosphorus" $minPhosphorus "scalar") (serialize-qp "maxPhosphorus" $maxPhosphorus "scalar") (serialize-qp "minPotassium" $minPotassium "scalar") (serialize-qp "maxPotassium" $maxPotassium "scalar") (serialize-qp "minSelenium" $minSelenium "scalar") (serialize-qp "maxSelenium" $maxSelenium "scalar") (serialize-qp "minSodium" $minSodium "scalar") (serialize-qp "maxSodium" $maxSodium "scalar") (serialize-qp "minSugar" $minSugar "scalar") (serialize-qp "maxSugar" $maxSugar "scalar") (serialize-qp "minZinc" $minZinc "scalar") (serialize-qp "maxZinc" $maxZinc "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "limitLicense" $limitLicense "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "excludeCuisine" $excludeCuisine "scalar") (serialize-qp "diet" $diet "scalar") (serialize-qp "intolerances" $intolerances "scalar") (serialize-qp "equipment" $equipment "scalar") (serialize-qp "includeIngredients" $includeIngredients "scalar") (serialize-qp "excludeIngredients" $excludeIngredients "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "instructionsRequired" $instructionsRequired "scalar") (serialize-qp "fillIngredients" $fillIngredients "scalar") (serialize-qp "addRecipeInformation" $addRecipeInformation "scalar") (serialize-qp "addRecipeNutrition" $addRecipeNutrition "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "recipeBoxId" $recipeBoxId "scalar") (serialize-qp "titleMatch" $titleMatch "scalar") (serialize-qp "maxReadyTime" $maxReadyTime "scalar") (serialize-qp "ignorePantry" $ignorePantry "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sortDirection" $sortDirection "scalar") (serialize-qp "minCarbs" $minCarbs "scalar") (serialize-qp "maxCarbs" $maxCarbs "scalar") (serialize-qp "minProtein" $minProtein "scalar") (serialize-qp "maxProtein" $maxProtein "scalar") (serialize-qp "minCalories" $minCalories "scalar") (serialize-qp "maxCalories" $maxCalories "scalar") (serialize-qp "minFat" $minFat "scalar") (serialize-qp "maxFat" $maxFat "scalar") (serialize-qp "minAlcohol" $minAlcohol "scalar") (serialize-qp "maxAlcohol" $maxAlcohol "scalar") (serialize-qp "minCaffeine" $minCaffeine "scalar") (serialize-qp "maxCaffeine" $maxCaffeine "scalar") (serialize-qp "minCopper" $minCopper "scalar") (serialize-qp "maxCopper" $maxCopper "scalar") (serialize-qp "minCalcium" $minCalcium "scalar") (serialize-qp "maxCalcium" $maxCalcium "scalar") (serialize-qp "minCholine" $minCholine "scalar") (serialize-qp "maxCholine" $maxCholine "scalar") (serialize-qp "minCholesterol" $minCholesterol "scalar") (serialize-qp "maxCholesterol" $maxCholesterol "scalar") (serialize-qp "minFluoride" $minFluoride "scalar") (serialize-qp "maxFluoride" $maxFluoride "scalar") (serialize-qp "minSaturatedFat" $minSaturatedFat "scalar") (serialize-qp "maxSaturatedFat" $maxSaturatedFat "scalar") (serialize-qp "minVitaminA" $minVitaminA "scalar") (serialize-qp "maxVitaminA" $maxVitaminA "scalar") (serialize-qp "minVitaminC" $minVitaminC "scalar") (serialize-qp "maxVitaminC" $maxVitaminC "scalar") (serialize-qp "minVitaminD" $minVitaminD "scalar") (serialize-qp "maxVitaminD" $maxVitaminD "scalar") (serialize-qp "minVitaminE" $minVitaminE "scalar") (serialize-qp "maxVitaminE" $maxVitaminE "scalar") (serialize-qp "minVitaminK" $minVitaminK "scalar") (serialize-qp "maxVitaminK" $maxVitaminK "scalar") (serialize-qp "minVitaminB1" $minVitaminB1 "scalar") (serialize-qp "maxVitaminB1" $maxVitaminB1 "scalar") (serialize-qp "minVitaminB2" $minVitaminB2 "scalar") (serialize-qp "maxVitaminB2" $maxVitaminB2 "scalar") (serialize-qp "minVitaminB5" $minVitaminB5 "scalar") (serialize-qp "maxVitaminB5" $maxVitaminB5 "scalar") (serialize-qp "minVitaminB3" $minVitaminB3 "scalar") (serialize-qp "maxVitaminB3" $maxVitaminB3 "scalar") (serialize-qp "minVitaminB6" $minVitaminB6 "scalar") (serialize-qp "maxVitaminB6" $maxVitaminB6 "scalar") (serialize-qp "minVitaminB12" $minVitaminB12 "scalar") (serialize-qp "maxVitaminB12" $maxVitaminB12 "scalar") (serialize-qp "minFiber" $minFiber "scalar") (serialize-qp "maxFiber" $maxFiber "scalar") (serialize-qp "minFolate" $minFolate "scalar") (serialize-qp "maxFolate" $maxFolate "scalar") (serialize-qp "minFolicAcid" $minFolicAcid "scalar") (serialize-qp "maxFolicAcid" $maxFolicAcid "scalar") (serialize-qp "minIodine" $minIodine "scalar") (serialize-qp "maxIodine" $maxIodine "scalar") (serialize-qp "minIron" $minIron "scalar") (serialize-qp "maxIron" $maxIron "scalar") (serialize-qp "minMagnesium" $minMagnesium "scalar") (serialize-qp "maxMagnesium" $maxMagnesium "scalar") (serialize-qp "minManganese" $minManganese "scalar") (serialize-qp "maxManganese" $maxManganese "scalar") (serialize-qp "minPhosphorus" $minPhosphorus "scalar") (serialize-qp "maxPhosphorus" $maxPhosphorus "scalar") (serialize-qp "minPotassium" $minPotassium "scalar") (serialize-qp "maxPotassium" $maxPotassium "scalar") (serialize-qp "minSelenium" $minSelenium "scalar") (serialize-qp "maxSelenium" $maxSelenium "scalar") (serialize-qp "minSodium" $minSodium "scalar") (serialize-qp "maxSodium" $maxSodium "scalar") (serialize-qp "minSugar" $minSugar "scalar") (serialize-qp "maxSugar" $maxSugar "scalar") (serialize-qp "minZinc" $minZinc "scalar") (serialize-qp "maxZinc" $maxZinc "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "limitLicense" $limitLicense "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/complexSearch" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -108,12 +108,12 @@ export def "personas list" [
   --name: string # Filter by Persona name
   --count: int # Amount of items to return (default: 20)
   --page: int # Offset, used together with count
-  --qp-fields: list # Allows to select only needed fields
+  --fields: list # Allows to select only needed fields
   --expand: list # Allows to select extra fields
 ]: nothing -> record<_links: record<self: record<href: string>>, _meta: record<currentPage: int, pageCount: int, perPage: int, totalCount: int>, items: table<_links: record, bio: string, email: string, id: int, image: string, name: string, since: int, website: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "fields" $qp_fields "multi") (serialize-qp "expand" $expand "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "fields" $fields "multi") (serialize-qp "expand" $expand "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/personas" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -134,12 +134,12 @@ export def "personas get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: list # Allows to select only needed fields
+  --fields: list # Allows to select only needed fields
   --expand: list # Allows to select extra fields
 ]: nothing -> record<_links: record<self: record<href: string>, shows: list<record>>, bio: string, email: string, id: int, image: string, name: string, since: int, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "multi") (serialize-qp "expand" $expand "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "multi") (serialize-qp "expand" $expand "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/personas/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -165,12 +165,12 @@ export def "playlists list" [
   --persona-id: int # Filter by persona
   --count: int # Amount of items to return (default: 20)
   --page: int # Offset, used together with count
-  --qp-fields: list # Allows to select only needed fields
+  --fields: list # Allows to select only needed fields
   --expand: list # Allows to select extra fields
 ]: nothing -> record<_links: record<self: record<href: string>>, _meta: record<currentPage: int, pageCount: int, perPage: int, totalCount: int>, items: table<_links: record, automation: bool, category: string, description: string, duration: int, end: string, episode_description: string, episode_name: string, hide_dj: bool, id: int, image: string, persona_id: int, show_id: int, since: int, start: string, timezone: string, title: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "show_id" $show_id "scalar") (serialize-qp "persona_id" $persona_id "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "fields" $qp_fields "multi") (serialize-qp "expand" $expand "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "show_id" $show_id "scalar") (serialize-qp "persona_id" $persona_id "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "fields" $fields "multi") (serialize-qp "expand" $expand "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/playlists" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -191,12 +191,12 @@ export def "playlists get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: list # Allows to select only needed fields
+  --fields: list # Allows to select only needed fields
   --expand: list # Allows to select extra fields
 ]: nothing -> record<_links: record<persona: record<href: string>, self: record<href: string>, show: record<href: string>, spins: record<href: string>>, automation: bool, category: string, description: string, duration: int, end: string, episode_description: string, episode_name: string, hide_dj: bool, id: int, image: string, persona_id: int, show_id: int, since: int, start: string, timezone: string, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "multi") (serialize-qp "expand" $expand "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "multi") (serialize-qp "expand" $expand "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/playlists/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -220,12 +220,12 @@ export def "shows list" [
   --end: string # The ending datetime. Maximum 1 hour in past.  (format: date-time)
   --count: int # Amount of items to return (default: 20)
   --page: int # Offset, used together with count
-  --qp-fields: list # Allows to select only needed fields
+  --fields: list # Allows to select only needed fields
   --expand: list # Allows to select extra fields
 ]: nothing -> record<_links: record<self: record<href: string>>, _meta: record<currentPage: int, pageCount: int, perPage: int, totalCount: int>, items: table<_links: record, category: string, description: string, duration: int, end: string, hide_dj: bool, id: int, image: string, one_off: bool, since: int, start: string, timezone: string, title: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "fields" $qp_fields "multi") (serialize-qp "expand" $expand "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "fields" $fields "multi") (serialize-qp "expand" $expand "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/shows" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -246,12 +246,12 @@ export def "shows get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: list # Allows to select only needed fields
+  --fields: list # Allows to select only needed fields
   --expand: list # Allows to select extra fields
 ]: nothing -> record<_links: record<personas: list<record>, playlists: record<href: string>, self: record<href: string>>, category: string, description: string, duration: int, end: string, hide_dj: bool, id: int, image: string, one_off: bool, since: int, start: string, timezone: string, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "multi") (serialize-qp "expand" $expand "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "multi") (serialize-qp "expand" $expand "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/shows/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -277,12 +277,12 @@ export def "spins list" [
   --show-id: int # Filter by show
   --count: int # Amount of items to return (default: 20)
   --page: int # Offset, used together with count
-  --qp-fields: list # Allows to select only needed fields
+  --fields: list # Allows to select only needed fields
   --expand: list # Allows to select extra fields
 ]: nothing -> record<_links: record<self: record<href: string>>, _meta: record<currentPage: int, pageCount: int, perPage: int, totalCount: int>, items: table<_links: record, artist: string, artist_custom: string, catalog_number: string, classical: bool, composer: string, conductor: string, duration: int, end: string, ensemble: string, genre: string, id: int, image: string, isrc: string, iswc: string, label: string, label_custom: string, local: bool, medium: string, new: bool, note: string, performers: string, playlist_id: int, release: string, release_custom: string, released: int, request: bool, song: string, start: string, timezone: string, upc: string, va: bool, work: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "playlist_id" $playlist_id "scalar") (serialize-qp "show_id" $show_id "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "fields" $qp_fields "multi") (serialize-qp "expand" $expand "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "playlist_id" $playlist_id "scalar") (serialize-qp "show_id" $show_id "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "fields" $fields "multi") (serialize-qp "expand" $expand "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/spins" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -338,12 +338,12 @@ export def "spins get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: list # Allows to select only needed fields
+  --fields: list # Allows to select only needed fields
   --expand: list # Allows to select extra fields
 ]: nothing -> record<_links: record<playlist: record<href: string>, self: record<href: string>>, artist: string, artist_custom: string, catalog_number: string, classical: bool, composer: string, conductor: string, duration: int, end: string, ensemble: string, genre: string, id: int, image: string, isrc: string, iswc: string, label: string, label_custom: string, local: bool, medium: string, new: bool, note: string, performers: string, playlist_id: int, release: string, release_custom: string, released: int, request: bool, song: string, start: string, timezone: string, upc: string, va: bool, work: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "multi") (serialize-qp "expand" $expand "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "multi") (serialize-qp "expand" $expand "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/spins/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

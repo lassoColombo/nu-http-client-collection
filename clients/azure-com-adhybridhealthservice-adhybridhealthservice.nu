@@ -319,7 +319,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-addomainse
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # The server property filter to apply.
   --isGroupbySite: oneof<nothing, bool> # Indicates if the result should be grouped by site or not.
-  --qp-query: string # The custom query.
+  --query: string # The custom query.
   --nextPartitionKey: string@nextPartitionKey-completer # The next partition key to query for.
   --nextRowKey: string@nextRowKey-completer # The next row key to query for.
   --takeCount: int # The take count , which specifies the number of elements that can be returned from a sequence.
@@ -327,7 +327,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-addomainse
 ]: nothing -> record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, addsRoles: list, createdDate: string, dcTypes: list, dimensions: list, disabled: bool, disabledReason: int, domainName: string, gcReachable: bool, installedQfes: list, isAdvertising: bool, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: list, monitoringConfigurationsCustomized: list, osName: string, osVersion: string, pdcReachable: bool, properties: list, recommendedQfes: list, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, siteName: string, status: string, sysvolState: bool, tenantId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "isGroupbySite" $isGroupbySite "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "nextPartitionKey" $nextPartitionKey "scalar") (serialize-qp "nextRowKey" $nextRowKey "scalar") (serialize-qp "takeCount" $takeCount "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "isGroupbySite" $isGroupbySite "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "nextPartitionKey" $nextPartitionKey "scalar") (serialize-qp "nextRowKey" $nextRowKey "scalar") (serialize-qp "takeCount" $takeCount "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/providers/Microsoft.ADHybridHealthService/addsservices/($serviceName)/addomainservicemembers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -782,7 +782,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-replicatio
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # The server property filter to apply.
   --isGroupbySite: oneof<nothing, bool> # Indicates if the result should be grouped by site or not.
-  --qp-query: string # The custom query.
+  --query: string # The custom query.
   --nextPartitionKey: string@nextPartitionKey-completer # The next partition key to query for.
   --nextRowKey: string@nextRowKey-completer # The next row key to query for.
   --takeCount: int # The take count , which specifies the number of elements that can be returned from a sequence.
@@ -790,7 +790,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-replicatio
 ]: nothing -> record<value: table<domain: string, inboundNeighborCollection: list, lastAttemptedSync: string, lastSuccessfulSync: string, site: string, status: int, targetServer: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "isGroupbySite" $isGroupbySite "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "nextPartitionKey" $nextPartitionKey "scalar") (serialize-qp "nextRowKey" $nextRowKey "scalar") (serialize-qp "takeCount" $takeCount "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "isGroupbySite" $isGroupbySite "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "nextPartitionKey" $nextPartitionKey "scalar") (serialize-qp "nextRowKey" $nextRowKey "scalar") (serialize-qp "takeCount" $takeCount "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/providers/Microsoft.ADHybridHealthService/addsservices/($serviceName)/replicationsummary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

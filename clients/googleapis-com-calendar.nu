@@ -109,7 +109,7 @@ export def "calendars calendarcalendarsinsert" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -127,7 +127,7 @@ export def "calendars calendarcalendarsinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/calendars" $qp)
   let body = {conferenceProperties: $conferenceProperties, description: $description, etag: $etag, id: $id, kind: $kind, location: $location, summary: $summary, timeZone: $timeZone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -151,7 +151,7 @@ export def "calendars calendarcalendarsdelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -160,7 +160,7 @@ export def "calendars calendarcalendarsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calendars/($calendarId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -182,7 +182,7 @@ export def "calendars calendarcalendarsget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -191,7 +191,7 @@ export def "calendars calendarcalendarsget" [
 ]: nothing -> record<conferenceProperties: record<allowedConferenceSolutionTypes: list<string>>, description: string, etag: string, id: string, kind: string, location: string, summary: string, timeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calendars/($calendarId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -214,7 +214,7 @@ export def "calendars calendarcalendarspatch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -232,7 +232,7 @@ export def "calendars calendarcalendarspatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calendars/($calendarId)" $qp)
   let body = {conferenceProperties: $conferenceProperties, description: $description, etag: $etag, id: $id, kind: $kind, location: $location, summary: $summary, timeZone: $timeZone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -257,7 +257,7 @@ export def "calendars calendarcalendarsupdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -275,7 +275,7 @@ export def "calendars calendarcalendarsupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calendars/($calendarId)" $qp)
   let body = {conferenceProperties: $conferenceProperties, description: $description, etag: $etag, id: $id, kind: $kind, location: $location, summary: $summary, timeZone: $timeZone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -299,7 +299,7 @@ export def "calendars-acl calendaracllist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -312,7 +312,7 @@ export def "calendars-acl calendaracllist" [
 ]: nothing -> record<etag: string, items: table<etag: string, id: string, kind: string, role: string, scope: record>, kind: string, nextPageToken: string, nextSyncToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "showDeleted" $showDeleted "scalar") (serialize-qp "syncToken" $syncToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "showDeleted" $showDeleted "scalar") (serialize-qp "syncToken" $syncToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calendars/($calendarId)/acl" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -335,7 +335,7 @@ export def "calendars-acl calendaraclinsert" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -351,7 +351,7 @@ export def "calendars-acl calendaraclinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "sendNotifications" $sendNotifications "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "sendNotifications" $sendNotifications "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calendars/($calendarId)/acl" $qp)
   let body = {etag: $etag, id: $id, kind: $kind, role: $role, scope: $scope} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -375,7 +375,7 @@ export def "calendars-acl-watch calendaraclwatch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -399,7 +399,7 @@ export def "calendars-acl-watch calendaraclwatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "showDeleted" $showDeleted "scalar") (serialize-qp "syncToken" $syncToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "showDeleted" $showDeleted "scalar") (serialize-qp "syncToken" $syncToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calendars/($calendarId)/acl/watch" $qp)
   let body = {address: $address, expiration: $expiration, id: $id, kind: $kind, params: $params, payload: $payload, resourceId: $resourceId, resourceUri: $resourceUri, token: $body_token, type: $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -424,7 +424,7 @@ export def "calendars-acl calendaracldelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -433,7 +433,7 @@ export def "calendars-acl calendaracldelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calendars/($calendarId)/acl/($ruleId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -456,7 +456,7 @@ export def "calendars-acl calendaraclget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -465,7 +465,7 @@ export def "calendars-acl calendaraclget" [
 ]: nothing -> record<etag: string, id: string, kind: string, role: string, scope: record<type: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calendars/($calendarId)/acl/($ruleId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -489,7 +489,7 @@ export def "calendars-acl calendaraclpatch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -505,7 +505,7 @@ export def "calendars-acl calendaraclpatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "sendNotifications" $sendNotifications "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "sendNotifications" $sendNotifications "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calendars/($calendarId)/acl/($ruleId)" $qp)
   let body = {etag: $etag, id: $id, kind: $kind, role: $role, scope: $scope} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -531,7 +531,7 @@ export def "calendars-acl calendaraclupdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -547,7 +547,7 @@ export def "calendars-acl calendaraclupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "sendNotifications" $sendNotifications "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "sendNotifications" $sendNotifications "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calendars/($calendarId)/acl/($ruleId)" $qp)
   let body = {etag: $etag, id: $id, kind: $kind, role: $role, scope: $scope} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -571,7 +571,7 @@ export def "calendars-clear calendarcalendarsclear" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -580,7 +580,7 @@ export def "calendars-clear calendarcalendarsclear" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calendars/($calendarId)/clear" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -602,7 +602,7 @@ export def "calendars-events calendareventslist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -629,7 +629,7 @@ export def "calendars-events calendareventslist" [
 ]: nothing -> record<accessRole: string, defaultReminders: table<method: string, minutes: int>, description: string, etag: string, items: table<anyoneCanAddSelf: bool, attachments: list, attendees: list, attendeesOmitted: bool, colorId: string, conferenceData: record, created: string, creator: record, description: string, end: record, endTimeUnspecified: bool, etag: string, eventType: string, extendedProperties: record, gadget: record, guestsCanInviteOthers: bool, guestsCanModify: bool, guestsCanSeeOtherGuests: bool, hangoutLink: string, htmlLink: string, iCalUID: string, id: string, kind: string, location: string, locked: bool, organizer: record, originalStartTime: record, privateCopy: bool, recurrence: list, recurringEventId: string, reminders: record, sequence: int, source: record, start: record, status: string, summary: string, transparency: string, updated: string, visibility: string, workingLocationProperties: record>, kind: string, nextPageToken: string, nextSyncToken: string, summary: string, timeZone: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "alwaysIncludeEmail" $alwaysIncludeEmail "scalar") (serialize-qp "eventTypes" $eventTypes "multi") (serialize-qp "iCalUID" $iCalUID "scalar") (serialize-qp "maxAttendees" $maxAttendees "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "privateExtendedProperty" $privateExtendedProperty "multi") (serialize-qp "q" $q "scalar") (serialize-qp "sharedExtendedProperty" $sharedExtendedProperty "multi") (serialize-qp "showDeleted" $showDeleted "scalar") (serialize-qp "showHiddenInvitations" $showHiddenInvitations "scalar") (serialize-qp "singleEvents" $singleEvents "scalar") (serialize-qp "syncToken" $syncToken "scalar") (serialize-qp "timeMax" $timeMax "scalar") (serialize-qp "timeMin" $timeMin "scalar") (serialize-qp "timeZone" $timeZone "scalar") (serialize-qp "updatedMin" $updatedMin "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "alwaysIncludeEmail" $alwaysIncludeEmail "scalar") (serialize-qp "eventTypes" $eventTypes "multi") (serialize-qp "iCalUID" $iCalUID "scalar") (serialize-qp "maxAttendees" $maxAttendees "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "privateExtendedProperty" $privateExtendedProperty "multi") (serialize-qp "q" $q "scalar") (serialize-qp "sharedExtendedProperty" $sharedExtendedProperty "multi") (serialize-qp "showDeleted" $showDeleted "scalar") (serialize-qp "showHiddenInvitations" $showHiddenInvitations "scalar") (serialize-qp "singleEvents" $singleEvents "scalar") (serialize-qp "syncToken" $syncToken "scalar") (serialize-qp "timeMax" $timeMax "scalar") (serialize-qp "timeMin" $timeMin "scalar") (serialize-qp "timeZone" $timeZone "scalar") (serialize-qp "updatedMin" $updatedMin "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calendars/($calendarId)/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -664,7 +664,7 @@ export def "calendars-events calendareventsinsert" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -719,7 +719,7 @@ export def "calendars-events calendareventsinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "conferenceDataVersion" $conferenceDataVersion "scalar") (serialize-qp "maxAttendees" $maxAttendees "scalar") (serialize-qp "sendNotifications" $sendNotifications "scalar") (serialize-qp "sendUpdates" $sendUpdates "scalar") (serialize-qp "supportsAttachments" $supportsAttachments "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "conferenceDataVersion" $conferenceDataVersion "scalar") (serialize-qp "maxAttendees" $maxAttendees "scalar") (serialize-qp "sendNotifications" $sendNotifications "scalar") (serialize-qp "sendUpdates" $sendUpdates "scalar") (serialize-qp "supportsAttachments" $supportsAttachments "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calendars/($calendarId)/events" $qp)
   let body = {anyoneCanAddSelf: $anyoneCanAddSelf, attachments: $attachments, attendees: $attendees, attendeesOmitted: $attendeesOmitted, colorId: $colorId, conferenceData: $conferenceData, created: $created, creator: $creator, description: $description, end: $end, endTimeUnspecified: $endTimeUnspecified, etag: $etag, eventType: $eventType, extendedProperties: $extendedProperties, gadget: $gadget, guestsCanInviteOthers: $guestsCanInviteOthers, guestsCanModify: $guestsCanModify, guestsCanSeeOtherGuests: $guestsCanSeeOtherGuests, hangoutLink: $hangoutLink, htmlLink: $htmlLink, iCalUID: $iCalUID, id: $id, kind: $kind, location: $location, locked: $locked, organizer: $organizer, originalStartTime: $originalStartTime, privateCopy: $privateCopy, recurrence: $recurrence, recurringEventId: $recurringEventId, reminders: $reminders, sequence: $sequence, source: $body_source, start: $start, status: $status, summary: $summary, transparency: $transparency, updated: $updated, visibility: $visibility, workingLocationProperties: $workingLocationProperties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -756,7 +756,7 @@ export def "calendars-events-import calendareventsimport" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -808,7 +808,7 @@ export def "calendars-events-import calendareventsimport" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "conferenceDataVersion" $conferenceDataVersion "scalar") (serialize-qp "supportsAttachments" $supportsAttachments "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "conferenceDataVersion" $conferenceDataVersion "scalar") (serialize-qp "supportsAttachments" $supportsAttachments "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calendars/($calendarId)/events/import" $qp)
   let body = {anyoneCanAddSelf: $anyoneCanAddSelf, attachments: $attachments, attendees: $attendees, attendeesOmitted: $attendeesOmitted, colorId: $colorId, conferenceData: $conferenceData, created: $created, creator: $creator, description: $description, end: $end, endTimeUnspecified: $endTimeUnspecified, etag: $etag, eventType: $eventType, extendedProperties: $extendedProperties, gadget: $gadget, guestsCanInviteOthers: $guestsCanInviteOthers, guestsCanModify: $guestsCanModify, guestsCanSeeOtherGuests: $guestsCanSeeOtherGuests, hangoutLink: $hangoutLink, htmlLink: $htmlLink, iCalUID: $iCalUID, id: $id, kind: $kind, location: $location, locked: $locked, organizer: $organizer, originalStartTime: $originalStartTime, privateCopy: $privateCopy, recurrence: $recurrence, recurringEventId: $recurringEventId, reminders: $reminders, sequence: $sequence, source: $body_source, start: $start, status: $status, summary: $summary, transparency: $transparency, updated: $updated, visibility: $visibility, workingLocationProperties: $workingLocationProperties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -832,7 +832,7 @@ export def "calendars-events-quick-add calendareventsquickAdd" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -844,7 +844,7 @@ export def "calendars-events-quick-add calendareventsquickAdd" [
 ]: nothing -> record<anyoneCanAddSelf: bool, attachments: table<fileId: string, fileUrl: string, iconLink: string, mimeType: string, title: string>, attendees: table<additionalGuests: int, comment: string, displayName: string, email: string, id: string, optional: bool, organizer: bool, resource: bool, responseStatus: string, self: bool>, attendeesOmitted: bool, colorId: string, conferenceData: record<conferenceId: string, conferenceSolution: record<iconUri: string, key: record, name: string>, createRequest: record<conferenceSolutionKey: record, requestId: string, status: record>, entryPoints: list<record>, notes: string, parameters: record<addOnParameters: record>, signature: string>, created: string, creator: record<displayName: string, email: string, id: string, self: bool>, description: string, end: record<date: string, dateTime: string, timeZone: string>, endTimeUnspecified: bool, etag: string, eventType: string, extendedProperties: record<private: record, shared: record>, gadget: record<display: string, height: int, iconLink: string, link: string, preferences: record, title: string, type: string, width: int>, guestsCanInviteOthers: bool, guestsCanModify: bool, guestsCanSeeOtherGuests: bool, hangoutLink: string, htmlLink: string, iCalUID: string, id: string, kind: string, location: string, locked: bool, organizer: record<displayName: string, email: string, id: string, self: bool>, originalStartTime: record<date: string, dateTime: string, timeZone: string>, privateCopy: bool, recurrence: list<string>, recurringEventId: string, reminders: record<overrides: list<record>, useDefault: bool>, sequence: int, source: record<title: string, url: string>, start: record<date: string, dateTime: string, timeZone: string>, status: string, summary: string, transparency: string, updated: string, visibility: string, workingLocationProperties: record<customLocation: record<label: string>, homeOffice: any, officeLocation: record<buildingId: string, deskId: string, floorId: string, floorSectionId: string, label: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "sendNotifications" $sendNotifications "scalar") (serialize-qp "sendUpdates" $sendUpdates "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "sendNotifications" $sendNotifications "scalar") (serialize-qp "sendUpdates" $sendUpdates "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calendars/($calendarId)/events/quickAdd" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -866,7 +866,7 @@ export def "calendars-events-watch calendareventswatch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -904,7 +904,7 @@ export def "calendars-events-watch calendareventswatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "alwaysIncludeEmail" $alwaysIncludeEmail "scalar") (serialize-qp "eventTypes" $eventTypes "multi") (serialize-qp "iCalUID" $iCalUID "scalar") (serialize-qp "maxAttendees" $maxAttendees "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "privateExtendedProperty" $privateExtendedProperty "multi") (serialize-qp "q" $q "scalar") (serialize-qp "sharedExtendedProperty" $sharedExtendedProperty "multi") (serialize-qp "showDeleted" $showDeleted "scalar") (serialize-qp "showHiddenInvitations" $showHiddenInvitations "scalar") (serialize-qp "singleEvents" $singleEvents "scalar") (serialize-qp "syncToken" $syncToken "scalar") (serialize-qp "timeMax" $timeMax "scalar") (serialize-qp "timeMin" $timeMin "scalar") (serialize-qp "timeZone" $timeZone "scalar") (serialize-qp "updatedMin" $updatedMin "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "alwaysIncludeEmail" $alwaysIncludeEmail "scalar") (serialize-qp "eventTypes" $eventTypes "multi") (serialize-qp "iCalUID" $iCalUID "scalar") (serialize-qp "maxAttendees" $maxAttendees "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "privateExtendedProperty" $privateExtendedProperty "multi") (serialize-qp "q" $q "scalar") (serialize-qp "sharedExtendedProperty" $sharedExtendedProperty "multi") (serialize-qp "showDeleted" $showDeleted "scalar") (serialize-qp "showHiddenInvitations" $showHiddenInvitations "scalar") (serialize-qp "singleEvents" $singleEvents "scalar") (serialize-qp "syncToken" $syncToken "scalar") (serialize-qp "timeMax" $timeMax "scalar") (serialize-qp "timeMin" $timeMin "scalar") (serialize-qp "timeZone" $timeZone "scalar") (serialize-qp "updatedMin" $updatedMin "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calendars/($calendarId)/events/watch" $qp)
   let body = {address: $address, expiration: $expiration, id: $id, kind: $kind, params: $params, payload: $payload, resourceId: $resourceId, resourceUri: $resourceUri, token: $body_token, type: $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -929,7 +929,7 @@ export def "calendars-events calendareventsdelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -940,7 +940,7 @@ export def "calendars-events calendareventsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "sendNotifications" $sendNotifications "scalar") (serialize-qp "sendUpdates" $sendUpdates "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "sendNotifications" $sendNotifications "scalar") (serialize-qp "sendUpdates" $sendUpdates "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calendars/($calendarId)/events/($eventId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -963,7 +963,7 @@ export def "calendars-events calendareventsget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -975,7 +975,7 @@ export def "calendars-events calendareventsget" [
 ]: nothing -> record<anyoneCanAddSelf: bool, attachments: table<fileId: string, fileUrl: string, iconLink: string, mimeType: string, title: string>, attendees: table<additionalGuests: int, comment: string, displayName: string, email: string, id: string, optional: bool, organizer: bool, resource: bool, responseStatus: string, self: bool>, attendeesOmitted: bool, colorId: string, conferenceData: record<conferenceId: string, conferenceSolution: record<iconUri: string, key: record, name: string>, createRequest: record<conferenceSolutionKey: record, requestId: string, status: record>, entryPoints: list<record>, notes: string, parameters: record<addOnParameters: record>, signature: string>, created: string, creator: record<displayName: string, email: string, id: string, self: bool>, description: string, end: record<date: string, dateTime: string, timeZone: string>, endTimeUnspecified: bool, etag: string, eventType: string, extendedProperties: record<private: record, shared: record>, gadget: record<display: string, height: int, iconLink: string, link: string, preferences: record, title: string, type: string, width: int>, guestsCanInviteOthers: bool, guestsCanModify: bool, guestsCanSeeOtherGuests: bool, hangoutLink: string, htmlLink: string, iCalUID: string, id: string, kind: string, location: string, locked: bool, organizer: record<displayName: string, email: string, id: string, self: bool>, originalStartTime: record<date: string, dateTime: string, timeZone: string>, privateCopy: bool, recurrence: list<string>, recurringEventId: string, reminders: record<overrides: list<record>, useDefault: bool>, sequence: int, source: record<title: string, url: string>, start: record<date: string, dateTime: string, timeZone: string>, status: string, summary: string, transparency: string, updated: string, visibility: string, workingLocationProperties: record<customLocation: record<label: string>, homeOffice: any, officeLocation: record<buildingId: string, deskId: string, floorId: string, floorSectionId: string, label: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "alwaysIncludeEmail" $alwaysIncludeEmail "scalar") (serialize-qp "maxAttendees" $maxAttendees "scalar") (serialize-qp "timeZone" $timeZone "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "alwaysIncludeEmail" $alwaysIncludeEmail "scalar") (serialize-qp "maxAttendees" $maxAttendees "scalar") (serialize-qp "timeZone" $timeZone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calendars/($calendarId)/events/($eventId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1011,7 +1011,7 @@ export def "calendars-events calendareventspatch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1067,7 +1067,7 @@ export def "calendars-events calendareventspatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "alwaysIncludeEmail" $alwaysIncludeEmail "scalar") (serialize-qp "conferenceDataVersion" $conferenceDataVersion "scalar") (serialize-qp "maxAttendees" $maxAttendees "scalar") (serialize-qp "sendNotifications" $sendNotifications "scalar") (serialize-qp "sendUpdates" $sendUpdates "scalar") (serialize-qp "supportsAttachments" $supportsAttachments "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "alwaysIncludeEmail" $alwaysIncludeEmail "scalar") (serialize-qp "conferenceDataVersion" $conferenceDataVersion "scalar") (serialize-qp "maxAttendees" $maxAttendees "scalar") (serialize-qp "sendNotifications" $sendNotifications "scalar") (serialize-qp "sendUpdates" $sendUpdates "scalar") (serialize-qp "supportsAttachments" $supportsAttachments "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calendars/($calendarId)/events/($eventId)" $qp)
   let body = {anyoneCanAddSelf: $anyoneCanAddSelf, attachments: $attachments, attendees: $attendees, attendeesOmitted: $attendeesOmitted, colorId: $colorId, conferenceData: $conferenceData, created: $created, creator: $creator, description: $description, end: $end, endTimeUnspecified: $endTimeUnspecified, etag: $etag, eventType: $eventType, extendedProperties: $extendedProperties, gadget: $gadget, guestsCanInviteOthers: $guestsCanInviteOthers, guestsCanModify: $guestsCanModify, guestsCanSeeOtherGuests: $guestsCanSeeOtherGuests, hangoutLink: $hangoutLink, htmlLink: $htmlLink, iCalUID: $iCalUID, id: $id, kind: $kind, location: $location, locked: $locked, organizer: $organizer, originalStartTime: $originalStartTime, privateCopy: $privateCopy, recurrence: $recurrence, recurringEventId: $recurringEventId, reminders: $reminders, sequence: $sequence, source: $body_source, start: $start, status: $status, summary: $summary, transparency: $transparency, updated: $updated, visibility: $visibility, workingLocationProperties: $workingLocationProperties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1105,7 +1105,7 @@ export def "calendars-events calendareventsupdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1161,7 +1161,7 @@ export def "calendars-events calendareventsupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "alwaysIncludeEmail" $alwaysIncludeEmail "scalar") (serialize-qp "conferenceDataVersion" $conferenceDataVersion "scalar") (serialize-qp "maxAttendees" $maxAttendees "scalar") (serialize-qp "sendNotifications" $sendNotifications "scalar") (serialize-qp "sendUpdates" $sendUpdates "scalar") (serialize-qp "supportsAttachments" $supportsAttachments "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "alwaysIncludeEmail" $alwaysIncludeEmail "scalar") (serialize-qp "conferenceDataVersion" $conferenceDataVersion "scalar") (serialize-qp "maxAttendees" $maxAttendees "scalar") (serialize-qp "sendNotifications" $sendNotifications "scalar") (serialize-qp "sendUpdates" $sendUpdates "scalar") (serialize-qp "supportsAttachments" $supportsAttachments "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calendars/($calendarId)/events/($eventId)" $qp)
   let body = {anyoneCanAddSelf: $anyoneCanAddSelf, attachments: $attachments, attendees: $attendees, attendeesOmitted: $attendeesOmitted, colorId: $colorId, conferenceData: $conferenceData, created: $created, creator: $creator, description: $description, end: $end, endTimeUnspecified: $endTimeUnspecified, etag: $etag, eventType: $eventType, extendedProperties: $extendedProperties, gadget: $gadget, guestsCanInviteOthers: $guestsCanInviteOthers, guestsCanModify: $guestsCanModify, guestsCanSeeOtherGuests: $guestsCanSeeOtherGuests, hangoutLink: $hangoutLink, htmlLink: $htmlLink, iCalUID: $iCalUID, id: $id, kind: $kind, location: $location, locked: $locked, organizer: $organizer, originalStartTime: $originalStartTime, privateCopy: $privateCopy, recurrence: $recurrence, recurringEventId: $recurringEventId, reminders: $reminders, sequence: $sequence, source: $body_source, start: $start, status: $status, summary: $summary, transparency: $transparency, updated: $updated, visibility: $visibility, workingLocationProperties: $workingLocationProperties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1186,7 +1186,7 @@ export def "calendars-events-instances calendareventsinstances" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1204,7 +1204,7 @@ export def "calendars-events-instances calendareventsinstances" [
 ]: nothing -> record<accessRole: string, defaultReminders: table<method: string, minutes: int>, description: string, etag: string, items: table<anyoneCanAddSelf: bool, attachments: list, attendees: list, attendeesOmitted: bool, colorId: string, conferenceData: record, created: string, creator: record, description: string, end: record, endTimeUnspecified: bool, etag: string, eventType: string, extendedProperties: record, gadget: record, guestsCanInviteOthers: bool, guestsCanModify: bool, guestsCanSeeOtherGuests: bool, hangoutLink: string, htmlLink: string, iCalUID: string, id: string, kind: string, location: string, locked: bool, organizer: record, originalStartTime: record, privateCopy: bool, recurrence: list, recurringEventId: string, reminders: record, sequence: int, source: record, start: record, status: string, summary: string, transparency: string, updated: string, visibility: string, workingLocationProperties: record>, kind: string, nextPageToken: string, nextSyncToken: string, summary: string, timeZone: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "alwaysIncludeEmail" $alwaysIncludeEmail "scalar") (serialize-qp "maxAttendees" $maxAttendees "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "originalStart" $originalStart "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "showDeleted" $showDeleted "scalar") (serialize-qp "timeMax" $timeMax "scalar") (serialize-qp "timeMin" $timeMin "scalar") (serialize-qp "timeZone" $timeZone "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "alwaysIncludeEmail" $alwaysIncludeEmail "scalar") (serialize-qp "maxAttendees" $maxAttendees "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "originalStart" $originalStart "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "showDeleted" $showDeleted "scalar") (serialize-qp "timeMax" $timeMax "scalar") (serialize-qp "timeMin" $timeMin "scalar") (serialize-qp "timeZone" $timeZone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calendars/($calendarId)/events/($eventId)/instances" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1227,7 +1227,7 @@ export def "calendars-events-move calendareventsmove" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1239,7 +1239,7 @@ export def "calendars-events-move calendareventsmove" [
 ]: nothing -> record<anyoneCanAddSelf: bool, attachments: table<fileId: string, fileUrl: string, iconLink: string, mimeType: string, title: string>, attendees: table<additionalGuests: int, comment: string, displayName: string, email: string, id: string, optional: bool, organizer: bool, resource: bool, responseStatus: string, self: bool>, attendeesOmitted: bool, colorId: string, conferenceData: record<conferenceId: string, conferenceSolution: record<iconUri: string, key: record, name: string>, createRequest: record<conferenceSolutionKey: record, requestId: string, status: record>, entryPoints: list<record>, notes: string, parameters: record<addOnParameters: record>, signature: string>, created: string, creator: record<displayName: string, email: string, id: string, self: bool>, description: string, end: record<date: string, dateTime: string, timeZone: string>, endTimeUnspecified: bool, etag: string, eventType: string, extendedProperties: record<private: record, shared: record>, gadget: record<display: string, height: int, iconLink: string, link: string, preferences: record, title: string, type: string, width: int>, guestsCanInviteOthers: bool, guestsCanModify: bool, guestsCanSeeOtherGuests: bool, hangoutLink: string, htmlLink: string, iCalUID: string, id: string, kind: string, location: string, locked: bool, organizer: record<displayName: string, email: string, id: string, self: bool>, originalStartTime: record<date: string, dateTime: string, timeZone: string>, privateCopy: bool, recurrence: list<string>, recurringEventId: string, reminders: record<overrides: list<record>, useDefault: bool>, sequence: int, source: record<title: string, url: string>, start: record<date: string, dateTime: string, timeZone: string>, status: string, summary: string, transparency: string, updated: string, visibility: string, workingLocationProperties: record<customLocation: record<label: string>, homeOffice: any, officeLocation: record<buildingId: string, deskId: string, floorId: string, floorSectionId: string, label: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "sendNotifications" $sendNotifications "scalar") (serialize-qp "sendUpdates" $sendUpdates "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "sendNotifications" $sendNotifications "scalar") (serialize-qp "sendUpdates" $sendUpdates "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calendars/($calendarId)/events/($eventId)/move" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1260,7 +1260,7 @@ export def "channels-stop calendarchannelsstop" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1280,7 +1280,7 @@ export def "channels-stop calendarchannelsstop" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels/stop" $qp)
   let body = {address: $address, expiration: $expiration, id: $id, kind: $kind, params: $params, payload: $payload, resourceId: $resourceId, resourceUri: $resourceUri, token: $body_token, type: $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1303,7 +1303,7 @@ export def "colors calendarcolorsget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1312,7 +1312,7 @@ export def "colors calendarcolorsget" [
 ]: nothing -> record<calendar: record, event: record, kind: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/colors" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1334,7 +1334,7 @@ export def "free-busy calendarfreebusyquery" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1350,7 +1350,7 @@ export def "free-busy calendarfreebusyquery" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/freeBusy" $qp)
   let body = {calendarExpansionMax: $calendarExpansionMax, groupExpansionMax: $groupExpansionMax, items: $items, timeMax: $timeMax, timeMin: $timeMin, timeZone: $timeZone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1373,7 +1373,7 @@ export def "users-me-calendar-list calendarcalendarListlist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1388,7 +1388,7 @@ export def "users-me-calendar-list calendarcalendarListlist" [
 ]: nothing -> record<etag: string, items: table<accessRole: string, backgroundColor: string, colorId: string, conferenceProperties: record, defaultReminders: list, deleted: bool, description: string, etag: string, foregroundColor: string, hidden: bool, id: string, kind: string, location: string, notificationSettings: record, primary: bool, selected: bool, summary: string, summaryOverride: string, timeZone: string>, kind: string, nextPageToken: string, nextSyncToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "minAccessRole" $minAccessRole "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "showDeleted" $showDeleted "scalar") (serialize-qp "showHidden" $showHidden "scalar") (serialize-qp "syncToken" $syncToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "minAccessRole" $minAccessRole "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "showDeleted" $showDeleted "scalar") (serialize-qp "showHidden" $showHidden "scalar") (serialize-qp "syncToken" $syncToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/me/calendarList" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1412,7 +1412,7 @@ export def "users-me-calendar-list calendarcalendarListinsert" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1442,7 +1442,7 @@ export def "users-me-calendar-list calendarcalendarListinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "colorRgbFormat" $colorRgbFormat "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "colorRgbFormat" $colorRgbFormat "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/me/calendarList" $qp)
   let body = {accessRole: $accessRole, backgroundColor: $backgroundColor, colorId: $colorId, conferenceProperties: $conferenceProperties, defaultReminders: $defaultReminders, deleted: $deleted, description: $description, etag: $etag, foregroundColor: $foregroundColor, hidden: $hidden, id: $id, kind: $kind, location: $location, notificationSettings: $notificationSettings, primary: $primary, selected: $selected, summary: $summary, summaryOverride: $summaryOverride, timeZone: $timeZone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1465,7 +1465,7 @@ export def "users-me-calendar-list-watch calendarcalendarListwatch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1491,7 +1491,7 @@ export def "users-me-calendar-list-watch calendarcalendarListwatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "minAccessRole" $minAccessRole "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "showDeleted" $showDeleted "scalar") (serialize-qp "showHidden" $showHidden "scalar") (serialize-qp "syncToken" $syncToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "minAccessRole" $minAccessRole "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "showDeleted" $showDeleted "scalar") (serialize-qp "showHidden" $showHidden "scalar") (serialize-qp "syncToken" $syncToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/me/calendarList/watch" $qp)
   let body = {address: $address, expiration: $expiration, id: $id, kind: $kind, params: $params, payload: $payload, resourceId: $resourceId, resourceUri: $resourceUri, token: $body_token, type: $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1515,7 +1515,7 @@ export def "users-me-calendar-list calendarcalendarListdelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1524,7 +1524,7 @@ export def "users-me-calendar-list calendarcalendarListdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/users/me/calendarList/($calendarId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1546,7 +1546,7 @@ export def "users-me-calendar-list calendarcalendarListget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1555,7 +1555,7 @@ export def "users-me-calendar-list calendarcalendarListget" [
 ]: nothing -> record<accessRole: string, backgroundColor: string, colorId: string, conferenceProperties: record<allowedConferenceSolutionTypes: list<string>>, defaultReminders: table<method: string, minutes: int>, deleted: bool, description: string, etag: string, foregroundColor: string, hidden: bool, id: string, kind: string, location: string, notificationSettings: record<notifications: list<record>>, primary: bool, selected: bool, summary: string, summaryOverride: string, timeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/users/me/calendarList/($calendarId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1580,7 +1580,7 @@ export def "users-me-calendar-list calendarcalendarListpatch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1610,7 +1610,7 @@ export def "users-me-calendar-list calendarcalendarListpatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "colorRgbFormat" $colorRgbFormat "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "colorRgbFormat" $colorRgbFormat "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/users/me/calendarList/($calendarId)" $qp)
   let body = {accessRole: $accessRole, backgroundColor: $backgroundColor, colorId: $colorId, conferenceProperties: $conferenceProperties, defaultReminders: $defaultReminders, deleted: $deleted, description: $description, etag: $etag, foregroundColor: $foregroundColor, hidden: $hidden, id: $id, kind: $kind, location: $location, notificationSettings: $notificationSettings, primary: $primary, selected: $selected, summary: $summary, summaryOverride: $summaryOverride, timeZone: $timeZone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1637,7 +1637,7 @@ export def "users-me-calendar-list calendarcalendarListupdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1667,7 +1667,7 @@ export def "users-me-calendar-list calendarcalendarListupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "colorRgbFormat" $colorRgbFormat "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "colorRgbFormat" $colorRgbFormat "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/users/me/calendarList/($calendarId)" $qp)
   let body = {accessRole: $accessRole, backgroundColor: $backgroundColor, colorId: $colorId, conferenceProperties: $conferenceProperties, defaultReminders: $defaultReminders, deleted: $deleted, description: $description, etag: $etag, foregroundColor: $foregroundColor, hidden: $hidden, id: $id, kind: $kind, location: $location, notificationSettings: $notificationSettings, primary: $primary, selected: $selected, summary: $summary, summaryOverride: $summaryOverride, timeZone: $timeZone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1690,7 +1690,7 @@ export def "users-me-settings calendarsettingslist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1702,7 +1702,7 @@ export def "users-me-settings calendarsettingslist" [
 ]: nothing -> record<etag: string, items: table<etag: string, id: string, kind: string, value: string>, kind: string, nextPageToken: string, nextSyncToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "syncToken" $syncToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "syncToken" $syncToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/me/settings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1723,7 +1723,7 @@ export def "users-me-settings-watch calendarsettingswatch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1746,7 +1746,7 @@ export def "users-me-settings-watch calendarsettingswatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "syncToken" $syncToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "syncToken" $syncToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/me/settings/watch" $qp)
   let body = {address: $address, expiration: $expiration, id: $id, kind: $kind, params: $params, payload: $payload, resourceId: $resourceId, resourceUri: $resourceUri, token: $body_token, type: $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1770,7 +1770,7 @@ export def "users-me-settings calendarsettingsget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1779,7 +1779,7 @@ export def "users-me-settings calendarsettingsget" [
 ]: nothing -> record<etag: string, id: string, kind: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/users/me/settings/($setting)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

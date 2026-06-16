@@ -2555,13 +2555,13 @@ export def "lists-remove-duplicates Remove-Duplicate-Contacts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-fields: list # List of Contact's fields to be used for checking.
+  fields: list # List of Contact's fields to be used for checking.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lists/($list_id)/remove-duplicates")
-  let body = {fields: $body_fields} | compact
+  let body = {fields: $fields} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

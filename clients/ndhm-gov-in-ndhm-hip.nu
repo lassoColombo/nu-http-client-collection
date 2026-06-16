@@ -845,7 +845,7 @@ export def "v05-users-auth-fetch-modes post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
   --X-CM-ID: string # Suffix of the consent manager to which the request was intended.
-  --body-query: record # shape: {id: string, purpose: "LINK"|"KYC"|"KYC_AND_LINK", requester: record}
+  query: record # shape: {id: string, purpose: "LINK"|"KYC"|"KYC_AND_LINK", requester: record}
   requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
@@ -853,7 +853,7 @@ export def "v05-users-auth-fetch-modes post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/users/auth/fetch-modes")
-  let body = {query: $body_query, requestId: $requestId, timestamp: $timestamp} | compact
+  let body = {query: $query, requestId: $requestId, timestamp: $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"Authorization": $Authorization, "X-CM-ID": $X_CM_ID} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -877,7 +877,7 @@ export def "v05-users-auth-init post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
   --X-CM-ID: string # Suffix of the consent manager to which the request was intended.
-  --body-query: record # shape: {authMode?: "MOBILE_OTP"|"DIRECT"|"DEMOGRAPHICS"|"AADHAAR_OTP", id: string, purpose: "LINK"|"KYC"|"KYC_AND_LINK", requester: record}
+  query: record # shape: {authMode?: "MOBILE_OTP"|"DIRECT"|"DEMOGRAPHICS"|"AADHAAR_OTP", id: string, purpose: "LINK"|"KYC"|"KYC_AND_LINK", requester: record}
   requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
@@ -885,7 +885,7 @@ export def "v05-users-auth-init post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/users/auth/init")
-  let body = {query: $body_query, requestId: $requestId, timestamp: $timestamp} | compact
+  let body = {query: $query, requestId: $requestId, timestamp: $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"Authorization": $Authorization, "X-CM-ID": $X_CM_ID} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

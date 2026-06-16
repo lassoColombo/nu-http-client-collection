@@ -253,12 +253,12 @@ export def "joke-categories-search get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # Search Query (format: string)
+  --query: string # Search Query (format: string)
   --start: int # Response is paged. This parameter controls where response starts the listing at (format: int32, default: 0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-jokesone-api-secret"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "start" $start "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start" $start "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/joke/categories/search" $qp)
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -325,7 +325,7 @@ export def "joke-search get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --category: string # Joke Category (format: string)
-  --qp-query: string # keyword to search for in the joke (format: string)
+  --query: string # keyword to search for in the joke (format: string)
   --minlength: int # Joke minimum Length (format: int32, default: 100)
   --maxlength: int # Joke maximum Length (format: int32, default: 300)
   --author: string # Joke Author (format: string)
@@ -333,7 +333,7 @@ export def "joke-search get" [
 ]: nothing -> record<contents: record<jokes: list<record>>, success: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-jokesone-api-secret"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "minlength" $minlength "scalar") (serialize-qp "maxlength" $maxlength "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "private" $private "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "minlength" $minlength "scalar") (serialize-qp "maxlength" $maxlength "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "private" $private "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/joke/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

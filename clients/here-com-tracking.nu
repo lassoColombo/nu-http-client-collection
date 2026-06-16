@@ -1929,12 +1929,12 @@ export def "geofences list" [
   --floor: string # The floor of the indoor geofence (e.g. {id: DM_1234})
   --type: list # Type of a geofence
   --bbox: list # Limit search to geofences intersecting the given bounding box.
-  --qp-fields: list # Field names to filter a result object.
+  --fields: list # Field names to filter a result object.
   --X-Request-Id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting.  Must be a valid UUIDv4.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "projectId" $projectId "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "floor" $floor "deepObject") (serialize-qp "type" $type "multi") (serialize-qp "bbox" $bbox "multi") (serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "projectId" $projectId "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "floor" $floor "deepObject") (serialize-qp "type" $type "multi") (serialize-qp "bbox" $bbox "multi") (serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/geofences/v2" $qp)
   let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2090,12 +2090,12 @@ export def "geofences get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: list # Field names to filter a result object.
+  --fields: list # Field names to filter a result object.
   --X-Request-Id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting.  Must be a valid UUIDv4.
 ]: nothing -> record<geofence: any, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/geofences/v2/($geofenceId)" $qp)
   let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2230,12 +2230,12 @@ export def "labels list" [
   --labels: record # A filter containing label key-value pairs. (e.g. {group: group1, priority: high})
   --pageToken: string # A token from the previously returned response to retrieve the specified page.
   --limit: int # The number of items to return per page (default: 100)
-  --qp-fields: list # Field names to filter a result object.
+  --fields: list # Field names to filter a result object.
   --X-Request-Id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting.  Must be a valid UUIDv4.
 ]: nothing -> record<count: int, items: table<labels: record, resourceId: string, resourceType: string>, limit: int, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "projectId" $projectId "scalar") (serialize-qp "labels" $labels "deepObject") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "projectId" $projectId "scalar") (serialize-qp "labels" $labels "deepObject") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/labels/v4/($resourceType)" $qp)
   let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2342,12 +2342,12 @@ export def "labels get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --appId: string # Application identifier. Used together with an external ID to identify a virtual device.
-  --qp-fields: list # Field names to filter a result object.
+  --fields: list # Field names to filter a result object.
   --X-Request-Id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting.  Must be a valid UUIDv4.
 ]: nothing -> record<labels: record, resourceId: string, resourceType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "appId" $appId "scalar") (serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "appId" $appId "scalar") (serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/labels/v4/($resourceType)/($resourceId)" $qp)
   let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

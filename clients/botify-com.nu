@@ -461,7 +461,7 @@ export def "analyses-urls post" [
   --area: string@area-completer # Analysis context to execute the query (default: current)
   --page: int # Page Number (format: int32)
   --size: int # Page Size (format: int32)
-  --body-fields: list
+  --fields: list
   --filters: record
   --body-sort: list
 ]: any -> record<count: int, next: string, page: int, previous: string, results: list<record>, size: int> {
@@ -470,7 +470,7 @@ export def "analyses-urls post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "area" $area "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/analyses/($username)/($project_slug)/($analysis_slug)/urls" $qp)
-  let body = {fields: $body_fields, filters: $filters, sort: $body_sort} | compact
+  let body = {fields: $fields, filters: $filters, sort: $body_sort} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -579,7 +579,7 @@ export def "analyses-urls-export createUrlsExport" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --area: string@area-completer # default: current
-  --body-fields: list
+  --fields: list
   --filters: record
   --body-sort: list
 ]: any -> record<area: int, date_created: string, job_id: string, job_status: string, job_url: string, nb_results: int, query: record<fields: list<string>, filters: record, sort: list<record>>, results: string> {
@@ -588,7 +588,7 @@ export def "analyses-urls-export createUrlsExport" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "area" $area "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/analyses/($username)/($project_slug)/($analysis_slug)/urls/export" $qp)
-  let body = {fields: $body_fields, filters: $filters, sort: $body_sort} | compact
+  let body = {fields: $fields, filters: $filters, sort: $body_sort} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -670,11 +670,11 @@ export def "analyses-urls get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # comma separated list of fields to return (c.f. URLs Datamodel)
+  --fields: list # comma separated list of fields to return (c.f. URLs Datamodel)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/analyses/($username)/($project_slug)/($analysis_slug)/urls/($url)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

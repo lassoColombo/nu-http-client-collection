@@ -125,7 +125,7 @@ export def "openai-search search" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Query string to search for items.
+  --query: string # Query string to search for items.
   --price-min: float # The minimum price to filter by.
   --price-max: float # The maximum price to filter by.
   --similar-to-id: string # A product id that you want to find similar products for. (Only include one)
@@ -133,7 +133,7 @@ export def "openai-search search" [
 ]: nothing -> record<results: table<currency_code: string, description: string, price: float, title: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "price_min" $price_min "scalar") (serialize-qp "price_max" $price_max "scalar") (serialize-qp "similar_to_id" $similar_to_id "scalar") (serialize-qp "num_results" $num_results "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "price_min" $price_min "scalar") (serialize-qp "price_max" $price_max "scalar") (serialize-qp "similar_to_id" $similar_to_id "scalar") (serialize-qp "num_results" $num_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/openai/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

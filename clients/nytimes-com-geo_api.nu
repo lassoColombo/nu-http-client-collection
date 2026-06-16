@@ -108,7 +108,7 @@ export def "queryjson get" [
   --longitude: string # The longitude of the specified place.
   --elevation: int # The elevation of the specified place, in meters.
   --sw: string # Along with ne, forms a bounded box using the longitude and latitude coordinates specified as the southwest corner. The search results are limited to the resulting box. Two float values, separated by a comma `latitude,longitude` <br/> The ne parameter is required to use this parameter.
-  --qp-query: string # Search keywords to perform a text search on the fields: web_description, event_name and venue_name. 'AND' searches can be performed by wrapping query terms in quotes. If you do not specify a query, all results will be returned.
+  --query: string # Search keywords to perform a text search on the fields: web_description, event_name and venue_name. 'AND' searches can be performed by wrapping query terms in quotes. If you do not specify a query, all results will be returned.
   --filter: string # Filters search results based on the facets provided.  For more information on the values you can filter on, see Facets.
   --date-range: string # Start date to end date in the following format- YYYY-MM-DD:YYYY-MM-DD
   --facets: int@facets-completer # When facets is set to 1, a count of all facets will be included in the response. (default: 0)
@@ -118,7 +118,7 @@ export def "queryjson get" [
 ]: nothing -> record<results: table<city: string, critic_name: string, event_detail_url: string, event_id: int, event_name: string, event_schedule_id: int, festival: bool, film_rating: bool, free: bool, kid_friendly: bool, last_chance: bool, last_modified: string, long_running_show: bool, previews_and_openings: bool, recur_days: list, recurring_start_date: string, state: string, times_pick: bool, web_description: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "elevation" $elevation "scalar") (serialize-qp "sw" $sw "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "date_range" $date_range "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "elevation" $elevation "scalar") (serialize-qp "sw" $sw "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "date_range" $date_range "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/query.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

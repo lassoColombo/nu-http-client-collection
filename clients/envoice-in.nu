@@ -787,13 +787,13 @@ export def "invoice-allcategories get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string
+  --query: string
   --x-auth-key: string
   --x-auth-secret: string
 ]: nothing -> record<Count: int, ErrorMessages: table<Code: string, FaultMessage: string, Group: string, UserVisibleMessage: string>, IsFaulted: bool, Result: table<Id: int, Name: string>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/invoice/allcategories" $qp)
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

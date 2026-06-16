@@ -230,11 +230,11 @@ export def "account-eventsjson exportEventsJSON" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # an optional search string for filtering results
-  --qp-fields: string # an optional list of fields to export, comma-separated
+  --fields: string # an optional list of fields to export, comma-separated
 ]: nothing -> table<action: string, client_id: string, created_at: int, details: record, id: string, organization_id: string, processed_at: int, processor_id: string, site_id: string, source_id: string, source_name: string, source_type: string, state: string, success: bool, target_id: string, target_name: string, target_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/events.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -255,11 +255,11 @@ export def "account-eventsjsonl exportEventsJSONL" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # an optional search string for filtering results
-  --qp-fields: string # an optional list of fields to export, comma-separated
+  --fields: string # an optional list of fields to export, comma-separated
 ]: nothing -> table<action: string, client_id: string, created_at: int, details: record, id: string, organization_id: string, processed_at: int, processor_id: string, site_id: string, source_id: string, source_name: string, source_type: string, state: string, success: bool, target_id: string, target_name: string, target_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/events.jsonl" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1357,11 +1357,11 @@ export def "export-org-assetsjson exportAssetsJSON" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # an optional search string for filtering results
-  --qp-fields: string # an optional list of fields to export, comma-separated
+  --fields: string # an optional list of fields to export, comma-separated
 ]: nothing -> table<addresses: list<string>, addresses_extra: list<string>, agent_name: string, alive: bool, attributes: record, comments: string, created_at: int, credentials: record, detected_by: string, domains: list<string>, first_seen: int, hw: string, id: string, last_agent_id: string, last_seen: int, last_task_id: string, lowest_rtt: int, lowest_ttl: int, mac_vendors: list<string>, macs: list<string>, names: list<string>, newest_mac: string, newest_mac_age: int, newest_mac_vendor: string, org_name: string, organization_id: string, os: string, os_version: string, rtts: record, service_count: int, service_count_arp: int, service_count_icmp: int, service_count_tcp: int, service_count_udp: int, service_ports_products: list<string>, service_ports_protocols: list<string>, service_ports_tcp: list<string>, service_ports_udp: list<string>, services: record, site_id: string, site_name: string, tags: record, type: string, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/export/org/assets.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1382,11 +1382,11 @@ export def "export-org-assetsjsonl exportAssetsJSONL" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # an optional search string for filtering results
-  --qp-fields: string # an optional list of fields to export, comma-separated
+  --fields: string # an optional list of fields to export, comma-separated
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/export/org/assets.jsonl" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1475,12 +1475,12 @@ export def "export-org-assets-sync-created-assetsjson splunkAssetSyncCreatedJSON
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # an optional search string for filtering results
-  --qp-fields: string # an optional list of fields to export, comma-separated
+  --fields: string # an optional list of fields to export, comma-separated
   --since: int # an optional unix timestamp to use as a checkpoint (format: int64, e.g. 1576300370)
 ]: nothing -> record<assets: table<addresses: list, addresses_extra: list, agent_name: string, alive: bool, attributes: record, comments: string, created_at: int, credentials: record, detected_by: string, domains: list, first_seen: int, hw: string, id: string, last_agent_id: string, last_seen: int, last_task_id: string, lowest_rtt: int, lowest_ttl: int, mac_vendors: list, macs: list, names: list, newest_mac: string, newest_mac_age: int, newest_mac_vendor: string, org_name: string, organization_id: string, os: string, os_version: string, rtts: record, service_count: int, service_count_arp: int, service_count_icmp: int, service_count_tcp: int, service_count_udp: int, service_ports_products: list, service_ports_protocols: list, service_ports_tcp: list, service_ports_udp: list, services: record, site_id: string, site_name: string, tags: record, type: string, updated_at: int>, since: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/export/org/assets/sync/created/assets.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1501,12 +1501,12 @@ export def "export-org-assets-sync-updated-assetsjson splunkAssetSyncUpdatedJSON
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # an optional search string for filtering results
-  --qp-fields: string # an optional list of fields to export, comma-separated
+  --fields: string # an optional list of fields to export, comma-separated
   --since: int # an optional unix timestamp to use as a checkpoint (format: int64, e.g. 1576300370)
 ]: nothing -> record<assets: table<addresses: list, addresses_extra: list, agent_name: string, alive: bool, attributes: record, comments: string, created_at: int, credentials: record, detected_by: string, domains: list, first_seen: int, hw: string, id: string, last_agent_id: string, last_seen: int, last_task_id: string, lowest_rtt: int, lowest_ttl: int, mac_vendors: list, macs: list, names: list, newest_mac: string, newest_mac_age: int, newest_mac_vendor: string, org_name: string, organization_id: string, os: string, os_version: string, rtts: record, service_count: int, service_count_arp: int, service_count_icmp: int, service_count_tcp: int, service_count_udp: int, service_ports_products: list, service_ports_protocols: list, service_ports_tcp: list, service_ports_udp: list, services: record, site_id: string, site_name: string, tags: record, type: string, updated_at: int>, since: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/export/org/assets/sync/updated/assets.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1551,11 +1551,11 @@ export def "export-org-servicesjson exportServicesJSON" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # an optional search string for filtering results
-  --qp-fields: string # an optional list of fields to export, comma-separated
+  --fields: string # an optional list of fields to export, comma-separated
 ]: nothing -> table<addresses: list<string>, addresses_extra: list<string>, agent_name: string, alive: bool, attributes: record, comments: string, created_at: int, credentials: record, detected_by: string, domains: list<string>, first_seen: int, hw: string, id: string, last_agent_id: string, last_seen: int, last_task_id: string, lowest_rtt: int, lowest_ttl: int, mac_vendors: list<string>, macs: list<string>, names: list<string>, newest_mac: string, newest_mac_age: int, newest_mac_vendor: string, org_name: string, organization_id: string, os: string, os_version: string, rtts: record, service_address: string, service_asset_id: string, service_count: int, service_count_arp: int, service_count_icmp: int, service_count_tcp: int, service_count_udp: int, service_created_at: int, service_data: record, service_id: string, service_link: string, service_port: string, service_ports_products: list<string>, service_ports_protocols: list<string>, service_ports_tcp: list<string>, service_ports_udp: list<string>, service_protocol: string, service_screenshot_link: string, service_summary: string, service_transport: string, service_updated_at: int, service_vhost: string, services: record, site_id: string, site_name: string, tags: record, type: string, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/export/org/services.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1576,11 +1576,11 @@ export def "export-org-servicesjsonl exportServicesJSONL" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # an optional search string for filtering results
-  --qp-fields: string # an optional list of fields to export, comma-separated
+  --fields: string # an optional list of fields to export, comma-separated
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/export/org/services.jsonl" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1645,11 +1645,11 @@ export def "export-org-sitesjson exportSitesJSON" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # an optional search string for filtering results
-  --qp-fields: string # an optional list of fields to export, comma-separated
+  --fields: string # an optional list of fields to export, comma-separated
 ]: nothing -> table<created_at: int, description: string, excludes: string, id: string, name: string, permanent: bool, scope: string, subnets: record, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/export/org/sites.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1670,11 +1670,11 @@ export def "export-org-sitesjsonl exportSitesJSONL" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # an optional search string for filtering results
-  --qp-fields: string # an optional list of fields to export, comma-separated
+  --fields: string # an optional list of fields to export, comma-separated
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/export/org/sites.jsonl" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1719,11 +1719,11 @@ export def "export-org-wirelessjson exportWirelessJSON" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # an optional search string for filtering results
-  --qp-fields: string # an optional list of fields to export, comma-separated
+  --fields: string # an optional list of fields to export, comma-separated
 ]: nothing -> table<agent_name: string, authentication: string, bssid: string, channels: string, created_at: int, data: record, encryption: string, essid: string, family: string, id: string, interface: string, last_agent_id: string, last_seen: int, last_task_id: string, org_name: string, organization_id: string, signal: int, site_id: string, site_name: string, type: string, vendor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/export/org/wireless.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1744,11 +1744,11 @@ export def "export-org-wirelessjsonl exportWirelessJSONL" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # an optional search string for filtering results
-  --qp-fields: string # an optional list of fields to export, comma-separated
+  --fields: string # an optional list of fields to export, comma-separated
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/export/org/wireless.jsonl" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

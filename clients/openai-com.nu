@@ -258,7 +258,7 @@ export def "classifications createClassification" [
   --logprobs: int # Include the log probabilities on the `logprobs` most likely tokens, as well the chosen tokens. For example, if `logprobs` is 5, the API will return a list of the 5 most likely tokens. The API will always return the `logprob` of the sampled token, so there may be up to `logprobs+1` elements in the response.  The maximum value for `logprobs` is 5. If you need more than this, please contact us through our [Help center](https://help.openai.com) and describe your use case.  When `logprobs` is set, `completion` will be automatically added into `expand` to get the logprobs.  (nullable)
   --max-examples: int # The maximum number of examples to be ranked by [Search](/docs/api-reference/searches/create) when using `file`. Setting it to a higher value leads to improved accuracy but with increased latency and cost. (nullable, default: 200)
   model: string # ID of the model to use. You can use the [List models](/docs/api-reference/models/list) API to see all of your available models, or see our [Model overview](/docs/models/overview) for descriptions of them.
-  --body-query: string # Query to be classified. (e.g. The plot is not very attractive.)
+  query: string # Query to be classified. (e.g. The plot is not very attractive.)
   --return-metadata: oneof<nothing, bool> # A special boolean flag for showing metadata. If set to `true`, each document entry in the returned JSON will contain a "metadata" field.  This flag only takes effect when `file` is set.  (nullable, default: false)
   --return-prompt: oneof<nothing, bool> # If set to `true`, the returned JSON will include a "prompt" field containing the final prompt that was used to request a completion. This is mainly useful for debugging purposes. (nullable, default: false)
   --search-model: string # ID of the model to use for [Search](/docs/api-reference/searches/create). You can select one of `ada`, `babbage`, `curie`, or `davinci`. (nullable, default: ada)
@@ -269,7 +269,7 @@ export def "classifications createClassification" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications")
-  let body = {examples: $examples, expand: $expand, file: $file, labels: $labels, logit_bias: $logit_bias, logprobs: $logprobs, max_examples: $max_examples, model: $model, query: $body_query, return_metadata: $return_metadata, return_prompt: $return_prompt, search_model: $search_model, temperature: $temperature, user: $user} | compact
+  let body = {examples: $examples, expand: $expand, file: $file, labels: $labels, logit_bias: $logit_bias, logprobs: $logprobs, max_examples: $max_examples, model: $model, query: $query, return_metadata: $return_metadata, return_prompt: $return_prompt, search_model: $search_model, temperature: $temperature, user: $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -444,7 +444,7 @@ export def "engines-search createSearch" [
   --documents: list # Up to 200 documents to search over, provided as a list of strings.  The maximum document length (in tokens) is 2034 minus the number of tokens in the query.  You should specify either `documents` or a `file`, but not both.  (nullable, e.g. ['White House', 'hospital', 'school'])
   --file: string # The ID of an uploaded file that contains documents to search over.  You should specify either `documents` or a `file`, but not both.  (nullable)
   --max-rerank: int # The maximum number of documents to be re-ranked and returned by search.  This flag only takes effect when `file` is set.  (nullable, default: 200)
-  --body-query: string # Query to search against the documents. (e.g. the president)
+  query: string # Query to search against the documents. (e.g. the president)
   --return-metadata: oneof<nothing, bool> # A special boolean flag for showing metadata. If set to `true`, each document entry in the returned JSON will contain a "metadata" field.  This flag only takes effect when `file` is set.  (nullable, default: false)
   --user: string # A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids).  (e.g. user-1234)
 ]: any -> record<data: table<document: int, object: string, score: float>, model: string, object: string> {
@@ -452,7 +452,7 @@ export def "engines-search createSearch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/engines/($engine_id)/search")
-  let body = {documents: $documents, file: $file, max_rerank: $max_rerank, query: $body_query, return_metadata: $return_metadata, user: $user} | compact
+  let body = {documents: $documents, file: $file, max_rerank: $max_rerank, query: $query, return_metadata: $return_metadata, user: $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

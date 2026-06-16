@@ -259,13 +259,13 @@ export def "query Query" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --customer-id: int # The Customer ID to use for the request.
-  --body-query: list # item shape: {corpusKey?: list, numResults?: int, query?: string, rerankingConfig?: record, start?: int}
+  --query: list # item shape: {corpusKey?: list, numResults?: int, query?: string, rerankingConfig?: record, start?: int}
 ]: any -> record<metrics: record<queryEncodeMs: int, rerankMs: int, retrievalMs: int, userdataRetrievalMs: int>, responseSet: table<document: list, response: list, status: list>, status: table<code: string, statusDetail: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/query")
-  let body = {query: $body_query} | compact
+  let body = {query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"customer-id": $customer_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -319,13 +319,13 @@ export def "stream-query StreamQuery" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --customer-id: int # The Customer ID to use for the request.
-  --body-query: list # item shape: {corpusKey?: list, numResults?: int, query?: string, rerankingConfig?: record, start?: int}
+  --query: list # item shape: {corpusKey?: list, numResults?: int, query?: string, rerankingConfig?: record, start?: int}
 ]: any -> record<error: record<code: int, details: list<record>, message: string>, result: record<document: list<record>, response: list<record>, status: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/stream-query")
-  let body = {query: $body_query} | compact
+  let body = {query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"customer-id": $customer_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

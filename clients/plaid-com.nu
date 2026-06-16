@@ -1723,14 +1723,14 @@ export def "employers-search employersSearch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   products: list # The Plaid products the returned employers should support. Currently, this field must be set to `"deposit_switch"`.
-  --body-query: string # The employer name to be searched for.
+  query: string # The employer name to be searched for.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<employers: table<address: record, confidence_score: float, employer_id: string, name: string>, request_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/employers/search")
-  let body = {client_id: $client_id, products: $products, query: $body_query, secret: $secret} | compact
+  let body = {client_id: $client_id, products: $products, query: $query, secret: $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2258,14 +2258,14 @@ export def "institutions-search institutionsSearch" [
   country_codes: list # Specify an array of Plaid-supported country codes this institution supports, using the ISO-3166-1 alpha-2 country code standard. In API versions 2019-05-29 and earlier, the `country_codes` parameter is an optional parameter within the `options` object and will default to `[US]` if it is not supplied.
   --options: record # An optional object to filter `/institutions/search` results. — shape: {include_auth_metadata?: bool, include_optional_metadata?: bool, include_payment_initiation_metadata?: bool, oauth?: bool, payment_initiation?: record}
   --products: list # Filter the Institutions based on whether they support all products listed in `products`. Provide `null` to get institutions regardless of supported products. Note that when `auth` is specified as a product, if you are enabled for Instant Match or Automated Micro-deposits, institutions that support those products will be returned even if `auth` is not present in their product array. (nullable)
-  --body-query: string # The search query. Institutions with names matching the query are returned
+  query: string # The search query. Institutions with names matching the query are returned
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<institutions: table<auth_metadata: record, country_codes: list, institution_id: string, logo: string, name: string, oauth: bool, payment_initiation_metadata: record, primary_color: string, products: list, routing_numbers: list, status: record, url: string>, request_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/institutions/search")
-  let body = {client_id: $client_id, country_codes: $country_codes, options: $options, products: $products, query: $body_query, secret: $secret} | compact
+  let body = {client_id: $client_id, country_codes: $country_codes, options: $options, products: $products, query: $query, secret: $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

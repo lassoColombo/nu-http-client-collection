@@ -196,11 +196,11 @@ export def "restrooms-search get" [
   --offset: int # Pad a number of results. (format: int32, default: 0)
   --ada: oneof<nothing, bool> # Only return restrooms that are ADA accessible.
   --unisex: oneof<nothing, bool> # Only return restrooms that are unisex.
-  --qp-query: string # Your search query.
+  --query: string # Your search query.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ada" $ada "scalar") (serialize-qp "unisex" $unisex "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ada" $ada "scalar") (serialize-qp "unisex" $unisex "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/restrooms/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

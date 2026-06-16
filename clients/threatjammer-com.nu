@@ -1706,11 +1706,11 @@ export def "origin get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The origin site to query
+  --query: string # The origin site to query
 ]: nothing -> record<actions: string, addresses: string, config: record, cookies: string, created_at: int, logs: string, origin: string, scripts: string, self: string, status: string, token: string, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/origin" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1757,13 +1757,13 @@ export def "origin-addresses get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The origin site to query
+  --query: string # The origin site to query
   --page: int # The page to be returned (default: 1)
   --page-size: int # The number of items per page (default: 20)
 ]: nothing -> record<addresses: table<address: string, created_at: int, expiry: int, log_id: string, status: string, updated_at: int>, page: int, page_size: int, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/origin/addresses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1805,14 +1805,14 @@ export def "origin-client-analysis get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The origin site to query
+  --query: string # The origin site to query
   --interval: string@interval-completer # The data inteval to aggregate the result dataset
   --from-timestamp: int # A UNIX timestamp in milliseconds to restrict the results of the query to entries logged after or equal to this value.
   --to-timestamp: int # A UNIX timestamp in milliseconds to restrict the results of the query to entries logged before this value.
 ]: nothing -> record<data: table<client_browser: int, client_crawler: int, client_email: int, client_library: int, client_mobile_browser: int, client_multimedia_player: int, client_offline_browser: int, client_total: int, client_ua_anonymizer: int, client_unrecognized: int, client_validator: int, client_wap_browser: int, crawler_feed_fetcher: int, crawler_link_checker: int, crawler_marketing: int, crawler_screenshot_creator: int, crawler_search_engine_bot: int, crawler_site_monitor: int, crawler_speed_tester: int, crawler_tool: int, crawler_total: int, crawler_uncategorised: int, crawler_unrecognized: int, crawler_virus_scanner: int, crawler_vulnerability_scanner: int, crawler_web_scraper: int, timestamp: int, total: int>, from_timestamp: int, interval: string, self: string, to_timestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "from_timestamp" $from_timestamp "scalar") (serialize-qp "to_timestamp" $to_timestamp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "from_timestamp" $from_timestamp "scalar") (serialize-qp "to_timestamp" $to_timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/origin/client/analysis" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1832,13 +1832,13 @@ export def "origin-cookies get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The origin site to query
+  --query: string # The origin site to query
   --page: int # The page to be returned (default: 1)
   --page-size: int # The number of items per page (default: 20)
 ]: nothing -> record<cookie_ids: table<cookie_id: string, created_at: int, expiry: int, log_id: string, status: string, updated_at: int>, page: int, page_size: int, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/origin/cookies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1858,11 +1858,11 @@ export def "origin-scripts get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The origin site to query
+  --query: string # The origin site to query
 ]: nothing -> record<detection: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/origin/scripts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1882,14 +1882,14 @@ export def "origin-status post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The origin site to query
+  --query: string # The origin site to query
   --address: any # The IP address to query the status
   --cookie-id: string # The cookie id to query the status (format: uuid)
 ]: any -> record<address: record<address: string, created_at: int, expiry: int, log_id: string, status: string, updated_at: int>, cookie_id: record<cookie_id: string, created_at: int, expiry: int, log_id: string, status: string, updated_at: int>, self: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/origin/status" $qp)
   let body = {address: $address, cookie_id: $cookie_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1956,14 +1956,14 @@ export def "origin-traffic-analysis get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The origin site to query
+  --query: string # The origin site to query
   --interval: string@interval-completer # The data inteval to aggregate the result dataset
   --from-timestamp: int # A UNIX timestamp in milliseconds to restrict the results of the query to entries logged after or equal to this value.
   --to-timestamp: int # A UNIX timestamp in milliseconds to restrict the results of the query to entries logged before this value.
 ]: nothing -> record<data: table<asn_risky: int, bots: int, datacenters: int, denylists: int, network_country_mismatches: int, score_high: int, timestamp: int, total: int, webdrivers: int>, from_timestamp: int, interval: string, self: string, to_timestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "from_timestamp" $from_timestamp "scalar") (serialize-qp "to_timestamp" $to_timestamp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "from_timestamp" $from_timestamp "scalar") (serialize-qp "to_timestamp" $to_timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/origin/traffic/analysis" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

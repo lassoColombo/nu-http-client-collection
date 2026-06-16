@@ -120,7 +120,7 @@ export def "bulk-download createBulkDownload" [
   --notificationUrl: string
   objectName: string
   --pageSize: int # format: int32
-  --body-query: record # shape: {anyKey?: string}
+  --query: record # shape: {anyKey?: string}
   --selectFields: string
   --body-to: string # format: date-time
   --body-where: string
@@ -129,7 +129,7 @@ export def "bulk-download createBulkDownload" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bulk/download")
-  let body = {apiLimit: $apiLimit, continueFromJobId: $continueFromJobId, docsHubDetails: $docsHubDetails, filterDateField: $filterDateField, filterNulls: $filterNulls, format: $format, from: $body_from, limit: $limit, notificationUrl: $notificationUrl, objectName: $objectName, pageSize: $pageSize, query: $body_query, selectFields: $selectFields, to: $body_to, where: $body_where} | compact
+  let body = {apiLimit: $apiLimit, continueFromJobId: $continueFromJobId, docsHubDetails: $docsHubDetails, filterDateField: $filterDateField, filterNulls: $filterNulls, format: $format, from: $body_from, limit: $limit, notificationUrl: $notificationUrl, objectName: $objectName, pageSize: $pageSize, query: $query, selectFields: $selectFields, to: $body_to, where: $body_where} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"Authorization": $Authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -154,12 +154,12 @@ export def "bulk-jobs get" [
   --qp-where: string # The CEQL search expression, or the where clause, without the WHERE keyword, in a typical SQL query. For example to get all upload jobs the expression would be where=job_direction='UPLOAD'. The following fields are valid search fields 'object_name', 'job_status', 'job_direction', 'record_count'
   --nextPage: string # The next page cursor, taken from the response header: `elements-next-page-token`
   --pageSize: int # The page size for pagination, which defaults to 200 if not supplied (format: int64)
-  --qp-fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
+  --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
   --Authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
 ]: nothing -> record<completion_time: int, createdDate: int, error_count: int, fileFormat: string, id: int, instanceId: int, job_direction: string, job_query: string, job_reset_attempt: int, job_state: string, notification_url: string, object_name: string, record_count: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "nextPage" $nextPage "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "nextPage" $nextPage "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bulk/jobs" $qp)
   let extra_headers = {"Authorization": $Authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -245,12 +245,12 @@ export def "bulk-errors get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # The page size for pagination, which defaults to 200 if not supplied (format: int64)
   --nextPage: string # The next page cursor, taken from the response header: `elements-next-page-token`
-  --qp-fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
+  --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
   --Authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "nextPage" $nextPage "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "nextPage" $nextPage "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/bulk/($id)/errors" $qp)
   let extra_headers = {"Authorization": $Authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -362,12 +362,12 @@ export def "customers list" [
   --qp-where: string # The CEQL search expression, or the where clause, without the WHERE keyword, in a typical SQL query (i.e. field='value'). <p>Supported search terms: customer_id and customer_email. All other search criteria are ignored. NOTE: When searching by customer_id, do not quote the value (ex: customer_id=15693430), as the ID is a number rather than a string.  When searching by email, quote the value (ex: customer_email='a@b.c'), as the email parameter is a string
   --pageSize: int # The number of results to fetch in a given page. When this parameter is omitted, a maximum of 200 results are returned (format: int64)
   --nextPage: string # The next page cursor, taken from the response header: `elements-next-page-token`
-  --qp-fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
+  --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
   --Authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
 ]: nothing -> table<billingPerson: record<city: string, companyName: string, countryCode: string, countryName: string, name: string, phone: string, postalCode: string, stateName: string, stateOrProvinceCode: string, stateOrProvinceName: string, street: string>, customerGroupId: int, customerGroupName: string, email: string, id: int, name: string, registered: string, shippingAddresses: list<record>, taxExempt: bool, taxId: float, taxIdValid: bool, totalOrderCount: float, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "nextPage" $nextPage "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "nextPage" $nextPage "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customers" $qp)
   let extra_headers = {"Authorization": $Authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -521,12 +521,12 @@ export def "customers-orders get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # The number of results to fetch in a given page. When this parameter is omitted, a maximum of 200 results are returned (format: int64)
   --nextPage: string # The next page cursor, taken from the response header: `elements-next-page-token`
-  --qp-fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
+  --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
   --Authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
 ]: nothing -> table<additionalInfo: record<google_customer_id: string>, billingPerson: record<city: string, companyName: string, countryCode: string, countryName: string, name: string, phone: string, postalCode: string, stateName: string, stateOrProvinceCode: string, stateOrProvinceName: string, street: string>, couponDiscount: float, createDate: string, createTimestamp: float, customerId: float, customerTaxExempt: bool, customerTaxId: int, customerTaxIdValid: bool, discount: float, email: string, fulfillmentStatus: string, globalReferer: string, handlingFee: record<description: string, name: string, value: float>, hidden: bool, ipAddress: string, items: list<record>, lastChangeDate: string, membershipBasedDiscount: float, orderComments: string, orderNumber: int, paymentMethod: string, paymentModule: string, paymentStatus: string, privateAdminNotes: string, refererUrl: string, refundedAmount: float, refunds: list<record>, reversedTaxApplied: bool, sample: bool, shippingMethod: string, shippingOption: record<estimatedTransitTime: string, isPickup: bool, shippingCarrierName: string, shippingMethodName: string, shippingRate: float>, shippingPerson: record<city: string, companyName: string, countryCode: string, countryName: string, name: string, phone: string, postalCode: string, stateName: string, stateOrProvinceCode: string, stateOrProvinceName: string, street: string>, subtotal: float, tax: float, taxesOnShipping: list<record>, total: float, totalAndMembershipBasedDiscount: float, trackingNumber: string, updateDate: string, updateTimestamp: float, usdTotal: float, vendorNumber: float, vendorOrderNumber: string, volumeDiscount: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "nextPage" $nextPage "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "nextPage" $nextPage "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/customers/($id)/orders" $qp)
   let extra_headers = {"Authorization": $Authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -635,12 +635,12 @@ export def "orders list" [
   --qp-where: string # The CEQL search expression, or the where clause, without the WHERE keyword, in a typical SQL query (i.e. field='value'). <p>Supported search terms: date, from_date, to_date, from_update_date, to_update_date, order, from_order, to_order, customer_id, customer_email and statuses. All other search criteria are ignored
   --pageSize: int # The number of results to fetch in a given page. When this parameter is omitted, a maximum of 200 results are returned (format: int64)
   --nextPage: string # The next page cursor, taken from the response header: `elements-next-page-token`
-  --qp-fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
+  --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
   --Authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
 ]: nothing -> table<additionalInfo: record<google_customer_id: string>, billingPerson: record<city: string, companyName: string, countryCode: string, countryName: string, name: string, phone: string, postalCode: string, stateName: string, stateOrProvinceCode: string, stateOrProvinceName: string, street: string>, couponDiscount: float, createDate: string, createTimestamp: float, customerId: float, customerTaxExempt: bool, customerTaxId: int, customerTaxIdValid: bool, discount: float, email: string, fulfillmentStatus: string, globalReferer: string, handlingFee: record<description: string, name: string, value: float>, hidden: bool, ipAddress: string, items: list<record>, lastChangeDate: string, membershipBasedDiscount: float, orderComments: string, orderNumber: int, paymentMethod: string, paymentModule: string, paymentStatus: string, privateAdminNotes: string, refererUrl: string, refundedAmount: float, refunds: list<record>, reversedTaxApplied: bool, sample: bool, shippingMethod: string, shippingOption: record<estimatedTransitTime: string, isPickup: bool, shippingCarrierName: string, shippingMethodName: string, shippingRate: float>, shippingPerson: record<city: string, companyName: string, countryCode: string, countryName: string, name: string, phone: string, postalCode: string, stateName: string, stateOrProvinceCode: string, stateOrProvinceName: string, street: string>, subtotal: float, tax: float, taxesOnShipping: list<record>, total: float, totalAndMembershipBasedDiscount: float, trackingNumber: string, updateDate: string, updateTimestamp: float, usdTotal: float, vendorNumber: float, vendorOrderNumber: string, volumeDiscount: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "nextPage" $nextPage "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "nextPage" $nextPage "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders" $qp)
   let extra_headers = {"Authorization": $Authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -843,12 +843,12 @@ export def "orders-payments get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # The number of results to fetch in a given page. When this parameter is omitted, a maximum of 200 results are returned (format: int64)
   --nextPage: string # The next page cursor, taken from the response header: `elements-next-page-token`
-  --qp-fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
+  --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
   --Authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
 ]: nothing -> table<paymentMethod: string, paymentStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "nextPage" $nextPage "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "nextPage" $nextPage "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/orders/($orderId)/payments" $qp)
   let extra_headers = {"Authorization": $Authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -873,12 +873,12 @@ export def "orders-refunds get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # The number of results to fetch in a given page. When this parameter is omitted, a maximum of 200 results are returned (format: int64)
   --nextPage: string # The next page cursor, taken from the response header: `elements-next-page-token`
-  --qp-fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
+  --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
   --Authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
 ]: nothing -> table<paymentMethod: string, paymentStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "nextPage" $nextPage "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "nextPage" $nextPage "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/orders/($orderId)/refunds" $qp)
   let extra_headers = {"Authorization": $Authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -928,12 +928,12 @@ export def "products list" [
   --qp-where: string # The CEQL search expression, or the where clause, without the WHERE keyword, in a typical SQL query (i.e. field='value'). <p>Supported search terms: category, hidden_products. All other search criteria are ignored
   --pageSize: int # The number of results to fetch in a given page. When this parameter is omitted, a maximum of 200 results are returned (format: int64)
   --nextPage: string # The next page cursor, taken from the response header: `elements-next-page-token`
-  --qp-fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
+  --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
   --Authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
 ]: nothing -> table<attributes: list<record>, borderInfo: record<dominatingColor: record, homogeneity: bool>, categories: list<record>, categoryIds: list<int>, combinations: list<record>, compareAtPrice: float, compareToPrice: float, compareToPriceDiscount: float, compareToPriceDiscountFormatted: string, compareToPriceDiscountPercent: float, compareToPriceDiscountPercentFormatted: string, compareToPriceFormatted: string, createTimestamp: int, created: string, defaultCategoryId: int, defaultCombinationId: float, defaultDisplayedPrice: float, defaultDisplayedPriceFormatted: string, description: string, descriptionTruncated: bool, dimensions: record<height: float, length: float, width: float>, enabled: bool, favorites: record<count: int, displayedCount: string>, files: list<record>, fixedShippingRate: float, fixedShippingRateOnly: bool, galleryImages: list<record>, googleItemCondition: string, hdThumbnailUrl: string, id: int, imageUrl: string, inStock: bool, isSampleProduct: bool, isShippingRequired: bool, media: record<images: list>, name: string, options: list<record>, originalImage: record<alt: string, height: int, thumbnail: string, url: string, width: int>, originalImageUrl: string, price: float, priceInProductList: float, productClassId: int, quantity: int, quantityDelta: int, relatedProducts: record<productIds: list, relatedCategory: record>, seoDescription: string, seoTitle: string, shipping: record<disabledMethods: list, enabledMethods: list, flatRate: float, methodMarkup: float, type: string>, showOnFrontpage: float, sku: string, smallThumbnailUrl: string, tangible: string, tax: record<defaultLocationIncludedTaxRate: float, enabledManualTaxes: list>, taxes: list<record>, thumbnailUrl: string, trackQuantity: string, unlimited: bool, updateTimestamp: int, updated: string, url: string, warningLimit: int, weight: float, wholesalePrices: record<_quantity_: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "nextPage" $nextPage "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "nextPage" $nextPage "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products" $qp)
   let extra_headers = {"Authorization": $Authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1147,12 +1147,12 @@ export def "object-name get-by-objectName" [
   --qp-where: string # The CEQL search expression.
   --pageSize: int # The page size. Defaults to 200 if not provided. Maximum of 5000. (format: int64)
   --nextPage: string # The next page cursor, taken from the response header: `elements-next-page-token`
-  --qp-fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
+  --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
   --Authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
 ]: nothing -> table<objectField: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "nextPage" $nextPage "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "nextPage" $nextPage "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/($objectName)" $qp)
   let extra_headers = {"Authorization": $Authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1327,12 +1327,12 @@ export def "object-name get-by-objectName-objectId-childObjectName" [
   --qp-where: string # The CEQL search expression.
   --pageSize: int # The page size. Defaults to 200 if not provided. Maximum of 5000. (format: int64)
   --nextPage: string # The next page cursor, taken from the response header: `elements-next-page-token`
-  --qp-fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
+  --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
   --Authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
 ]: nothing -> table<objectField: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "nextPage" $nextPage "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "nextPage" $nextPage "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/($objectName)/($objectId)/($childObjectName)" $qp)
   let extra_headers = {"Authorization": $Authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

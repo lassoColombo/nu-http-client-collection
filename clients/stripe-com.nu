@@ -2117,13 +2117,13 @@ export def "charges-search GetChargesSearch" [
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
   --page: string # A cursor for pagination across multiple pages of results. Don't include this parameter on the first call. Use the next_page value returned in a previous response to request subsequent results.
-  --qp-query: string # The search query string. See [search query language](https://stripe.com/docs/search#search-query-language) and the list of supported [query fields for charges](https://stripe.com/docs/search#query-fields-for-charges).
+  --query: string # The search query string. See [search query language](https://stripe.com/docs/search#search-query-language) and the list of supported [query fields for charges](https://stripe.com/docs/search#query-fields-for-charges).
   --body: record
 ]: any -> record<data: table<amount: int, amount_captured: int, amount_refunded: int, application: any, application_fee: any, application_fee_amount: int, balance_transaction: any, billing_details: record, calculated_statement_descriptor: string, captured: bool, created: int, currency: string, customer: any, description: string, disputed: bool, failure_balance_transaction: any, failure_code: string, failure_message: string, fraud_details: any, id: string, invoice: any, livemode: bool, metadata: record, object: string, on_behalf_of: any, outcome: any, paid: bool, payment_intent: any, payment_method: string, payment_method_details: any, radar_options: record, receipt_email: string, receipt_number: string, receipt_url: string, refunded: bool, refunds: record, review: any, shipping: any, source_transfer: any, statement_descriptor: string, statement_descriptor_suffix: string, status: string, transfer: any, transfer_data: any, transfer_group: string>, has_more: bool, next_page: string, object: string, total_count: int, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "deepObject") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "deepObject") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/charges/search" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -3249,13 +3249,13 @@ export def "customers-search GetCustomersSearch" [
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
   --page: string # A cursor for pagination across multiple pages of results. Don't include this parameter on the first call. Use the next_page value returned in a previous response to request subsequent results.
-  --qp-query: string # The search query string. See [search query language](https://stripe.com/docs/search#search-query-language) and the list of supported [query fields for customers](https://stripe.com/docs/search#query-fields-for-customers).
+  --query: string # The search query string. See [search query language](https://stripe.com/docs/search#search-query-language) and the list of supported [query fields for customers](https://stripe.com/docs/search#query-fields-for-customers).
   --body: record
 ]: any -> record<data: table<address: any, balance: int, cash_balance: any, created: int, currency: string, default_source: any, delinquent: bool, description: string, discount: any, email: string, id: string, invoice_credit_balance: record, invoice_prefix: string, invoice_settings: record, livemode: bool, metadata: record, name: string, next_invoice_sequence: int, object: string, phone: string, preferred_locales: list, shipping: any, sources: record, subscriptions: record, tax: record, tax_exempt: string, tax_ids: record, test_clock: any>, has_more: bool, next_page: string, object: string, total_count: int, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "deepObject") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "deepObject") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/customers/search" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -5927,13 +5927,13 @@ export def "invoices-search GetInvoicesSearch" [
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
   --page: string # A cursor for pagination across multiple pages of results. Don't include this parameter on the first call. Use the next_page value returned in a previous response to request subsequent results.
-  --qp-query: string # The search query string. See [search query language](https://stripe.com/docs/search#search-query-language) and the list of supported [query fields for invoices](https://stripe.com/docs/search#query-fields-for-invoices).
+  --query: string # The search query string. See [search query language](https://stripe.com/docs/search#search-query-language) and the list of supported [query fields for invoices](https://stripe.com/docs/search#query-fields-for-invoices).
   --body: record
 ]: any -> record<data: table<account_country: string, account_name: string, account_tax_ids: list, amount_due: int, amount_paid: int, amount_remaining: int, amount_shipping: int, application: any, application_fee_amount: int, attempt_count: int, attempted: bool, auto_advance: bool, automatic_tax: record, billing_reason: string, charge: any, collection_method: string, created: int, currency: string, custom_fields: list, customer: any, customer_address: any, customer_email: string, customer_name: string, customer_phone: string, customer_shipping: any, customer_tax_exempt: string, customer_tax_ids: list, default_payment_method: any, default_source: any, default_tax_rates: list, description: string, discount: any, discounts: list, due_date: int, ending_balance: int, footer: string, from_invoice: any, hosted_invoice_url: string, id: string, invoice_pdf: string, last_finalization_error: any, latest_revision: any, lines: record, livemode: bool, metadata: record, next_payment_attempt: int, number: string, object: string, on_behalf_of: any, paid: bool, paid_out_of_band: bool, payment_intent: any, payment_settings: record, period_end: int, period_start: int, post_payment_credit_notes_amount: int, pre_payment_credit_notes_amount: int, quote: any, receipt_number: string, rendering_options: any, shipping_cost: any, shipping_details: any, starting_balance: int, statement_descriptor: string, status: string, status_transitions: record, subscription: any, subscription_proration_date: int, subtotal: int, subtotal_excluding_tax: int, tax: int, test_clock: any, threshold_reason: record, total: int, total_discount_amounts: list, total_excluding_tax: int, total_tax_amounts: list, transfer_data: any, webhooks_delivered_at: int>, has_more: bool, next_page: string, object: string, total_count: int, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "deepObject") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "deepObject") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/invoices/search" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -7419,13 +7419,13 @@ export def "payment-intents-search GetPaymentIntentsSearch" [
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
   --page: string # A cursor for pagination across multiple pages of results. Don't include this parameter on the first call. Use the next_page value returned in a previous response to request subsequent results.
-  --qp-query: string # The search query string. See [search query language](https://stripe.com/docs/search#search-query-language) and the list of supported [query fields for payment intents](https://stripe.com/docs/search#query-fields-for-payment-intents).
+  --query: string # The search query string. See [search query language](https://stripe.com/docs/search#search-query-language) and the list of supported [query fields for payment intents](https://stripe.com/docs/search#query-fields-for-payment-intents).
   --body: record
 ]: any -> record<data: table<amount: int, amount_capturable: int, amount_details: record, amount_received: int, application: any, application_fee_amount: int, automatic_payment_methods: any, canceled_at: int, cancellation_reason: string, capture_method: string, client_secret: string, confirmation_method: string, created: int, currency: string, customer: any, description: string, id: string, invoice: any, last_payment_error: any, latest_charge: any, livemode: bool, metadata: record, next_action: any, object: string, on_behalf_of: any, payment_method: any, payment_method_options: any, payment_method_types: list, processing: any, receipt_email: string, review: any, setup_future_usage: string, shipping: any, statement_descriptor: string, statement_descriptor_suffix: string, status: string, transfer_data: any, transfer_group: string>, has_more: bool, next_page: string, object: string, total_count: int, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "deepObject") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "deepObject") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/payment_intents/search" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -8581,13 +8581,13 @@ export def "prices-search GetPricesSearch" [
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
   --page: string # A cursor for pagination across multiple pages of results. Don't include this parameter on the first call. Use the next_page value returned in a previous response to request subsequent results.
-  --qp-query: string # The search query string. See [search query language](https://stripe.com/docs/search#search-query-language) and the list of supported [query fields for prices](https://stripe.com/docs/search#query-fields-for-prices).
+  --query: string # The search query string. See [search query language](https://stripe.com/docs/search#search-query-language) and the list of supported [query fields for prices](https://stripe.com/docs/search#query-fields-for-prices).
   --body: record
 ]: any -> record<data: table<active: bool, billing_scheme: string, created: int, currency: string, currency_options: record, custom_unit_amount: any, id: string, livemode: bool, lookup_key: string, metadata: record, nickname: string, object: string, product: any, recurring: any, tax_behavior: string, tiers: list, tiers_mode: string, transform_quantity: any, type: string, unit_amount: int, unit_amount_decimal: string>, has_more: bool, next_page: string, object: string, total_count: int, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "deepObject") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "deepObject") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/prices/search" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -8749,13 +8749,13 @@ export def "products-search GetProductsSearch" [
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
   --page: string # A cursor for pagination across multiple pages of results. Don't include this parameter on the first call. Use the next_page value returned in a previous response to request subsequent results.
-  --qp-query: string # The search query string. See [search query language](https://stripe.com/docs/search#search-query-language) and the list of supported [query fields for products](https://stripe.com/docs/search#query-fields-for-products).
+  --query: string # The search query string. See [search query language](https://stripe.com/docs/search#search-query-language) and the list of supported [query fields for products](https://stripe.com/docs/search#query-fields-for-products).
   --body: record
 ]: any -> record<data: table<active: bool, created: int, default_price: any, description: string, id: string, images: list, livemode: bool, metadata: record, name: string, object: string, package_dimensions: any, shippable: bool, statement_descriptor: string, tax_code: any, unit_label: string, updated: int, url: string>, has_more: bool, next_page: string, object: string, total_count: int, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "deepObject") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "deepObject") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/products/search" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -11236,13 +11236,13 @@ export def "subscriptions-search GetSubscriptionsSearch" [
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
   --page: string # A cursor for pagination across multiple pages of results. Don't include this parameter on the first call. Use the next_page value returned in a previous response to request subsequent results.
-  --qp-query: string # The search query string. See [search query language](https://stripe.com/docs/search#search-query-language) and the list of supported [query fields for subscriptions](https://stripe.com/docs/search#query-fields-for-subscriptions).
+  --query: string # The search query string. See [search query language](https://stripe.com/docs/search#search-query-language) and the list of supported [query fields for subscriptions](https://stripe.com/docs/search#query-fields-for-subscriptions).
   --body: record
 ]: any -> record<data: table<application: any, application_fee_percent: float, automatic_tax: record, billing_cycle_anchor: int, billing_thresholds: any, cancel_at: int, cancel_at_period_end: bool, canceled_at: int, cancellation_details: any, collection_method: string, created: int, currency: string, current_period_end: int, current_period_start: int, customer: any, days_until_due: int, default_payment_method: any, default_source: any, default_tax_rates: list, description: string, discount: any, ended_at: int, id: string, items: record, latest_invoice: any, livemode: bool, metadata: record, next_pending_invoice_item_invoice: int, object: string, on_behalf_of: any, pause_collection: any, payment_settings: any, pending_invoice_item_interval: any, pending_setup_intent: any, pending_update: any, schedule: any, start_date: int, status: string, test_clock: any, transfer_data: any, trial_end: int, trial_settings: any, trial_start: int>, has_more: bool, next_page: string, object: string, total_count: int, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "deepObject") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "deepObject") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/subscriptions/search" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"

@@ -318,7 +318,7 @@ export def "data-requests updateDataRequest" [
   --auth-user-id-hash: string # nullable
   --auth-username-hash: string # nullable
   --email: string # nullable
-  --body-fields: list
+  --fields: list
   --metadata: record
   --name: string # nullable
   --order: int
@@ -327,7 +327,7 @@ export def "data-requests updateDataRequest" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/data_requests/($data_request_id)")
-  let body = {auth_phone_number_hash: $auth_phone_number_hash, auth_provider: $auth_provider, auth_second_factor_type: $auth_second_factor_type, auth_session_id_hash: $auth_session_id_hash, auth_session_started_at: $auth_session_started_at, auth_type: $auth_type, auth_user_id_hash: $auth_user_id_hash, auth_username_hash: $auth_username_hash, email: $email, fields: $body_fields, metadata: $metadata, name: $name, order: $order} | compact
+  let body = {auth_phone_number_hash: $auth_phone_number_hash, auth_provider: $auth_provider, auth_second_factor_type: $auth_second_factor_type, auth_session_id_hash: $auth_session_id_hash, auth_session_started_at: $auth_session_started_at, auth_type: $auth_type, auth_user_id_hash: $auth_user_id_hash, auth_username_hash: $auth_username_hash, email: $email, fields: $fields, metadata: $metadata, name: $name, order: $order} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -630,14 +630,14 @@ export def "templates listTemplates" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search By Name (e.g. 2)
+  --query: string # Search By Name (e.g. 2)
   --parent-folder-id: string # Filter By Folder Id (e.g. fld_000000000000000001)
   --page: int # Default: 1 (e.g. 2)
   --per-page: int # Default: 50 (e.g. 1)
 ]: nothing -> table<allow_additional_properties: bool, description: string, document_url: string, editable_submissions: bool, expiration_interval: string, expire_after: float, expire_submissions: bool, id: string, locked: bool, name: string, page_dimensions: list<list>, parent_folder_id: string, path: string, permanent_document_url: string, public_submissions: bool, public_web_form: bool, redirect_url: string, slack_webhook_url: string, template_type: string, webhook_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "parent_folder_id" $parent_folder_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "parent_folder_id" $parent_folder_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -738,13 +738,13 @@ export def "templates-add-fields addFieldsToTemplate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-fields: list # item shape: {alignment?: "left"|"center"|"right", autoCalculateMaxLength?: bool, backgroundColor?: string, backgroundColorFieldName?: string, backgroundColorFieldRequired?: bool, barcodeSymbology?: string, bold?: bool, characterSpacing?: float, checkCharacter?: "&#10003;"|"&#10004;"|"&#10006;"|"&#10007;"|"&#10008;", checkColor?: string, checkColorFieldName?: string, checkColorFieldRequired?: bool, color?: string, colorFieldName?: string, colorFieldRequired?: bool, comb?: bool, combNumberOfCells?: float, combValueOffset?: float, combinedFieldFormat?: string, combinedFieldNames?: string, combinedFieldSeparator?: string, combinedFieldType?: string, condition?: string, currency?: bool, dateTimeFormat?: string, decimalPlaces?: float, default?: string, description?: string, displayType?: "text"|"check"|"qrcode"|"barcode"|"image"|"shape", exclusiveMaximum?: bool, exclusiveMinimum?: bool, falseText?: string, fontSize?: float, height?: float, hidden?: bool, id?: float, imageGravity?: "NorthWest"|"North"|"NorthEast"|"West"|"Center"|"East"|"SouthWest"|"South"|"SouthEast", imageScaleType?: "fit"|"fill"|"stretch", includeTime?: bool, integer?: bool, invertBooleanCondition?: bool, maxLength?: float, maximum?: float, metadata?: string, minLength?: float, minimum?: float, multiline?: bool, multilineLines?: float, name: string, numberConditionRangeExclusiveMax?: bool, numberConditionRangeExclusiveMin?: bool, numberConditionRangeMax?: float, numberConditionRangeMin?: float, numberConditionType?: "equals"|"range"|"gte"|"gt"|"lte"|"lt", opacity?: float, optionList?: string, overflow?: "shrink_to_fit"|"truncate", page: float, placeholder?: string, qrcodeColor?: string, qrcodeColorFieldName?: string, qrcodeColorFieldRequired?: bool, required?: bool, rotation?: float, shapeBorderColor?: string, shapeBorderColorFieldName?: string, shapeBorderColorFieldRequired?: bool, shapeBorderWidth?: float, shapeFillColor?: string, shapeFillColorFieldName?: string, shapeFillColorFieldRequired?: bool, shapeType?: "square"|"rectangle"|"circle"|"ellipse", signatureAllowDraw?: bool, signatureAllowType?: bool, static?: bool, strikethrough?: bool, stringConditionType?: "equals"|"contains"|"starts_with"|"ends_with"|"regex", title?: string, trueText?: string, type?: "string"|"number"|"boolean"|"date"|"address"|"country"|"email"|"url"|"image"|"signature"|"barcode"|"combined", typeface?: string, uppercase?: bool, vAlignment?: "bottom"|"center"|"top", width?: float, x?: float, y?: float}
+  fields: list # item shape: {alignment?: "left"|"center"|"right", autoCalculateMaxLength?: bool, backgroundColor?: string, backgroundColorFieldName?: string, backgroundColorFieldRequired?: bool, barcodeSymbology?: string, bold?: bool, characterSpacing?: float, checkCharacter?: "&#10003;"|"&#10004;"|"&#10006;"|"&#10007;"|"&#10008;", checkColor?: string, checkColorFieldName?: string, checkColorFieldRequired?: bool, color?: string, colorFieldName?: string, colorFieldRequired?: bool, comb?: bool, combNumberOfCells?: float, combValueOffset?: float, combinedFieldFormat?: string, combinedFieldNames?: string, combinedFieldSeparator?: string, combinedFieldType?: string, condition?: string, currency?: bool, dateTimeFormat?: string, decimalPlaces?: float, default?: string, description?: string, displayType?: "text"|"check"|"qrcode"|"barcode"|"image"|"shape", exclusiveMaximum?: bool, exclusiveMinimum?: bool, falseText?: string, fontSize?: float, height?: float, hidden?: bool, id?: float, imageGravity?: "NorthWest"|"North"|"NorthEast"|"West"|"Center"|"East"|"SouthWest"|"South"|"SouthEast", imageScaleType?: "fit"|"fill"|"stretch", includeTime?: bool, integer?: bool, invertBooleanCondition?: bool, maxLength?: float, maximum?: float, metadata?: string, minLength?: float, minimum?: float, multiline?: bool, multilineLines?: float, name: string, numberConditionRangeExclusiveMax?: bool, numberConditionRangeExclusiveMin?: bool, numberConditionRangeMax?: float, numberConditionRangeMin?: float, numberConditionType?: "equals"|"range"|"gte"|"gt"|"lte"|"lt", opacity?: float, optionList?: string, overflow?: "shrink_to_fit"|"truncate", page: float, placeholder?: string, qrcodeColor?: string, qrcodeColorFieldName?: string, qrcodeColorFieldRequired?: bool, required?: bool, rotation?: float, shapeBorderColor?: string, shapeBorderColorFieldName?: string, shapeBorderColorFieldRequired?: bool, shapeBorderWidth?: float, shapeFillColor?: string, shapeFillColorFieldName?: string, shapeFillColorFieldRequired?: bool, shapeType?: "square"|"rectangle"|"circle"|"ellipse", signatureAllowDraw?: bool, signatureAllowType?: bool, static?: bool, strikethrough?: bool, stringConditionType?: "equals"|"contains"|"starts_with"|"ends_with"|"regex", title?: string, trueText?: string, type?: "string"|"number"|"boolean"|"date"|"address"|"country"|"email"|"url"|"image"|"signature"|"barcode"|"combined", typeface?: string, uppercase?: bool, vAlignment?: "bottom"|"center"|"top", width?: float, x?: float, y?: float}
 ]: any -> record<errors: list<string>, new_field_ids: list<int>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/templates/($template_id)/add_fields")
-  let body = {fields: $body_fields} | compact
+  let body = {fields: $fields} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -103,7 +103,7 @@ export def "classes-competitions get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --isPublished: string # Specify whether only active entities should be returned, according to the William Hill definition of active (default: yes)
-  --qp-fields: list # Specify an absolute field list to return (Comma-Separated List)
+  --fields: list # Specify an absolute field list to return (Comma-Separated List)
   --include: list # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list # Specify fields from the default to exclude (Comma-Separated List)
   --displayed: string # Specify whether to return displayed entities or not (default: yes)
@@ -117,7 +117,7 @@ export def "classes-competitions get" [
 ]: nothing -> record<competitions: table<betInRunningDelay: float, cashinAvailable: bool, channels: list, description: string, displayed: bool, flags: list, id: string, isPublished: bool, name: string, order: int, parentIds: list, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "isPublished" $isPublished "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "isPublished" $isPublished "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/classes/($classId)/competitions/" $qp)
   let extra_headers = {"apiKey": $apiKey} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -141,7 +141,7 @@ export def "classes-events get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --isPublished: string # Specify whether only active entities should be returned, according to the William Hill definition of active (default: yes)
-  --qp-fields: list # Specify an absolute field list to return (Comma-Separated List)
+  --fields: list # Specify an absolute field list to return (Comma-Separated List)
   --include: list # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list # Specify fields from the default to exclude (Comma-Separated List)
   --displayed: string # Specify whether to return displayed entities or not (default: yes)
@@ -174,7 +174,7 @@ export def "classes-events get" [
 ]: nothing -> record<events: table<betInRunningDelay: float, bettingStatus: string, cashinAvailable: bool, channels: list, country: string, description: string, displayed: bool, eventSort: string, flags: list, hasInPlayMarkets: bool, hasLivePrices: bool, id: string, isInPlay: bool, isPublished: bool, marketCountActiveInPlay: float, marketCountActivePreMatch: float, marketCountActiveTotal: float, marketCountInPlay: float, marketCountPreMatch: float, markets: list, name: string, order: float, parentIds: list, raceNum: string, settled: bool, startDateTime: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "isPublished" $isPublished "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "settled" $settled "scalar") (serialize-qp "includeEmpty" $includeEmpty "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "headlineSummary" $headlineSummary "scalar") (serialize-qp "includeAllDescendants" $includeAllDescendants "scalar") (serialize-qp "isInPlay" $isInPlay "scalar") (serialize-qp "marketCount" $marketCount "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "dateFrom" $dateFrom "scalar") (serialize-qp "dateTo" $dateTo "scalar") (serialize-qp "eventSort" $eventSort "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $marketPublished "scalar") (serialize-qp "marketStatus" $marketStatus "scalar") (serialize-qp "marketDisplayed" $marketDisplayed "scalar") (serialize-qp "marketChannel" $marketChannel "scalar") (serialize-qp "marketSort" $marketSort "scalar") (serialize-qp "marketEW" $marketEW "scalar") (serialize-qp "selectionStatus" $selectionStatus "scalar") (serialize-qp "selectionChannel" $selectionChannel "scalar") (serialize-qp "selectionPublished" $selectionPublished "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "isPublished" $isPublished "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "settled" $settled "scalar") (serialize-qp "includeEmpty" $includeEmpty "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "headlineSummary" $headlineSummary "scalar") (serialize-qp "includeAllDescendants" $includeAllDescendants "scalar") (serialize-qp "isInPlay" $isInPlay "scalar") (serialize-qp "marketCount" $marketCount "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "dateFrom" $dateFrom "scalar") (serialize-qp "dateTo" $dateTo "scalar") (serialize-qp "eventSort" $eventSort "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $marketPublished "scalar") (serialize-qp "marketStatus" $marketStatus "scalar") (serialize-qp "marketDisplayed" $marketDisplayed "scalar") (serialize-qp "marketChannel" $marketChannel "scalar") (serialize-qp "marketSort" $marketSort "scalar") (serialize-qp "marketEW" $marketEW "scalar") (serialize-qp "selectionStatus" $selectionStatus "scalar") (serialize-qp "selectionChannel" $selectionChannel "scalar") (serialize-qp "selectionPublished" $selectionPublished "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/classes/($classId)/events/" $qp)
   let extra_headers = {"apiKey": $apiKey} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -197,7 +197,7 @@ export def "competitions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # Specify an absolute field list to return (Comma-Separated List)
+  --fields: list # Specify an absolute field list to return (Comma-Separated List)
   --include: list # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list # Specify fields from the default to exclude (Comma-Separated List)
   --culture: string # Code used to return responses in language other than English, acceptable values are en-GB|de-DE|es-ES|fr-FR|nn-NO|fi-FI|ru-RU|pt-PT|hu-HU|sl-SL|ga-IE|en-CA|sr-Latn|sv-SE|el=GR|zh-CHS|it-IT|zh-CHT|cs-CZ|de-AT|ja-JP|pl-PL|da-DK|ro-RO|nl-NL|tr-TR
@@ -205,7 +205,7 @@ export def "competitions get" [
 ]: nothing -> record<betInRunningDelay: float, cashinAvailable: bool, channels: list<string>, description: string, displayed: bool, flags: list<string>, id: string, isPublished: bool, name: string, order: int, parentIds: list<string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/competitions/($competitionId)" $qp)
   let extra_headers = {"apiKey": $apiKey} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -229,7 +229,7 @@ export def "competitions-events get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --isPublished: string # Specify whether only active entities should be returned, according to the William Hill definition of active (default: yes)
-  --qp-fields: list # Specify an absolute field list to return (Comma-Separated List)
+  --fields: list # Specify an absolute field list to return (Comma-Separated List)
   --include: list # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list # Specify fields from the default to exclude (Comma-Separated List)
   --displayed: string # Specify whether to return displayed entities or not (default: yes)
@@ -263,7 +263,7 @@ export def "competitions-events get" [
 ]: nothing -> record<events: table<betInRunningDelay: float, bettingStatus: string, cashinAvailable: bool, channels: list, country: string, description: string, displayed: bool, eventSort: string, flags: list, hasInPlayMarkets: bool, hasLivePrices: bool, id: string, isInPlay: bool, isPublished: bool, marketCountActiveInPlay: float, marketCountActivePreMatch: float, marketCountActiveTotal: float, marketCountInPlay: float, marketCountPreMatch: float, markets: list, name: string, order: float, parentIds: list, raceNum: string, settled: bool, startDateTime: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "isPublished" $isPublished "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "settled" $settled "scalar") (serialize-qp "includeEmpty" $includeEmpty "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "headlineSummary" $headlineSummary "scalar") (serialize-qp "includeAllDescendants" $includeAllDescendants "scalar") (serialize-qp "isInPlay" $isInPlay "scalar") (serialize-qp "marketCount" $marketCount "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "dateFrom" $dateFrom "scalar") (serialize-qp "dateTo" $dateTo "scalar") (serialize-qp "marketGroupId" $marketGroupId "scalar") (serialize-qp "eventSort" $eventSort "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $marketPublished "scalar") (serialize-qp "marketStatus" $marketStatus "scalar") (serialize-qp "marketDisplayed" $marketDisplayed "scalar") (serialize-qp "marketChannel" $marketChannel "scalar") (serialize-qp "marketSort" $marketSort "scalar") (serialize-qp "marketEW" $marketEW "scalar") (serialize-qp "selectionStatus" $selectionStatus "scalar") (serialize-qp "selectionChannel" $selectionChannel "scalar") (serialize-qp "selectionPublished" $selectionPublished "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "isPublished" $isPublished "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "settled" $settled "scalar") (serialize-qp "includeEmpty" $includeEmpty "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "headlineSummary" $headlineSummary "scalar") (serialize-qp "includeAllDescendants" $includeAllDescendants "scalar") (serialize-qp "isInPlay" $isInPlay "scalar") (serialize-qp "marketCount" $marketCount "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "dateFrom" $dateFrom "scalar") (serialize-qp "dateTo" $dateTo "scalar") (serialize-qp "marketGroupId" $marketGroupId "scalar") (serialize-qp "eventSort" $eventSort "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $marketPublished "scalar") (serialize-qp "marketStatus" $marketStatus "scalar") (serialize-qp "marketDisplayed" $marketDisplayed "scalar") (serialize-qp "marketChannel" $marketChannel "scalar") (serialize-qp "marketSort" $marketSort "scalar") (serialize-qp "marketEW" $marketEW "scalar") (serialize-qp "selectionStatus" $selectionStatus "scalar") (serialize-qp "selectionChannel" $selectionChannel "scalar") (serialize-qp "selectionPublished" $selectionPublished "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/competitions/($competitionId)/events/" $qp)
   let extra_headers = {"apiKey": $apiKey} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -286,7 +286,7 @@ export def "competitions-marketgroups get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # Specify an absolute field list to return (Comma-Separated List)
+  --fields: list # Specify an absolute field list to return (Comma-Separated List)
   --include: list # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list # Specify fields from the default to exclude (Comma-Separated List)
   --qp-sort: string # The field to order the response by, followed by the order. For example: name,desc (default: id,asc)
@@ -298,7 +298,7 @@ export def "competitions-marketgroups get" [
 ]: nothing -> record<marketGroups: table<collectionId: string, competitionId: string, id: string, marketSort: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/competitions/($competitionId)/marketgroups/" $qp)
   let extra_headers = {"apiKey": $apiKey} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -321,7 +321,7 @@ export def "competitions-markets-by-groupid get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # Specify an absolute field list to return (Comma-Separated List)
+  --fields: list # Specify an absolute field list to return (Comma-Separated List)
   --include: list # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list # Specify fields from the default to exclude (Comma-Separated List)
   --marketSort: string # Filter by market sort (e.g. MR (match result) -- (Outright)).
@@ -330,7 +330,7 @@ export def "competitions-markets-by-groupid get" [
 ]: nothing -> record<marketGroups: table<collectionId: string, competitionId: string, id: string, marketSort: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "marketSort" $marketSort "scalar") (serialize-qp "marketGroupId" $marketGroupId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "marketSort" $marketSort "scalar") (serialize-qp "marketGroupId" $marketGroupId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/competitions/($competitionId)/marketsByGroupid" $qp)
   let extra_headers = {"apiKey": $apiKey} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -355,7 +355,7 @@ export def "events list" [
   --ids: list # A comma-separated list of selectionIds
   --isPublished: string # Specify whether only active entities should be returned, according to the William Hill definition of active (default: yes)
   --includeAllDescendants: oneof<nothing, bool> # Include every descendant in the below heirarchy (default: false)
-  --qp-fields: list # Specify an absolute field list to return (Comma-Separated List)
+  --fields: list # Specify an absolute field list to return (Comma-Separated List)
   --include: list # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list # Specify fields from the default to exclude (Comma-Separated List)
   --channel: string # Specify a channel filter and only results from that channel will be returned
@@ -381,7 +381,7 @@ export def "events list" [
 ]: nothing -> record<events: table<betInRunningDelay: float, bettingStatus: string, cashinAvailable: bool, channels: list, country: string, description: string, displayed: bool, eventSort: string, flags: list, hasInPlayMarkets: bool, hasLivePrices: bool, id: string, isInPlay: bool, isPublished: bool, marketCountActiveInPlay: float, marketCountActivePreMatch: float, marketCountActiveTotal: float, marketCountInPlay: float, marketCountPreMatch: float, markets: list, name: string, order: float, parentIds: list, raceNum: string, settled: bool, startDateTime: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "isPublished" $isPublished "scalar") (serialize-qp "includeAllDescendants" $includeAllDescendants "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "channel" $channel "scalar") (serialize-qp "settled" $settled "scalar") (serialize-qp "includeEmpty" $includeEmpty "scalar") (serialize-qp "headlineSummary" $headlineSummary "scalar") (serialize-qp "marketCount" $marketCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marketIds" $marketIds "csv") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $marketPublished "scalar") (serialize-qp "marketStatus" $marketStatus "scalar") (serialize-qp "marketDisplayed" $marketDisplayed "scalar") (serialize-qp "marketChannel" $marketChannel "scalar") (serialize-qp "marketSort" $marketSort "scalar") (serialize-qp "marketEW" $marketEW "scalar") (serialize-qp "selectionStatus" $selectionStatus "scalar") (serialize-qp "selectionChannel" $selectionChannel "scalar") (serialize-qp "selectionPublished" $selectionPublished "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "isPublished" $isPublished "scalar") (serialize-qp "includeAllDescendants" $includeAllDescendants "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "channel" $channel "scalar") (serialize-qp "settled" $settled "scalar") (serialize-qp "includeEmpty" $includeEmpty "scalar") (serialize-qp "headlineSummary" $headlineSummary "scalar") (serialize-qp "marketCount" $marketCount "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marketIds" $marketIds "csv") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $marketPublished "scalar") (serialize-qp "marketStatus" $marketStatus "scalar") (serialize-qp "marketDisplayed" $marketDisplayed "scalar") (serialize-qp "marketChannel" $marketChannel "scalar") (serialize-qp "marketSort" $marketSort "scalar") (serialize-qp "marketEW" $marketEW "scalar") (serialize-qp "selectionStatus" $selectionStatus "scalar") (serialize-qp "selectionChannel" $selectionChannel "scalar") (serialize-qp "selectionPublished" $selectionPublished "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/events/" $qp)
   let extra_headers = {"apiKey": $apiKey} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -405,7 +405,7 @@ export def "events get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --includeAllDescendants: oneof<nothing, bool> # Include every descendant in the below heirarchy (default: false)
-  --qp-fields: list # Specify an absolute field list to return (Comma-Separated List)
+  --fields: list # Specify an absolute field list to return (Comma-Separated List)
   --include: list # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list # Specify fields from the default to exclude (Comma-Separated List)
   --headlineSummary: oneof<nothing, bool> # Return only headline markets (Markets with the lowest display order) Either 1 InPlay and 1 Pre-Match, or the amount specified in marketCount, if available. Markets and Outcomes will be returned. (default: false)
@@ -426,7 +426,7 @@ export def "events get" [
 ]: nothing -> record<events: table<betInRunningDelay: float, bettingStatus: string, cashinAvailable: bool, channels: list, country: string, description: string, displayed: bool, eventSort: string, flags: list, hasInPlayMarkets: bool, hasLivePrices: bool, id: string, isInPlay: bool, isPublished: bool, marketCountActiveInPlay: float, marketCountActivePreMatch: float, marketCountActiveTotal: float, marketCountInPlay: float, marketCountPreMatch: float, markets: list, name: string, order: float, parentIds: list, raceNum: string, settled: bool, startDateTime: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includeAllDescendants" $includeAllDescendants "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "headlineSummary" $headlineSummary "scalar") (serialize-qp "marketCount" $marketCount "scalar") (serialize-qp "marketIds" $marketIds "csv") (serialize-qp "includeEmpty" $includeEmpty "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $marketPublished "scalar") (serialize-qp "marketStatus" $marketStatus "scalar") (serialize-qp "marketDisplayed" $marketDisplayed "scalar") (serialize-qp "marketChannel" $marketChannel "scalar") (serialize-qp "marketSort" $marketSort "scalar") (serialize-qp "marketEW" $marketEW "scalar") (serialize-qp "selectionStatus" $selectionStatus "scalar") (serialize-qp "selectionChannel" $selectionChannel "scalar") (serialize-qp "selectionPublished" $selectionPublished "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "includeAllDescendants" $includeAllDescendants "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "headlineSummary" $headlineSummary "scalar") (serialize-qp "marketCount" $marketCount "scalar") (serialize-qp "marketIds" $marketIds "csv") (serialize-qp "includeEmpty" $includeEmpty "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $marketPublished "scalar") (serialize-qp "marketStatus" $marketStatus "scalar") (serialize-qp "marketDisplayed" $marketDisplayed "scalar") (serialize-qp "marketChannel" $marketChannel "scalar") (serialize-qp "marketSort" $marketSort "scalar") (serialize-qp "marketEW" $marketEW "scalar") (serialize-qp "selectionStatus" $selectionStatus "scalar") (serialize-qp "selectionChannel" $selectionChannel "scalar") (serialize-qp "selectionPublished" $selectionPublished "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/events/($eventId)" $qp)
   let extra_headers = {"apiKey": $apiKey} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -449,14 +449,14 @@ export def "events-competitors get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # Specify an absolute field list to return (Comma-Separated List)
+  --fields: list # Specify an absolute field list to return (Comma-Separated List)
   --include: list # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list # Specify fields from the default to exclude (Comma-Separated List)
   --apiKey: string # Your API Key available from your developer portal
 ]: nothing -> record<competitors: table<age: float, colour: string, drawNumber: float, formGuide: string, id: float, jockeyName: string, name: string, overview: string, ownerName: string, rating: string, sex: string, silkImageUrl: string, trainerName: string, weightPounds: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/events/($eventId)/competitors" $qp)
   let extra_headers = {"apiKey": $apiKey} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -481,7 +481,7 @@ export def "events-markets get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # A comma-separated list of selectionIds
   --includeAllDescendants: oneof<nothing, bool> # Include every descendant in the below heirarchy (default: false)
-  --qp-fields: list # Specify an absolute field list to return (Comma-Separated List)
+  --fields: list # Specify an absolute field list to return (Comma-Separated List)
   --include: list # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list # Specify fields from the default to exclude (Comma-Separated List)
   --includeEmpty: oneof<nothing, bool> # When declared as false it should exclude markets and events that have no selections / markets (default: true)
@@ -499,7 +499,7 @@ export def "events-markets get" [
 ]: nothing -> record<markets: table<antepostMarket: bool, bestOddsGuaranteed: bool, betInRunningDelay: float, channels: string, description: string, displayed: bool, eachWay: bool, eachWayFactorDen: float, eachWayFactorNum: float, eachWayPlaces: float, earlyPriceAvailable: bool, fcAvailable: bool, firstFourAvailable: bool, firstPriceAvailable: bool, flags: string, hcapMakeup: float, hcapValue: float, id: string, isInPlayMarket: bool, isPublished: bool, livePriceAvailable: bool, marketGroupCollectionId: string, marketGroupId: string, marketGroupName: string, marketSort: string, name: string, order: float, parentIds: list, quinellaAvailable: bool, selections: list, settled: bool, startingPriceAvailable: bool, status: string, tcAvailable: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "includeAllDescendants" $includeAllDescendants "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "includeEmpty" $includeEmpty "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $marketPublished "scalar") (serialize-qp "marketStatus" $marketStatus "scalar") (serialize-qp "marketDisplayed" $marketDisplayed "scalar") (serialize-qp "marketChannel" $marketChannel "scalar") (serialize-qp "marketSort" $marketSort "scalar") (serialize-qp "marketEW" $marketEW "scalar") (serialize-qp "selectionStatus" $selectionStatus "scalar") (serialize-qp "selectionChannel" $selectionChannel "scalar") (serialize-qp "selectionPublished" $selectionPublished "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "includeAllDescendants" $includeAllDescendants "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "includeEmpty" $includeEmpty "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $marketPublished "scalar") (serialize-qp "marketStatus" $marketStatus "scalar") (serialize-qp "marketDisplayed" $marketDisplayed "scalar") (serialize-qp "marketChannel" $marketChannel "scalar") (serialize-qp "marketSort" $marketSort "scalar") (serialize-qp "marketEW" $marketEW "scalar") (serialize-qp "selectionStatus" $selectionStatus "scalar") (serialize-qp "selectionChannel" $selectionChannel "scalar") (serialize-qp "selectionPublished" $selectionPublished "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/events/($eventId)/markets/" $qp)
   let extra_headers = {"apiKey": $apiKey} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -524,7 +524,7 @@ export def "events-markets-selections get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # A comma-separated list of selectionIds
-  --qp-fields: list # Specify an absolute field list to return (Comma-Separated List)
+  --fields: list # Specify an absolute field list to return (Comma-Separated List)
   --include: list # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list # Specify fields from the default to exclude (Comma-Separated List)
   --culture: string # Code used to return responses in language other than English, acceptable values are en-GB|de-DE|es-ES|fr-FR|nn-NO|fi-FI|ru-RU|pt-PT|hu-HU|sl-SL|ga-IE|en-CA|sr-Latn|sv-SE|el=GR|zh-CHS|it-IT|zh-CHT|cs-CZ|de-AT|ja-JP|pl-PL|da-DK|ro-RO|nl-NL|tr-TR
@@ -535,7 +535,7 @@ export def "events-markets-selections get" [
 ]: nothing -> record<selections: table<cashinPriceDen: float, cashinPriceNum: float, channels: list, csAway: float, csHome: float, currentPriceDen: float, currentPriceNum: float, description: string, displayed: bool, id: string, isPublished: bool, name: string, oddsDecimal: float, oddsFractional: float, order: float, parentIds: list, priceFormatted: record, result: string, resultType: string, runnerNum: float, settled: bool, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "culture" $culture "scalar") (serialize-qp "selectionStatus" $selectionStatus "scalar") (serialize-qp "selectionChannel" $selectionChannel "scalar") (serialize-qp "selectionPublished" $selectionPublished "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "culture" $culture "scalar") (serialize-qp "selectionStatus" $selectionStatus "scalar") (serialize-qp "selectionChannel" $selectionChannel "scalar") (serialize-qp "selectionPublished" $selectionPublished "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/events/($eventId)/markets/($marketId)/selections/" $qp)
   let extra_headers = {"apiKey": $apiKey} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -561,7 +561,7 @@ export def "sports get" [
   --offset: int # Skip over a number of elements by specifying a start value for the query (default: 0)
   --isPublished: string # Specify whether only active entities should be returned, according to the William Hill definition of active (default: yes)
   --limit: int # Specify the number of results to return (default: 100)
-  --qp-fields: list # Specify an absolute field list to return (Comma-Separated List)
+  --fields: list # Specify an absolute field list to return (Comma-Separated List)
   --include: list # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list # Specify fields from the default to exclude (Comma-Separated List)
   --culture: string # Code used to return responses in language other than English, acceptable values are en-GB|de-DE|es-ES|fr-FR|nn-NO|fi-FI|ru-RU|pt-PT|hu-HU|sl-SL|ga-IE|en-CA|sr-Latn|sv-SE|el=GR|zh-CHS|it-IT|zh-CHT|cs-CZ|de-AT|ja-JP|pl-PL|da-DK|ro-RO|nl-NL|tr-TR
@@ -569,7 +569,7 @@ export def "sports get" [
 ]: nothing -> record<sports: table<id: string, isPublished: bool, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "isPublished" $isPublished "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "isPublished" $isPublished "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sports/" $qp)
   let extra_headers = {"apiKey": $apiKey} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -593,7 +593,7 @@ export def "sports-classes get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --isPublished: string # Specify whether only active entities should be returned, according to the William Hill definition of active (default: yes)
-  --qp-fields: list # Specify an absolute field list to return (Comma-Separated List)
+  --fields: list # Specify an absolute field list to return (Comma-Separated List)
   --include: list # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list # Specify fields from the default to exclude (Comma-Separated List)
   --displayed: string # Specify whether to return displayed entities or not (default: yes)
@@ -607,7 +607,7 @@ export def "sports-classes get" [
 ]: nothing -> record<classes: table<id: string, isPublished: bool, name: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "isPublished" $isPublished "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "isPublished" $isPublished "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/sports/($sportId)/classes/" $qp)
   let extra_headers = {"apiKey": $apiKey} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -631,7 +631,7 @@ export def "sports-competitions get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --isPublished: string # Specify whether only active entities should be returned, according to the William Hill definition of active (default: yes)
-  --qp-fields: list # Specify an absolute field list to return (Comma-Separated List)
+  --fields: list # Specify an absolute field list to return (Comma-Separated List)
   --include: list # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list # Specify fields from the default to exclude (Comma-Separated List)
   --displayed: string # Specify whether to return displayed entities or not (default: yes)
@@ -645,7 +645,7 @@ export def "sports-competitions get" [
 ]: nothing -> record<competitions: table<betInRunningDelay: float, cashinAvailable: bool, channels: list, description: string, displayed: bool, flags: list, id: string, isPublished: bool, name: string, order: int, parentIds: list, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "isPublished" $isPublished "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "isPublished" $isPublished "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/sports/($sportId)/competitions/" $qp)
   let extra_headers = {"apiKey": $apiKey} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -670,7 +670,7 @@ export def "topbets get" [
   --sportIds: list # A comma-separated list of sportsIds for which to retrieve topBets for
   --competitionIds: list # A comma-separated list of competitionIds for which to retrieve topBets for
   --limit: int # Specify the number of results to return (default: 100)
-  --qp-fields: list # Specify an absolute field list to return (Comma-Separated List)
+  --fields: list # Specify an absolute field list to return (Comma-Separated List)
   --include: list # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list # Specify fields from the default to exclude (Comma-Separated List)
   --param-topBetEventId: string # The event ID to retrieve top bet information for. Multiple events up to 5 may be used
@@ -681,7 +681,7 @@ export def "topbets get" [
 ]: nothing -> record<bets: table<competition: record, event: record, market: record, selection: record, sport: record, weight: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sportIds" $sportIds "csv") (serialize-qp "competitionIds" $competitionIds "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "param_topBetEventId" $param_topBetEventId "scalar") (serialize-qp "sortName" $sortName "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "Locale" $Locale "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sportIds" $sportIds "csv") (serialize-qp "competitionIds" $competitionIds "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "param_topBetEventId" $param_topBetEventId "scalar") (serialize-qp "sortName" $sortName "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "Locale" $Locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/topbets/" $qp)
   let extra_headers = {"apiKey": $apiKey} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

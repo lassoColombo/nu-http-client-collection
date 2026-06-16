@@ -116,7 +116,7 @@ export def "calls findCalls" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
   --id: list # Lists the Call ids to search for. If calls ids are specified then other query parameters can be ignored
@@ -133,7 +133,7 @@ export def "calls findCalls" [
 ]: nothing -> record<items: table<agentCall: bool, attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalCallResult: string, fromNumber: string, id: int, inbound: bool, labels: list, modified: int, notes: list, records: list, state: string, toNumber: string>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "id" $id "multi") (serialize-qp "campaignId" $campaignId "scalar") (serialize-qp "batchId" $batchId "scalar") (serialize-qp "fromNumber" $fromNumber "scalar") (serialize-qp "toNumber" $toNumber "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "states" $states "scalar") (serialize-qp "results" $results "scalar") (serialize-qp "inbound" $inbound "scalar") (serialize-qp "intervalBegin" $intervalBegin "scalar") (serialize-qp "intervalEnd" $intervalEnd "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "id" $id "multi") (serialize-qp "campaignId" $campaignId "scalar") (serialize-qp "batchId" $batchId "scalar") (serialize-qp "fromNumber" $fromNumber "scalar") (serialize-qp "toNumber" $toNumber "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "states" $states "scalar") (serialize-qp "results" $results "scalar") (serialize-qp "inbound" $inbound "scalar") (serialize-qp "intervalBegin" $intervalBegin "scalar") (serialize-qp "intervalEnd" $intervalEnd "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/calls" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -153,7 +153,7 @@ export def "calls sendCalls" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --campaignId: int # Specifies a campaignId to send calls quickly on a previously created campaign (format: int64)
   --defaultLiveMessage: string # Text to be turned into a sound, this text will be played when the phone is answered. Parameter can be overridden for any particular CallRecipient
   --defaultMachineMessage: string # Text to be turned into a sound, this text will be played when answering machine is detected. Parameter can be overridden for any particular CallRecipient
@@ -166,7 +166,7 @@ export def "calls sendCalls" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "campaignId" $campaignId "scalar") (serialize-qp "defaultLiveMessage" $defaultLiveMessage "scalar") (serialize-qp "defaultMachineMessage" $defaultMachineMessage "scalar") (serialize-qp "defaultLiveMessageSoundId" $defaultLiveMessageSoundId "scalar") (serialize-qp "defaultMachineMessageSoundId" $defaultMachineMessageSoundId "scalar") (serialize-qp "defaultVoice" $defaultVoice "scalar") (serialize-qp "strictValidation" $strictValidation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "campaignId" $campaignId "scalar") (serialize-qp "defaultLiveMessage" $defaultLiveMessage "scalar") (serialize-qp "defaultMachineMessage" $defaultMachineMessage "scalar") (serialize-qp "defaultLiveMessageSoundId" $defaultLiveMessageSoundId "scalar") (serialize-qp "defaultMachineMessageSoundId" $defaultMachineMessageSoundId "scalar") (serialize-qp "defaultVoice" $defaultVoice "scalar") (serialize-qp "strictValidation" $strictValidation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/calls" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -187,7 +187,7 @@ export def "calls-broadcasts findCallBroadcasts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 10)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
   --label: string # A label of a voice broadcast
@@ -199,7 +199,7 @@ export def "calls-broadcasts findCallBroadcasts" [
 ]: nothing -> record<items: table<answeringMachineConfig: string, dialplanXml: string, fromNumber: string, id: int, labels: list, lastModified: int, localTimeRestriction: record, maxActive: int, maxActiveTransfers: int, name: string, recipients: list, resumeNextDay: bool, retryConfig: record, schedules: list, sounds: record, status: string>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "running" $running "scalar") (serialize-qp "scheduled" $scheduled "scalar") (serialize-qp "intervalBegin" $intervalBegin "scalar") (serialize-qp "intervalEnd" $intervalEnd "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "running" $running "scalar") (serialize-qp "scheduled" $scheduled "scalar") (serialize-qp "intervalBegin" $intervalBegin "scalar") (serialize-qp "intervalEnd" $intervalEnd "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/calls/broadcasts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -267,11 +267,11 @@ export def "calls-broadcasts get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<answeringMachineConfig: string, dialplanXml: string, fromNumber: string, id: int, labels: list<string>, lastModified: int, localTimeRestriction: record<beginHour: int, beginMinute: int, enabled: bool, endHour: int, endMinute: int>, maxActive: int, maxActiveTransfers: int, name: string, recipients: table<attributes: record, contactId: int, fromNumber: string, phoneNumber: string>, resumeNextDay: bool, retryConfig: record<maxAttempts: int, minutesBetweenAttempts: int, retryPhoneTypes: list<string>, retryResults: list<string>>, schedules: table<campaignId: int, daysOfWeek: list, id: int, startDate: record, startTimeOfDay: record, stopDate: record, stopTimeOfDay: record, timeZone: string>, sounds: record<dncDigit: string, dncSoundId: int, dncSoundText: string, dncSoundTextVoice: string, liveSoundId: int, liveSoundText: string, liveSoundTextVoice: string, machineSoundId: int, machineSoundText: string, machineSoundTextVoice: string, transferDigit: string, transferNumber: string, transferSoundId: int, transferSoundText: string, transferSoundTextVoice: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calls/broadcasts/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -362,13 +362,13 @@ export def "calls-broadcasts-batches get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
 ]: nothing -> record<items: table<broadcastId: int, created: int, enabled: bool, id: int, name: string, remaining: int, size: int, status: string>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calls/broadcasts/($id)/batches" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -423,13 +423,13 @@ export def "calls-broadcasts-calls get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --batchId: int # An id of a particular batch associated with broadcast (format: int64)
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
 ]: nothing -> record<items: table<agentCall: bool, attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalCallResult: string, fromNumber: string, id: int, inbound: bool, labels: list, modified: int, notes: list, records: list, state: string, toNumber: string>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "batchId" $batchId "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "batchId" $batchId "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calls/broadcasts/($id)/calls" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -450,14 +450,14 @@ export def "calls-broadcasts-recipients addCallBroadcastRecipients" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --strictValidation: oneof<nothing, bool> # Turns on strict validation for recipients. System will reply with BAD_REQUEST(400) if strictValidation = true and one of numbers didn't pass validation
   --body: record
 ]: any -> record<items: table<agentCall: bool, attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalCallResult: string, fromNumber: string, id: int, inbound: bool, labels: list, modified: int, notes: list, records: list, state: string, toNumber: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "strictValidation" $strictValidation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "strictValidation" $strictValidation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calls/broadcasts/($id)/recipients" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -502,13 +502,13 @@ export def "calls-broadcasts-stats get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --begin: int # Start of the search time interval, formatted in unix time milliseconds. Example: 1473781817000 for Sat, 05 Jan 1985 14:03:37 GMT (format: int64)
   --end: int # End of the search time interval, formatted in unix time milliseconds. Example: 1473781817000 for Sat, 05 Jan 1985 14:03:37 GMT (format: int64)
 ]: nothing -> record<answeringMachineCount: int, billedAmount: float, billedDuration: int, busyCount: int, callsAttempted: int, callsAwaitingRedial: int, callsDuration: int, callsLiveAnswer: int, callsPlaced: int, callsRemaining: int, dialedCount: int, doNotCallCount: int, errorCount: int, liveCount: int, miscCount: int, noAnswerCount: int, remainingOutboundCount: int, responseRatePercent: int, totalCount: int, totalOutboundCount: int, transferCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "begin" $begin "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "begin" $begin "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calls/broadcasts/($id)/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -580,11 +580,11 @@ export def "calls-recordings get-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<callId: int, campaignId: int, created: int, hash: string, id: int, lengthInBytes: int, lengthInSeconds: int, mp3Url: string, name: string, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calls/recordings/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -628,11 +628,11 @@ export def "calls get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<agentCall: bool, attributes: record, batchId: int, campaignId: int, contact: record<deleted: bool, externalId: string, externalSystem: string, extraPhone1: string, extraPhone2: string, extraPhone3: string, firstName: string, homePhone: string, id: int, lastName: string, mobilePhone: string, properties: record, workPhone: string, zipcode: string>, created: int, finalCallResult: string, fromNumber: string, id: int, inbound: bool, labels: list<string>, modified: int, notes: table<created: int, text: string>, records: table<answerTime: int, billedAmount: float, callerName: string, duration: int, finishTime: int, id: int, labels: list, notes: list, originateTime: int, questionResponses: list, recordings: list, result: string, switchId: string, toNumber: string>, state: string, toNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calls/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -653,11 +653,11 @@ export def "calls-recordings get-by-id-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<items: table<callId: int, campaignId: int, created: int, hash: string, id: int, lengthInBytes: int, lengthInSeconds: int, mp3Url: string, name: string, state: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calls/($id)/recordings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -679,11 +679,11 @@ export def "calls-recordings get-by-id-name" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<callId: int, campaignId: int, created: int, hash: string, id: int, lengthInBytes: int, lengthInSeconds: int, mp3Url: string, name: string, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/calls/($id)/recordings/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -728,11 +728,11 @@ export def "campaigns-batches get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<broadcastId: int, created: int, enabled: bool, id: int, name: string, remaining: int, size: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/campaigns/batches/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -789,11 +789,11 @@ export def "campaigns-sounds findCampaignSounds" [
   --includeArchived: oneof<nothing, bool> # Includes ARCHIVED sounds for "true" value
   --includePending: oneof<nothing, bool> # Includes UPLOAD/RECORDING sounds for "true" value
   --includeScrubbed: oneof<nothing, bool> # Includes SCRUBBED sounds for "true" value
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<items: table<created: int, duplicate: bool, id: int, lengthInSeconds: int, name: string, status: string>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "includeArchived" $includeArchived "scalar") (serialize-qp "includePending" $includePending "scalar") (serialize-qp "includeScrubbed" $includeScrubbed "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "includeArchived" $includeArchived "scalar") (serialize-qp "includePending" $includePending "scalar") (serialize-qp "includeScrubbed" $includeScrubbed "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/campaigns/sounds" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -813,14 +813,14 @@ export def "campaigns-sounds-calls post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --name: string # Name of a sound to create
   --toNumber: string # Phone number in E.164 11-digit format to call to record a sound.  Example: 12132000384
 ]: any -> record<created: int, duplicate: bool, id: int, lengthInSeconds: int, name: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/campaigns/sounds/calls" $qp)
   let body = {name: $name, toNumber: $toNumber} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -842,14 +842,14 @@ export def "campaigns-sounds-files post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   file: string # A sound file encoded in binary form (format: binary)
   --name: string # Optional name of a sound file, if the name is empty than it will be taken from a file
 ]: any -> record<created: int, duplicate: bool, id: int, lengthInSeconds: int, name: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/campaigns/sounds/files" $qp)
   let body = {file: $file, name: $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -871,14 +871,14 @@ export def "campaigns-sounds-tts post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --message: string # A text to be turned into sound
   --voice: string@voice-completer # A voice to be used. Available values: MALE1, FEMALE1 , FEMALE2, SPANISH1, FRENCHCANADIAN1
 ]: any -> record<created: int, duplicate: bool, id: int, lengthInSeconds: int, name: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/campaigns/sounds/tts" $qp)
   let body = {message: $message, voice: $voice} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -924,11 +924,11 @@ export def "campaigns-sounds get-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<created: int, duplicate: bool, id: int, lengthInSeconds: int, name: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/campaigns/sounds/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -994,7 +994,7 @@ export def "contacts findContacts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
   --id: list # A list of contact IDs. If the id parameter is included, the other query parameters are ignored.
@@ -1005,7 +1005,7 @@ export def "contacts findContacts" [
 ]: nothing -> record<items: table<deleted: bool, externalId: string, externalSystem: string, extraPhone1: string, extraPhone2: string, extraPhone3: string, firstName: string, homePhone: string, id: int, lastName: string, mobilePhone: string, properties: record, workPhone: string, zipcode: string>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "id" $id "multi") (serialize-qp "number" $number "multi") (serialize-qp "contactListId" $contactListId "scalar") (serialize-qp "propertyName" $propertyName "scalar") (serialize-qp "propertyValue" $propertyValue "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "id" $id "multi") (serialize-qp "number" $number "multi") (serialize-qp "contactListId" $contactListId "scalar") (serialize-qp "propertyName" $propertyName "scalar") (serialize-qp "propertyValue" $propertyValue "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contacts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1050,7 +1050,7 @@ export def "contacts-dncs findDoNotContacts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
   --prefix: string # Prefix (1-10 digits) of phone numbers
@@ -1064,7 +1064,7 @@ export def "contacts-dncs findDoNotContacts" [
 ]: nothing -> record<items: table<call: bool, campaignId: int, created: int, inboundCall: bool, inboundText: bool, number: string, source: string, text: bool>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "campaignId" $campaignId "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "call" $call "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "inboundCall" $inboundCall "scalar") (serialize-qp "inboundText" $inboundText "scalar") (serialize-qp "number" $number "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "campaignId" $campaignId "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "call" $call "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "inboundCall" $inboundCall "scalar") (serialize-qp "inboundText" $inboundText "scalar") (serialize-qp "number" $number "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/contacts/dncs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1140,11 +1140,11 @@ export def "contacts-dncs-universals get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --fromNumber: string # An optional destination/source number for DNC, specified in E.164 format (11-digit). Example: 12132000384
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<items: table<fromNumber: string, inboundCall: bool, inboundText: bool, outboundCall: bool, outboundText: bool, toNumber: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fromNumber" $fromNumber "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fromNumber" $fromNumber "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/contacts/dncs/universals/($toNumber)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1242,7 +1242,7 @@ export def "contacts-lists findContactLists" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
   --name: string # A name or a partial name of a contact list
@@ -1252,7 +1252,7 @@ export def "contacts-lists findContactLists" [
 ]: nothing -> record<items: table<created: int, id: int, name: string, size: int, status: string>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "exactMatch" $exactMatch "scalar") (serialize-qp "contactCount" $contactCount "scalar") (serialize-qp "orderBy" $orderBy "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "exactMatch" $exactMatch "scalar") (serialize-qp "contactCount" $contactCount "scalar") (serialize-qp "orderBy" $orderBy "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contacts/lists" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1273,7 +1273,7 @@ export def "contacts-lists createContactList" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --contactIds: list # A list of ids of existing contacts in CallFire system
   --contactNumbers: list # List of numbers in E.164 format (11-digit). Example: 12132000384
   --contactNumbersField: string # A type of a phone number (homePhone, workPhone, mobilePhone). This parameter is used with contactNumbers and specifies which types of phone numbers are included to a contact list
@@ -1284,7 +1284,7 @@ export def "contacts-lists createContactList" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contacts/lists" $qp)
   let body = {contactIds: $contactIds, contactNumbers: $contactNumbers, contactNumbersField: $contactNumbersField, contacts: $contacts, name: $name, useCustomFields: $useCustomFields} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1358,11 +1358,11 @@ export def "contacts-lists get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<created: int, id: int, name: string, size: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/contacts/lists/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1435,13 +1435,13 @@ export def "contacts-lists-items get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32)
 ]: nothing -> record<items: table<deleted: bool, externalId: string, externalSystem: string, extraPhone1: string, extraPhone2: string, extraPhone3: string, firstName: string, homePhone: string, id: int, lastName: string, mobilePhone: string, properties: record, workPhone: string, zipcode: string>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/contacts/lists/($id)/items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1541,11 +1541,11 @@ export def "contacts get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<deleted: bool, externalId: string, externalSystem: string, extraPhone1: string, extraPhone2: string, extraPhone3: string, firstName: string, homePhone: string, id: int, lastName: string, mobilePhone: string, properties: record, workPhone: string, zipcode: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/contacts/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1608,11 +1608,11 @@ export def "contacts-history get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32)
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<calls: table<agentCall: bool, attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalCallResult: string, fromNumber: string, id: int, inbound: bool, labels: list, modified: int, notes: list, records: list, state: string, toNumber: string>, id: int, texts: table<attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalTextResult: string, fromNumber: string, id: int, inbound: bool, labels: list, media: list, message: string, modified: int, records: list, state: string, toNumber: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/contacts/($id)/history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1660,11 +1660,11 @@ export def "keywords-leases findKeywordLeases" [
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
   --filter: string # Filter by part of Keyword name or Label name of Keyword
   --labelName: string # An exact label name to search by
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<items: table<autoRenew: bool, contactListId: int, doubleOptInEnabled: bool, keyword: string, labels: list, leaseBegin: int, leaseEnd: int, number: string, optInConfirmationMessage: string, shortCode: string, status: string, type: string>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "labelName" $labelName "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "labelName" $labelName "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/keywords/leases" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1688,11 +1688,11 @@ export def "keywords-leases-configs findKeywordLeaseConfigs" [
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
   --filter: string # Filter by part of Keyword name or Label name of Keyword
   --labelName: string # An exact label name to search by
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<items: list<record>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "labelName" $labelName "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "labelName" $labelName "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/keywords/leases/configs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1713,11 +1713,11 @@ export def "keywords-leases-configs get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<keyword: string, textInboundConfig: record<forwardEnabled: bool, forwardNumber: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/keywords/leases/configs/($keyword)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1767,11 +1767,11 @@ export def "keywords-leases-id get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<autoRenew: bool, contactListId: int, doubleOptInEnabled: bool, keyword: string, labels: list<string>, leaseBegin: int, leaseEnd: int, number: string, optInConfirmationMessage: string, shortCode: string, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/keywords/leases/id/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1792,11 +1792,11 @@ export def "keywords-leases get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<autoRenew: bool, contactListId: int, doubleOptInEnabled: bool, keyword: string, labels: list<string>, leaseBegin: int, leaseEnd: int, number: string, optInConfirmationMessage: string, shortCode: string, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/keywords/leases/($keyword)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1877,11 +1877,11 @@ export def "me-account get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<active: bool, address: string, age: record<millis: int, standardDays: int, standardHours: int, standardMinutes: int, standardSeconds: int>, agencyManagedAccounts: bool, allowedToCreateCampaign: bool, apiCallLimit: int, archived: bool, autoAddDoNotContact: bool, brand: string, canceled: bool, canceledOrArchived: bool, city: string, companyName: string, country: string, countryOrDefault: string, created: string, dateTimeZone: record<fixed: bool, id: string>, defaultNotificationTtlMillis: int, defaultNumberId: int, ein: string, entityType: string, ez: bool, failedVerificationAttempts: int, fromNumberPool: string, id: int, industry: string, industryName: string, key: string, localTimeZoneRestriction: record<enabled: bool, startTime: string, stopTime: string>, locale: record<country: string, displayCountry: string, displayLanguage: string, displayName: string, displayScript: string, displayVariant: string, extensionKeys: list<string>, iso3Country: string, iso3Language: string, language: string, script: string, unicodeLocaleAttributes: list<string>, unicodeLocaleKeys: list<string>, variant: string>, maxAgents: int, messageClass: string, messageFlows: list<string>, name: string, outboundThreshold: int, receiverPeriodCall: int, receiverPeriodEnabled: bool, receiverPeriodGlobal: int, receiverPeriodText: int, receiverPeriodTimeUnit: string, retainOnlyMetadata: bool, retainOnlyMetadataLastDetailRecordId: int, retainOnlyMetadataLastModified: string, scrub: bool, sharedShortCodeAllowed: bool, sharedShortCodeId: int, soaAccount: any, startCapable: bool, state: string, status: string, textOutboundThreshold: int, timeZone: record<displayName: string, dstsavings: int, id: string, rawOffset: int>, timeZoneId: record<id: string, rules: record<fixedOffset: bool, transitionRules: list, transitions: list>>, trustLevel: string, tsrAgreement: string, tsrInitials: string, uiContext: string, universal: bool, website: string, zipcode: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/account" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1902,13 +1902,13 @@ export def "me-credentials findApiCredentials" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Filter by name
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
 ]: nothing -> record<items: table<enabled: bool, id: int, name: string, password: string, username: string>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/api/credentials" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1980,11 +1980,11 @@ export def "me-credentials get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<enabled: bool, id: int, name: string, password: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/me/api/credentials/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2172,11 +2172,11 @@ export def "media findMedia" [
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
   --filter: string # value to filter file names again; this value is used to check if the filename contains the filter value.
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<items: table<accountId: int, created: int, id: int, lengthInBytes: int, mediaType: string, name: string, publicUrl: string>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/media" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2249,11 +2249,11 @@ export def "media list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<accountId: int, created: int, id: int, lengthInBytes: int, mediaType: string, name: string, publicUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/media/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2329,11 +2329,11 @@ export def "numbers-leases findNumberLeases" [
   --zipcode: string # A five-digit Zipcode
   --labelName: string # A label name
   --tollFree: oneof<nothing, bool> # ~
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<items: table<autoRenew: bool, callFeatureStatus: string, labels: list, leaseBegin: int, leaseEnd: int, nationalFormat: string, number: string, region: record, sendEmailOnCreate: bool, status: string, textFeatureStatus: string, tollFree: bool, type: string>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "zipcode" $zipcode "scalar") (serialize-qp "labelName" $labelName "scalar") (serialize-qp "tollFree" $tollFree "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "zipcode" $zipcode "scalar") (serialize-qp "labelName" $labelName "scalar") (serialize-qp "tollFree" $tollFree "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/leases" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2360,11 +2360,11 @@ export def "numbers-leases-configs findNumberLeaseConfigs" [
   --state: string # A two-letter state code. Example: CA, IL, etc.
   --zipcode: string # A five-digit Zipcode
   --labelName: string # A label name
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<items: table<callTrackingConfig: record, configType: string, ivrInboundConfig: record, number: string, textInboundConfig: record>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "zipcode" $zipcode "scalar") (serialize-qp "labelName" $labelName "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "zipcode" $zipcode "scalar") (serialize-qp "labelName" $labelName "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/leases/configs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2385,11 +2385,11 @@ export def "numbers-leases-configs get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<callTrackingConfig: record<failedTransferSoundId: int, googleAnalytics: record<category: string, domain: string, googleAccountId: string>, introSoundId: int, recorded: bool, screen: bool, transferNumbers: list<string>, voicemail: bool, voicemailSoundId: int, weeklySchedule: record<daysOfWeek: list, startTimeOfDay: record, stopTimeOfDay: record, timeZone: string>, whisperSoundId: int>, configType: string, ivrInboundConfig: record<dialplanXml: string>, number: string, textInboundConfig: record<forwardEnabled: bool, forwardNumber: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/numbers/leases/configs/($number)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2444,11 +2444,11 @@ export def "numbers-leases get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<autoRenew: bool, callFeatureStatus: string, labels: list<string>, leaseBegin: int, leaseEnd: int, nationalFormat: string, number: string, region: record<city: string, country: string, latitude: float, longitude: float, prefix: string, state: string, timeZone: string, zipcode: string>, sendEmailOnCreate: bool, status: string, textFeatureStatus: string, tollFree: bool, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/numbers/leases/($number)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2512,11 +2512,11 @@ export def "numbers-local findNumbersLocal" [
   --city: string # A city name
   --state: string # A two-letter state code. Example: CA, IL, etc.
   --zipcode: string # A five-digit Zipcode
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<items: table<nationalFormat: string, number: string, region: record, sendEmailOnCreate: bool, tollFree: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "zipcode" $zipcode "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "zipcode" $zipcode "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/local" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2544,11 +2544,11 @@ export def "numbers-regions findNumberRegions" [
   --state: string # A two-letter state code. Example: CA, IL, etc.
   --zipcode: string # A five-digit Zipcode
   --country: string # ~
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<items: table<city: string, country: string, latitude: float, longitude: float, prefix: string, state: string, timeZone: string, zipcode: string>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "cityPrefix" $cityPrefix "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "zipcode" $zipcode "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "cityPrefix" $cityPrefix "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "zipcode" $zipcode "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/regions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2570,11 +2570,11 @@ export def "numbers-tollfree findNumbersTollfree" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pattern: string # Filter toll free numbers by prefix, pattern must be 3 char long and should end with '*'. Examples: 8**, 85*, 87* (but 855 will fail because pattern must end with '*').
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<items: table<nationalFormat: string, number: string, region: record, sendEmailOnCreate: bool, tollFree: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pattern" $pattern "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pattern" $pattern "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/tollfree" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2596,14 +2596,14 @@ export def "orders findOrders" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 20)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --status: list # Filter by order status, accepts multiple values in comma separated string, available values: [PROCESSING, FINISHED, PAYMENT_ERROR, VOID, WAIT_FOR_PAYMENT, PARTIALLY_ADJUSTED, ADJUSTED]
   --intervalBegin: int # Start of the find time interval, formatted in unix time milliseconds. Example: 1473781817000 (format: int64)
   --intervalEnd: int # End of the find time interval, formatted in unix time milliseconds. Example: 1473781817000 (format: int64)
 ]: nothing -> record<items: table<created: int, id: int, keywords: record, localNumbers: record, salesTax: float, status: string, summary: float, tollFreeNumbers: record, total: float, totalCost: float>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "status" $status "multi") (serialize-qp "intervalBegin" $intervalBegin "scalar") (serialize-qp "intervalEnd" $intervalEnd "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "status" $status "multi") (serialize-qp "intervalBegin" $intervalBegin "scalar") (serialize-qp "intervalEnd" $intervalEnd "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2623,13 +2623,13 @@ export def "orders-keywords orderKeywords" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --keywords: list # A list of keywords
 ]: any -> record<id: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/keywords" $qp)
   let body = {keywords: $keywords} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2651,7 +2651,7 @@ export def "orders-numbers orderNumbers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --city: string # City of requested numbers
   --localCount: int # Total count of local numbers requested (format: int32)
   --numbers: list # A list of phone numbers in E.164 format (11-digit) to buy. Example: 12132000384
@@ -2664,7 +2664,7 @@ export def "orders-numbers orderNumbers" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/numbers" $qp)
   let body = {city: $city, localCount: $localCount, numbers: $numbers, prefix: $prefix, promo: $promo, state: $state, tollFreeCount: $tollFreeCount, zipcode: $zipcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2687,11 +2687,11 @@ export def "orders get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<created: int, id: int, keywords: record<fulfilled: list<string>, ordered: int, unitCost: float>, localNumbers: record<fulfilled: list<string>, ordered: int, unitCost: float>, salesTax: float, status: string, summary: float, tollFreeNumbers: record<fulfilled: list<string>, ordered: int, unitCost: float>, total: float, totalCost: float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/orders/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2758,11 +2758,11 @@ export def "texts findTexts" [
   --intervalEnd: int # End of the find time interval, formatted in unix time milliseconds. Example: 1473781817000 (format: int64)
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 10)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<items: table<attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalTextResult: string, fromNumber: string, id: int, inbound: bool, labels: list, media: list, message: string, modified: int, records: list, state: string, toNumber: string>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "multi") (serialize-qp "campaignId" $campaignId "scalar") (serialize-qp "batchId" $batchId "scalar") (serialize-qp "fromNumber" $fromNumber "scalar") (serialize-qp "toNumber" $toNumber "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "states" $states "scalar") (serialize-qp "results" $results "scalar") (serialize-qp "inbound" $inbound "scalar") (serialize-qp "intervalBegin" $intervalBegin "scalar") (serialize-qp "intervalEnd" $intervalEnd "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "id" $id "multi") (serialize-qp "campaignId" $campaignId "scalar") (serialize-qp "batchId" $batchId "scalar") (serialize-qp "fromNumber" $fromNumber "scalar") (serialize-qp "toNumber" $toNumber "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "states" $states "scalar") (serialize-qp "results" $results "scalar") (serialize-qp "inbound" $inbound "scalar") (serialize-qp "intervalBegin" $intervalBegin "scalar") (serialize-qp "intervalEnd" $intervalEnd "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/texts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2782,7 +2782,7 @@ export def "texts sendTexts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --campaignId: int # Specifies a campaignId to send texts through a previously created campaign (format: int64)
   --defaultMessage: string # Text message can be overridden by TextRecipient.message field. If multiple recipients have the same text message to a different recipients it is better to specify a single default message and do not duplicate it in each recipient.
   --strictValidation: oneof<nothing, bool> # Turns on strict validation for recipients
@@ -2791,7 +2791,7 @@ export def "texts sendTexts" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "campaignId" $campaignId "scalar") (serialize-qp "defaultMessage" $defaultMessage "scalar") (serialize-qp "strictValidation" $strictValidation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "campaignId" $campaignId "scalar") (serialize-qp "defaultMessage" $defaultMessage "scalar") (serialize-qp "strictValidation" $strictValidation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/texts" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -2812,14 +2812,14 @@ export def "texts-auto-replys findTextAutoReplys" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
   --number: string # Phone number in E.164 format (11-digit) which contains a TextAutoReply. Example: 12132000384. If number is empty then operator returns all autoreplies configured for the user's account
 ]: nothing -> record<items: table<id: int, keyword: string, match: string, message: string, number: string>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/texts/auto-replys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2893,11 +2893,11 @@ export def "texts-auto-replys get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<id: int, keyword: string, match: string, message: string, number: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/texts/auto-replys/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2925,11 +2925,11 @@ export def "texts-broadcasts findTextBroadcasts" [
   --intervalEnd: int # End of the find time interval, formatted in unix time milliseconds. Example: 1473781817000 for Sat, 05 Jan 1985 14:03:37 GMT (format: int64)
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 10)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<items: table<bigMessageStrategy: string, fromNumber: string, id: int, labels: list, lastModified: int, localTimeRestriction: record, maxActive: int, media: list, message: string, name: string, recipients: list, resumeNextDay: bool, schedules: list, status: string>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "running" $running "scalar") (serialize-qp "scheduled" $scheduled "scalar") (serialize-qp "intervalBegin" $intervalBegin "scalar") (serialize-qp "intervalEnd" $intervalEnd "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "running" $running "scalar") (serialize-qp "scheduled" $scheduled "scalar") (serialize-qp "intervalBegin" $intervalBegin "scalar") (serialize-qp "intervalEnd" $intervalEnd "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/texts/broadcasts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2994,11 +2994,11 @@ export def "texts-broadcasts get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<bigMessageStrategy: string, fromNumber: string, id: int, labels: list<string>, lastModified: int, localTimeRestriction: record<beginHour: int, beginMinute: int, enabled: bool, endHour: int, endMinute: int>, maxActive: int, media: table<accountId: int, created: int, id: int, lengthInBytes: int, mediaType: string, name: string, publicUrl: string>, message: string, name: string, recipients: table<attributes: record, contactId: int, fromNumber: string, media: list, message: string, phoneNumber: string>, resumeNextDay: bool, schedules: table<campaignId: int, daysOfWeek: list, id: int, startDate: record, startTimeOfDay: record, stopDate: record, stopTimeOfDay: record, timeZone: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/texts/broadcasts/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3086,13 +3086,13 @@ export def "texts-broadcasts-batches get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
 ]: nothing -> record<items: table<broadcastId: int, created: int, enabled: bool, id: int, name: string, remaining: int, size: int, status: string>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/texts/broadcasts/($id)/batches" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3146,14 +3146,14 @@ export def "texts-broadcasts-recipients addTextBroadcastRecipients" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --strictValidation: oneof<nothing, bool> # Turns on strict validation for recipients. System will reply with BAD_REQUEST(400) if strictValidation = true and one of numbers didn't pass validation
   --body: record
 ]: any -> record<items: table<attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalTextResult: string, fromNumber: string, id: int, inbound: bool, labels: list, media: list, message: string, modified: int, records: list, state: string, toNumber: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "strictValidation" $strictValidation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "strictValidation" $strictValidation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/texts/broadcasts/($id)/recipients" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -3198,13 +3198,13 @@ export def "texts-broadcasts-stats get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --begin: int # Start of a search find time interval, formatted in unix time milliseconds. Example: 1473781817000 for Sat, 05 Jan 1985 14:03:37 GMT (format: int64)
   --end: int # End of a search time interval, formatted in unix time milliseconds. Example: 1473781817000 for Sat, 05 Jan 1985 14:03:37 GMT (format: int64)
 ]: nothing -> record<billedAmount: float, doNotTextCount: int, errorCount: int, recievedCount: int, remainingOutboundCount: int, sentCount: int, tooBigCount: int, totalOutboundCount: int, unsentCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "begin" $begin "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "begin" $begin "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/texts/broadcasts/($id)/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3249,13 +3249,13 @@ export def "texts-broadcasts-texts get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --batchId: int # ~ (format: int64)
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
 ]: nothing -> record<items: table<attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalTextResult: string, fromNumber: string, id: int, inbound: bool, labels: list, media: list, message: string, modified: int, records: list, state: string, toNumber: string>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "batchId" $batchId "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "batchId" $batchId "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/texts/broadcasts/($id)/texts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3304,11 +3304,11 @@ export def "texts get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<attributes: record, batchId: int, campaignId: int, contact: record<deleted: bool, externalId: string, externalSystem: string, extraPhone1: string, extraPhone2: string, extraPhone3: string, firstName: string, homePhone: string, id: int, lastName: string, mobilePhone: string, properties: record, workPhone: string, zipcode: string>, created: int, finalTextResult: string, fromNumber: string, id: int, inbound: bool, labels: list<string>, media: table<accountId: int, created: int, id: int, lengthInBytes: int, mediaType: string, name: string, publicUrl: string>, message: string, modified: int, records: table<billedAmount: float, callerName: string, finishTime: int, id: int, labels: list, message: string, switchId: string, textResult: string, toNumber: string>, state: string, toNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/texts/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3328,7 +3328,7 @@ export def "webhooks findWebhooks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
   --name: string # A name of a webhook
@@ -3339,7 +3339,7 @@ export def "webhooks findWebhooks" [
 ]: nothing -> record<items: table<callback: string, createdAt: int, enabled: bool, events: list, expiresAt: int, fields: string, id: int, name: string, nonStrictSsl: bool, resource: string, secret: string, singleUse: bool, updatedAt: int>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "resource" $resource "scalar") (serialize-qp "event" $event "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "enabled" $enabled "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "resource" $resource "scalar") (serialize-qp "event" $event "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "enabled" $enabled "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhooks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3363,7 +3363,7 @@ export def "webhooks createWebhook" [
   --enabled: oneof<nothing, bool> # A parameter which allows the webhook to send requests to unknown ssl endpoints (ssl certificate verification is disabled)
   --events: list # Comma separated list of events on resource that will trigger callbacks (ex: STARTED, STOPPED, FINISHED, etc...). 
   --expiresAt: int # ~ (format: int64)
-  --body-fields: string # A limit callback response to a particular fields
+  --fields: string # A limit callback response to a particular fields
   --id: int # An id of a webhook (format: int64)
   --name: string # A name of a webhook
   --nonStrictSsl: oneof<nothing, bool> # A parameter which allows the webhook to send requests to unknown ssl endpoints (ssl certificate verification is disabled)
@@ -3375,7 +3375,7 @@ export def "webhooks createWebhook" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks")
-  let body = {callback: $callback, enabled: $enabled, events: $events, expiresAt: $expiresAt, fields: $body_fields, id: $id, name: $name, nonStrictSsl: $nonStrictSsl, resource: $resource, secret: $secret, singleUse: $singleUse} | compact
+  let body = {callback: $callback, enabled: $enabled, events: $events, expiresAt: $expiresAt, fields: $fields, id: $id, name: $name, nonStrictSsl: $nonStrictSsl, resource: $resource, secret: $secret, singleUse: $singleUse} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3395,11 +3395,11 @@ export def "webhooks-resources findWebhookResources" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<items: table<resource: string, supportedEvents: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhooks/resources" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3420,11 +3420,11 @@ export def "webhooks-resources get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<resource: string, supportedEvents: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/webhooks/resources/($resource)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3468,11 +3468,11 @@ export def "webhooks get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
+  --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<callback: string, createdAt: int, enabled: bool, events: list<string>, expiresAt: int, fields: string, id: int, name: string, nonStrictSsl: bool, resource: string, secret: string, singleUse: bool, updatedAt: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/webhooks/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3497,7 +3497,7 @@ export def "webhooks updateWebhook" [
   --enabled: oneof<nothing, bool> # A parameter which allows the webhook to send requests to unknown ssl endpoints (ssl certificate verification is disabled)
   --events: list # Comma separated list of events on resource that will trigger callbacks (ex: STARTED, STOPPED, FINISHED, etc...). 
   --expiresAt: int # ~ (format: int64)
-  --body-fields: string # A limit callback response to a particular fields
+  --fields: string # A limit callback response to a particular fields
   --body-id: int # An id of a webhook (format: int64)
   --name: string # A name of a webhook
   --nonStrictSsl: oneof<nothing, bool> # A parameter which allows the webhook to send requests to unknown ssl endpoints (ssl certificate verification is disabled)
@@ -3509,7 +3509,7 @@ export def "webhooks updateWebhook" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webhooks/($id)")
-  let body = {callback: $callback, enabled: $enabled, events: $events, expiresAt: $expiresAt, fields: $body_fields, id: $body_id, name: $name, nonStrictSsl: $nonStrictSsl, resource: $resource, secret: $secret, singleUse: $singleUse} | compact
+  let body = {callback: $callback, enabled: $enabled, events: $events, expiresAt: $expiresAt, fields: $fields, id: $body_id, name: $name, nonStrictSsl: $nonStrictSsl, resource: $resource, secret: $secret, singleUse: $singleUse} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

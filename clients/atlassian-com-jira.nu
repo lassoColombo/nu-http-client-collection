@@ -1649,13 +1649,13 @@ export def "rest-3-field-search get" [
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --type: list # The type of fields to search.
   --id: list # The IDs of the custom fields to return or, where `query` is specified, filter.
-  --qp-query: string # String used to perform a case-insensitive partial match with field names or descriptions.
+  --query: string # String used to perform a case-insensitive partial match with field names or descriptions.
   --orderBy: string@orderBy-completer-1 # [Order](#ordering) the results by a field:   *  `contextsCount` sorts by the number of contexts related to a field  *  `lastUsed` sorts by the date when the value of the field last changed  *  `name` sorts by the field name  *  `screensCount` sorts by the number of screens related to a field
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts a comma-separated list. Expand options include:   *  `key` returns the key for each field  *  `lastUsed` returns the date when the value of the field last changed  *  `screensCount` returns the number of screens related to a field  *  `contextsCount` returns the number of contexts related to a field  *  `isLocked` returns information about whether the field is [locked](https://confluence.atlassian.com/x/ZSN7Og)  *  `searcherKey` returns the searcher key for each custom field
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<contextsCount: int, description: string, id: string, isLocked: bool, isUnscreenable: bool, key: string, lastUsed: record, name: string, projectsCount: int, schema: record, screensCount: int, searcherKey: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "type" $type "multi") (serialize-qp "id" $id "multi") (serialize-qp "query" $qp_query "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "type" $type "multi") (serialize-qp "id" $id "multi") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/field/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1678,13 +1678,13 @@ export def "rest-3-field-search-trashed get" [
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --id: list
-  --qp-query: string # String used to perform a case-insensitive partial match with field names or descriptions.
+  --query: string # String used to perform a case-insensitive partial match with field names or descriptions.
   --expand: string@expand-completer
   --orderBy: string # [Order](#ordering) the results by a field:   *  `name` sorts by the field name  *  `trashDate` sorts by the date the field was moved to the trash  *  `plannedDeletionDate` sorts by the planned deletion date
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<contextsCount: int, description: string, id: string, isLocked: bool, isUnscreenable: bool, key: string, lastUsed: record, name: string, projectsCount: int, schema: record, screensCount: int, searcherKey: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "id" $id "multi") (serialize-qp "query" $qp_query "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "orderBy" $orderBy "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "id" $id "multi") (serialize-qp "query" $query "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "orderBy" $orderBy "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/field/search/trashed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2585,11 +2585,11 @@ export def "rest-3-fieldconfiguration get" [
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --id: list # The list of field configuration IDs. To include multiple IDs, provide an ampersand-separated list. For example, `id=10000&id=10001`.
   --isDefault: oneof<nothing, bool> # If *true* returns default field configurations only. (default: false)
-  --qp-query: string # The query string used to match against field configuration names and descriptions. (default: )
+  --query: string # The query string used to match against field configuration names and descriptions. (default: )
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<description: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "id" $id "multi") (serialize-qp "isDefault" $isDefault "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "id" $id "multi") (serialize-qp "isDefault" $isDefault "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/fieldconfiguration" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3708,7 +3708,7 @@ export def "rest-3-groups-picker findGroups" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: string # This parameter is deprecated, setting it does not affect the results. To find groups containing a particular user, use [Get user groups](#api-rest-api-3-user-groups-get).
-  --qp-query: string # The string to find in group names. (e.g. query)
+  --query: string # The string to find in group names. (e.g. query)
   --exclude: list # As a group's name can change, use of `excludeGroupIds` is recommended to identify a group.   A group to exclude from the result. To exclude multiple groups, provide an ampersand-separated list. For example, `exclude=group1&exclude=group2`. This parameter cannot be used with the `excludeGroupIds` parameter.
   --excludeId: list # A group ID to exclude from the result. To exclude multiple groups, provide an ampersand-separated list. For example, `excludeId=group1-id&excludeId=group2-id`. This parameter cannot be used with the `excludeGroups` parameter.
   --maxResults: int # The maximum number of groups to return. The maximum number of groups that can be returned is limited by the system property `jira.ajax.autocomplete.limit`. (format: int32)
@@ -3717,7 +3717,7 @@ export def "rest-3-groups-picker findGroups" [
 ]: nothing -> record<groups: table<groupId: string, html: string, labels: list, name: string>, header: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountId" $accountId "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "exclude" $exclude "multi") (serialize-qp "excludeId" $excludeId "multi") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "caseInsensitive" $caseInsensitive "scalar") (serialize-qp "userName" $userName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "accountId" $accountId "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "exclude" $exclude "multi") (serialize-qp "excludeId" $excludeId "multi") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "caseInsensitive" $caseInsensitive "scalar") (serialize-qp "userName" $userName "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/groups/picker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3737,7 +3737,7 @@ export def "rest-3-groupuserpicker findUsersAndGroups" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The search string.
+  --query: string # The search string.
   --maxResults: int # The maximum number of items to return in each list. (format: int32, default: 50)
   --showAvatar: oneof<nothing, bool> # Whether the user avatar should be returned. If an invalid value is provided, the default value is used. (default: false)
   --fieldId: string # The custom field ID of the field this request is for.
@@ -3749,7 +3749,7 @@ export def "rest-3-groupuserpicker findUsersAndGroups" [
 ]: nothing -> record<groups: record<groups: list<record>, header: string, total: int>, users: record<header: string, total: int, users: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "showAvatar" $showAvatar "scalar") (serialize-qp "fieldId" $fieldId "scalar") (serialize-qp "projectId" $projectId "multi") (serialize-qp "issueTypeId" $issueTypeId "multi") (serialize-qp "avatarSize" $avatarSize "scalar") (serialize-qp "caseInsensitive" $caseInsensitive "scalar") (serialize-qp "excludeConnectAddons" $excludeConnectAddons "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "showAvatar" $showAvatar "scalar") (serialize-qp "fieldId" $fieldId "scalar") (serialize-qp "projectId" $projectId "multi") (serialize-qp "issueTypeId" $issueTypeId "multi") (serialize-qp "avatarSize" $avatarSize "scalar") (serialize-qp "caseInsensitive" $caseInsensitive "scalar") (serialize-qp "excludeConnectAddons" $excludeConnectAddons "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/groupuserpicker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3793,7 +3793,7 @@ export def "rest-3-issue createIssue" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --updateHistory: oneof<nothing, bool> # Whether the project in which the issue is created is added to the user's **Recently viewed** project list, as shown under **Projects** in Jira. When provided, the issue type and request type are added to the user's history for a project. These values are then used to provide defaults on the issue create screen. (default: false)
-  --body-fields: record # List of issue screen fields to update, specifying the sub-field to update and its value for each field. This field provides a straightforward option when setting a sub-field. When multiple sub-fields or other operations are required, use `update`. Fields included in here cannot be included in `update`.
+  --fields: record # List of issue screen fields to update, specifying the sub-field to update and its value for each field. This field provides a straightforward option when setting a sub-field. When multiple sub-fields or other operations are required, use `update`. Fields included in here cannot be included in `update`.
   --historyMetadata: any # Additional issue history details.
   --properties: list # Details of issue properties to be add or update. — item shape: {key?: string, value?: any}
   --transition: any # Details of a transition. Required when performing a transition, optional when creating or editing an issue.
@@ -3804,7 +3804,7 @@ export def "rest-3-issue createIssue" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "updateHistory" $updateHistory "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/issue" $qp)
-  let body = {fields: $body_fields, historyMetadata: $historyMetadata, properties: $properties, transition: $transition, update: $update} | compact
+  let body = {fields: $fields, historyMetadata: $historyMetadata, properties: $properties, transition: $transition, update: $update} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3879,7 +3879,7 @@ export def "rest-3-issue-picker get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A string to match against text fields in the issue such as title, description, or comments. (e.g. query)
+  --query: string # A string to match against text fields in the issue such as title, description, or comments. (e.g. query)
   --currentJQL: string # A JQL query defining a list of issues to search for the query term. Note that `username` and `userkey` cannot be used as search terms for this parameter, due to privacy reasons. Use `accountId` instead.
   --currentIssueKey: string # The key of an issue to exclude from search results. For example, the issue the user is viewing when they perform this query.
   --currentProjectId: string # The ID of a project that suggested issues must belong to.
@@ -3888,7 +3888,7 @@ export def "rest-3-issue-picker get" [
 ]: nothing -> record<sections: table<id: string, issues: list, label: string, msg: string, sub: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "currentJQL" $currentJQL "scalar") (serialize-qp "currentIssueKey" $currentIssueKey "scalar") (serialize-qp "currentProjectId" $currentProjectId "scalar") (serialize-qp "showSubTasks" $showSubTasks "scalar") (serialize-qp "showSubTaskParent" $showSubTaskParent "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "currentJQL" $currentJQL "scalar") (serialize-qp "currentIssueKey" $currentIssueKey "scalar") (serialize-qp "currentProjectId" $currentProjectId "scalar") (serialize-qp "showSubTasks" $showSubTasks "scalar") (serialize-qp "showSubTaskParent" $showSubTaskParent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/issue/picker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4071,7 +4071,7 @@ export def "rest-3-issue get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A list of fields to return for the issue. This parameter accepts a comma-separated list. Use it to retrieve a subset of fields. Allowed values:   *  `*all` Returns all fields.  *  `*navigable` Returns navigable fields.  *  Any issue field, prefixed with a minus to exclude.  Examples:   *  `summary,comment` Returns only the summary and comments fields.  *  `-description` Returns all (default) fields except description.  *  `*navigable,-comment` Returns all navigable fields except comment.  This parameter may be specified multiple times. For example, `fields=field1,field2& fields=field3`.  Note: All fields are returned by default. This differs from [Search for issues using JQL (GET)](#api-rest-api-3-search-get) and [Search for issues using JQL (POST)](#api-rest-api-3-search-post) where the default is all navigable fields.
+  --fields: list # A list of fields to return for the issue. This parameter accepts a comma-separated list. Use it to retrieve a subset of fields. Allowed values:   *  `*all` Returns all fields.  *  `*navigable` Returns navigable fields.  *  Any issue field, prefixed with a minus to exclude.  Examples:   *  `summary,comment` Returns only the summary and comments fields.  *  `-description` Returns all (default) fields except description.  *  `*navigable,-comment` Returns all navigable fields except comment.  This parameter may be specified multiple times. For example, `fields=field1,field2& fields=field3`.  Note: All fields are returned by default. This differs from [Search for issues using JQL (GET)](#api-rest-api-3-search-get) and [Search for issues using JQL (POST)](#api-rest-api-3-search-post) where the default is all navigable fields.
   --fieldsByKeys: oneof<nothing, bool> # Whether fields in `fields` are referenced by keys rather than IDs. This parameter is useful where fields have been added by a connect app and a field's key may differ from its ID. (default: false)
   --expand: string # Use [expand](#expansion) to include additional information about the issues in the response. This parameter accepts a comma-separated list. Expand options include:   *  `renderedFields` Returns field values rendered in HTML format.  *  `names` Returns the display name of each field.  *  `schema` Returns the schema describing a field type.  *  `transitions` Returns all possible transitions for the issue.  *  `editmeta` Returns information about how each field can be edited.  *  `changelog` Returns a list of recent updates to an issue, sorted by date, starting from the most recent.  *  `versionedRepresentations` Returns a JSON array for each version of a field's value, with the highest number representing the most recent version. Note: When included in the request, the `fields` parameter is ignored.
   --properties: list # A list of issue properties to return for the issue. This parameter accepts a comma-separated list. Allowed values:   *  `*all` Returns all issue properties.  *  Any issue property key, prefixed with a minus to exclude.  Examples:   *  `*all` Returns all properties.  *  `*all,-prop1` Returns all properties except `prop1`.  *  `prop1,prop2` Returns `prop1` and `prop2` properties.  This parameter may be specified multiple times. For example, `properties=prop1,prop2& properties=prop3`.
@@ -4079,7 +4079,7 @@ export def "rest-3-issue get" [
 ]: nothing -> record<changelog: record<histories: list<record>, maxResults: int, startAt: int, total: int>, editmeta: record<fields: record>, expand: string, fields: record, fieldsToInclude: record<actuallyIncluded: list<string>, excluded: list<string>, included: list<string>>, id: string, key: string, names: record, operations: record<linkGroups: list<record>>, properties: record, renderedFields: record, schema: record, self: string, transitions: table<expand: string, fields: record, hasScreen: bool, id: string, isAvailable: bool, isConditional: bool, isGlobal: bool, isInitial: bool, looped: bool, name: string, to: record>, versionedRepresentations: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "multi") (serialize-qp "fieldsByKeys" $fieldsByKeys "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "properties" $properties "multi") (serialize-qp "updateHistory" $updateHistory "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "multi") (serialize-qp "fieldsByKeys" $fieldsByKeys "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "properties" $properties "multi") (serialize-qp "updateHistory" $updateHistory "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4104,7 +4104,7 @@ export def "rest-3-issue editIssue" [
   --notifyUsers: oneof<nothing, bool> # Whether a notification email about the issue update is sent to all watchers. To disable the notification, administer Jira or administer project permissions are required. If the user doesn't have the necessary permission the request is ignored. (default: true)
   --overrideScreenSecurity: oneof<nothing, bool> # Whether screen security is overridden to enable hidden fields to be edited. Available to Connect app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
   --overrideEditableFlag: oneof<nothing, bool> # Whether screen security is overridden to enable uneditable fields to be edited. Available to Connect app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
-  --body-fields: record # List of issue screen fields to update, specifying the sub-field to update and its value for each field. This field provides a straightforward option when setting a sub-field. When multiple sub-fields or other operations are required, use `update`. Fields included in here cannot be included in `update`.
+  --fields: record # List of issue screen fields to update, specifying the sub-field to update and its value for each field. This field provides a straightforward option when setting a sub-field. When multiple sub-fields or other operations are required, use `update`. Fields included in here cannot be included in `update`.
   --historyMetadata: any # Additional issue history details.
   --properties: list # Details of issue properties to be add or update. — item shape: {key?: string, value?: any}
   --transition: any # Details of a transition. Required when performing a transition, optional when creating or editing an issue.
@@ -4115,7 +4115,7 @@ export def "rest-3-issue editIssue" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "notifyUsers" $notifyUsers "scalar") (serialize-qp "overrideScreenSecurity" $overrideScreenSecurity "scalar") (serialize-qp "overrideEditableFlag" $overrideEditableFlag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)" $qp)
-  let body = {fields: $body_fields, historyMetadata: $historyMetadata, properties: $properties, transition: $transition, update: $update} | compact
+  let body = {fields: $fields, historyMetadata: $historyMetadata, properties: $properties, transition: $transition, update: $update} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4733,7 +4733,7 @@ export def "rest-3-issue-transitions doTransition" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-fields: record # List of issue screen fields to update, specifying the sub-field to update and its value for each field. This field provides a straightforward option when setting a sub-field. When multiple sub-fields or other operations are required, use `update`. Fields included in here cannot be included in `update`.
+  --fields: record # List of issue screen fields to update, specifying the sub-field to update and its value for each field. This field provides a straightforward option when setting a sub-field. When multiple sub-fields or other operations are required, use `update`. Fields included in here cannot be included in `update`.
   --historyMetadata: any # Additional issue history details.
   --properties: list # Details of issue properties to be add or update. — item shape: {key?: string, value?: any}
   --transition: any # Details of a transition. Required when performing a transition, optional when creating or editing an issue.
@@ -4743,7 +4743,7 @@ export def "rest-3-issue-transitions doTransition" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/transitions")
-  let body = {fields: $body_fields, historyMetadata: $historyMetadata, properties: $properties, transition: $transition, update: $update} | compact
+  let body = {fields: $fields, historyMetadata: $historyMetadata, properties: $properties, transition: $transition, update: $update} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6299,11 +6299,11 @@ export def "rest-3-issuetypescreenscheme-project get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
-  --qp-query: string # default: 
+  --query: string # default: 
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/rest/api/3/issuetypescreenscheme/($issueTypeScreenSchemeId)/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7681,7 +7681,7 @@ export def "rest-3-project-search searchProjects" [
   --orderBy: string@orderBy-completer-5 # [Order](#ordering) the results by a field.   *  `category` Sorts by project category. A complete list of category IDs is found using [Get all project categories](#api-rest-api-3-projectCategory-get).  *  `issueCount` Sorts by the total number of issues in each project.  *  `key` Sorts by project key.  *  `lastIssueUpdatedTime` Sorts by the last issue update time.  *  `name` Sorts by project name.  *  `owner` Sorts by project lead.  *  `archivedDate` EXPERIMENTAL. Sorts by project archived date.  *  `deletedDate` EXPERIMENTAL. Sorts by project deleted date. (default: key)
   --id: list # The project IDs to filter the results by. To include multiple IDs, provide an ampersand-separated list. For example, `id=10000&id=10001`. Up to 50 project IDs can be provided.
   --keys: list # The project keys to filter the results by. To include multiple keys, provide an ampersand-separated list. For example, `keys=PA&keys=PB`. Up to 50 project keys can be provided.
-  --qp-query: string # Filter the results using a literal string. Projects with a matching `key` or `name` are returned (case insensitive).
+  --query: string # Filter the results using a literal string. Projects with a matching `key` or `name` are returned (case insensitive).
   --typeKey: string # Orders results by the [project type](https://confluence.atlassian.com/x/GwiiLQ#Jiraapplicationsoverview-Productfeaturesandprojecttypes). This parameter accepts a comma-separated list. Valid values are `business`, `service_desk`, and `software`.
   --categoryId: int # The ID of the project's category. A complete list of category IDs is found using the [Get all project categories](#api-rest-api-3-projectCategory-get) operation. (format: int64)
   --action: string@action-completer # Filter results by projects for which the user can:   *  `view` the project, meaning that they have one of the following permissions:           *  *Browse projects* [project permission](https://confluence.atlassian.com/x/yodKLg) for the project.      *  *Administer projects* [project permission](https://confluence.atlassian.com/x/yodKLg) for the project.      *  *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg).  *  `browse` the project, meaning that they have the *Browse projects* [project permission](https://confluence.atlassian.com/x/yodKLg) for the project.  *  `edit` the project, meaning that they have one of the following permissions:           *  *Administer projects* [project permission](https://confluence.atlassian.com/x/yodKLg) for the project.      *  *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: view)
@@ -7692,7 +7692,7 @@ export def "rest-3-project-search searchProjects" [
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<archived: bool, archivedBy: record, archivedDate: string, assigneeType: string, avatarUrls: record, components: list, deleted: bool, deletedBy: record, deletedDate: string, description: string, email: string, expand: string, favourite: bool, id: string, insight: record, isPrivate: bool, issueTypeHierarchy: record, issueTypes: list, key: string, landingPageInfo: record, lead: record, name: string, permissions: record, projectCategory: record, projectTypeKey: string, properties: record, retentionTillDate: string, roles: record, self: string, simplified: bool, style: string, url: string, uuid: string, versions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "id" $id "multi") (serialize-qp "keys" $keys "multi") (serialize-qp "query" $qp_query "scalar") (serialize-qp "typeKey" $typeKey "scalar") (serialize-qp "categoryId" $categoryId "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "status" $status "multi") (serialize-qp "properties" $properties "multi") (serialize-qp "propertyQuery" $propertyQuery "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "id" $id "multi") (serialize-qp "keys" $keys "multi") (serialize-qp "query" $query "scalar") (serialize-qp "typeKey" $typeKey "scalar") (serialize-qp "categoryId" $categoryId "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "status" $status "multi") (serialize-qp "properties" $properties "multi") (serialize-qp "propertyQuery" $propertyQuery "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/project/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8024,11 +8024,11 @@ export def "rest-3-project-component get" [
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --orderBy: string@orderBy-completer-6 # [Order](#ordering) the results by a field:   *  `description` Sorts by the component description.  *  `issueCount` Sorts by the count of issues associated with the component.  *  `lead` Sorts by the user key of the component's project lead.  *  `name` Sorts by component name.
-  --qp-query: string # Filter the results using a literal string. Components with a matching `name` or `description` are returned (case insensitive).
+  --query: string # Filter the results using a literal string. Components with a matching `name` or `description` are returned (case insensitive).
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<assignee: record, assigneeType: string, description: string, id: string, isAssigneeTypeValid: bool, issueCount: int, lead: record, name: string, project: string, projectId: int, realAssignee: record, realAssigneeType: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/component" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8480,13 +8480,13 @@ export def "rest-3-project-version get" [
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --orderBy: string@orderBy-completer-7 # [Order](#ordering) the results by a field:   *  `description` Sorts by version description.  *  `name` Sorts by version name.  *  `releaseDate` Sorts by release date, starting with the oldest date. Versions with no release date are listed last.  *  `sequence` Sorts by the order of appearance in the user interface.  *  `startDate` Sorts by start date, starting with the oldest date. Versions with no start date are listed last.
-  --qp-query: string # Filter the results using a literal string. Versions with matching `name` or `description` are returned (case insensitive).
+  --query: string # Filter the results using a literal string. Versions with matching `name` or `description` are returned (case insensitive).
   --status: string # A list of status values used to filter the results by version status. This parameter accepts a comma-separated list. The status values are `released`, `unreleased`, and `archived`.
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts a comma-separated list. Expand options include:   *  `issuesstatus` Returns the number of issues in each status category for each version.  *  `operations` Returns actions that can be performed on the specified version.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<archived: bool, description: string, expand: string, id: string, issuesStatusForFixVersion: record, moveUnfixedIssuesTo: string, name: string, operations: list, overdue: bool, project: string, projectId: int, releaseDate: string, released: bool, self: string, startDate: string, userReleaseDate: string, userStartDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/version" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9873,14 +9873,14 @@ export def "rest-3-search searchForIssuesUsingJql" [
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int32, default: 0)
   --maxResults: int # The maximum number of items to return per page. To manage page size, Jira may return fewer items per page where a large number of fields are requested. The greatest number of items returned per page is achieved when requesting `id` or `key` only. (format: int32, default: 50)
   --validateQuery: string@validateQuery-completer # Determines how to validate the JQL query and treat the validation results. Supported values are:   *  `strict` Returns a 400 response code if any errors are found, along with a list of all errors (and warnings).  *  `warn` Returns all errors as warnings.  *  `none` No validation is performed.  *  `true` *Deprecated* A legacy synonym for `strict`.  *  `false` *Deprecated* A legacy synonym for `warn`.  Note: If the JQL is not correctly formed a 400 response code is returned, regardless of the `validateQuery` value. (default: strict)
-  --qp-fields: list # A list of fields to return for each issue, use it to retrieve a subset of fields. This parameter accepts a comma-separated list. Expand options include:   *  `*all` Returns all fields.  *  `*navigable` Returns navigable fields.  *  Any issue field, prefixed with a minus to exclude.  Examples:   *  `summary,comment` Returns only the summary and comments fields.  *  `-description` Returns all navigable (default) fields except description.  *  `*all,-comment` Returns all fields except comments.  This parameter may be specified multiple times. For example, `fields=field1,field2&fields=field3`.  Note: All navigable fields are returned by default. This differs from [GET issue](#api-rest-api-3-issue-issueIdOrKey-get) where the default is all fields.
+  --fields: list # A list of fields to return for each issue, use it to retrieve a subset of fields. This parameter accepts a comma-separated list. Expand options include:   *  `*all` Returns all fields.  *  `*navigable` Returns navigable fields.  *  Any issue field, prefixed with a minus to exclude.  Examples:   *  `summary,comment` Returns only the summary and comments fields.  *  `-description` Returns all navigable (default) fields except description.  *  `*all,-comment` Returns all fields except comments.  This parameter may be specified multiple times. For example, `fields=field1,field2&fields=field3`.  Note: All navigable fields are returned by default. This differs from [GET issue](#api-rest-api-3-issue-issueIdOrKey-get) where the default is all fields.
   --expand: string # Use [expand](#expansion) to include additional information about issues in the response. This parameter accepts a comma-separated list. Expand options include:   *  `renderedFields` Returns field values rendered in HTML format.  *  `names` Returns the display name of each field.  *  `schema` Returns the schema describing a field type.  *  `transitions` Returns all possible transitions for the issue.  *  `operations` Returns all possible operations for the issue.  *  `editmeta` Returns information about how each field can be edited.  *  `changelog` Returns a list of recent updates to an issue, sorted by date, starting from the most recent.  *  `versionedRepresentations` Instead of `fields`, returns `versionedRepresentations` a JSON array containing each version of a field's value, with the highest numbered item representing the most recent version.
   --properties: list # A list of issue property keys for issue properties to include in the results. This parameter accepts a comma-separated list. Multiple properties can also be provided using an ampersand separated list. For example, `properties=prop1,prop2&properties=prop3`. A maximum of 5 issue property keys can be specified.
   --fieldsByKeys: oneof<nothing, bool> # Reference fields by their key (rather than ID). (default: false)
 ]: nothing -> record<expand: string, issues: table<changelog: record, editmeta: record, expand: string, fields: record, fieldsToInclude: record, id: string, key: string, names: record, operations: record, properties: record, renderedFields: record, schema: record, self: string, transitions: list, versionedRepresentations: record>, maxResults: int, names: record, schema: record, startAt: int, total: int, warningMessages: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jql" $jql "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "validateQuery" $validateQuery "scalar") (serialize-qp "fields" $qp_fields "multi") (serialize-qp "expand" $expand "scalar") (serialize-qp "properties" $properties "multi") (serialize-qp "fieldsByKeys" $fieldsByKeys "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jql" $jql "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "validateQuery" $validateQuery "scalar") (serialize-qp "fields" $fields "multi") (serialize-qp "expand" $expand "scalar") (serialize-qp "properties" $properties "multi") (serialize-qp "fieldsByKeys" $fieldsByKeys "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9901,7 +9901,7 @@ export def "rest-3-search searchForIssuesUsingJqlPost" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Use [expand](em>#expansion) to include additional information about issues in the response. Note that, unlike the majority of instances where `expand` is specified, `expand` is defined as a list of values. The expand options are:   *  `renderedFields` Returns field values rendered in HTML format.  *  `names` Returns the display name of each field.  *  `schema` Returns the schema describing a field type.  *  `transitions` Returns all possible transitions for the issue.  *  `operations` Returns all possible operations for the issue.  *  `editmeta` Returns information about how each field can be edited.  *  `changelog` Returns a list of recent updates to an issue, sorted by date, starting from the most recent.  *  `versionedRepresentations` Instead of `fields`, returns `versionedRepresentations` a JSON array containing each version of a field's value, with the highest numbered item representing the most recent version.
-  --body-fields: list # A list of fields to return for each issue, use it to retrieve a subset of fields. This parameter accepts a comma-separated list. Expand options include:   *  `*all` Returns all fields.  *  `*navigable` Returns navigable fields.  *  Any issue field, prefixed with a minus to exclude.  The default is `*navigable`.  Examples:   *  `summary,comment` Returns the summary and comments fields only.  *  `-description` Returns all navigable (default) fields except description.  *  `*all,-comment` Returns all fields except comments.  Multiple `fields` parameters can be included in a request.  Note: All navigable fields are returned by default. This differs from [GET issue](#api-rest-api-3-issue-issueIdOrKey-get) where the default is all fields.
+  --fields: list # A list of fields to return for each issue, use it to retrieve a subset of fields. This parameter accepts a comma-separated list. Expand options include:   *  `*all` Returns all fields.  *  `*navigable` Returns navigable fields.  *  Any issue field, prefixed with a minus to exclude.  The default is `*navigable`.  Examples:   *  `summary,comment` Returns the summary and comments fields only.  *  `-description` Returns all navigable (default) fields except description.  *  `*all,-comment` Returns all fields except comments.  Multiple `fields` parameters can be included in a request.  Note: All navigable fields are returned by default. This differs from [GET issue](#api-rest-api-3-issue-issueIdOrKey-get) where the default is all fields.
   --fieldsByKeys: oneof<nothing, bool> # Reference fields by their key (rather than ID). The default is `false`.
   --jql: string # A [JQL](https://confluence.atlassian.com/x/egORLQ) expression.
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
@@ -9913,7 +9913,7 @@ export def "rest-3-search searchForIssuesUsingJqlPost" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/search")
-  let body = {expand: $expand, fields: $body_fields, fieldsByKeys: $fieldsByKeys, jql: $jql, maxResults: $maxResults, properties: $properties, startAt: $startAt, validateQuery: $validateQuery} | compact
+  let body = {expand: $expand, fields: $fields, fieldsByKeys: $fieldsByKeys, jql: $jql, maxResults: $maxResults, properties: $properties, startAt: $startAt, validateQuery: $validateQuery} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10652,7 +10652,7 @@ export def "rest-3-user-assignable-multi-project-search findBulkAssignableUsers"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A query string that is matched against user attributes, such as `displayName` and `emailAddress`, to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*. Required, unless `accountId` is specified. (e.g. query)
+  --query: string # A query string that is matched against user attributes, such as `displayName` and `emailAddress`, to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*. Required, unless `accountId` is specified. (e.g. query)
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --accountId: string # A query string that is matched exactly against user `accountId`. Required, unless `query` is specified.
   --projectKeys: string # A list of project keys (case sensitive). This parameter accepts a comma-separated list.
@@ -10661,7 +10661,7 @@ export def "rest-3-user-assignable-multi-project-search findBulkAssignableUsers"
 ]: nothing -> table<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "accountId" $accountId "scalar") (serialize-qp "projectKeys" $projectKeys "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "accountId" $accountId "scalar") (serialize-qp "projectKeys" $projectKeys "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/assignable/multiProjectSearch" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10681,7 +10681,7 @@ export def "rest-3-user-assignable-search findAssignableUsers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A query string that is matched against user attributes, such as `displayName`, and `emailAddress`, to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*. Required, unless `username` or `accountId` is specified. (e.g. query)
+  --query: string # A query string that is matched against user attributes, such as `displayName`, and `emailAddress`, to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*. Required, unless `username` or `accountId` is specified. (e.g. query)
   --sessionId: string # The sessionId of this request. SessionId is the same until the assignee is set.
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --accountId: string # A query string that is matched exactly against user `accountId`. Required, unless `query` is specified.
@@ -10694,7 +10694,7 @@ export def "rest-3-user-assignable-search findAssignableUsers" [
 ]: nothing -> table<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "sessionId" $sessionId "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "accountId" $accountId "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "issueKey" $issueKey "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "actionDescriptorId" $actionDescriptorId "scalar") (serialize-qp "recommend" $recommend "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sessionId" $sessionId "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "accountId" $accountId "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "issueKey" $issueKey "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "actionDescriptorId" $actionDescriptorId "scalar") (serialize-qp "recommend" $recommend "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/assignable/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10920,7 +10920,7 @@ export def "rest-3-user-permission-search findUsersWithAllPermissions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A query string that is matched against user attributes, such as `displayName` and `emailAddress`, to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*. Required, unless `accountId` is specified. (e.g. query)
+  --query: string # A query string that is matched against user attributes, such as `displayName` and `emailAddress`, to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*. Required, unless `accountId` is specified. (e.g. query)
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --accountId: string # A query string that is matched exactly against user `accountId`. Required, unless `query` is specified.
   --permissions: string # A comma separated list of permissions. Permissions can be specified as any:   *  permission returned by [Get all permissions](#api-rest-api-3-permissions-get).  *  custom project permission added by Connect apps.  *  (deprecated) one of the following:           *  ASSIGNABLE\_USER      *  ASSIGN\_ISSUE      *  ATTACHMENT\_DELETE\_ALL      *  ATTACHMENT\_DELETE\_OWN      *  BROWSE      *  CLOSE\_ISSUE      *  COMMENT\_DELETE\_ALL      *  COMMENT\_DELETE\_OWN      *  COMMENT\_EDIT\_ALL      *  COMMENT\_EDIT\_OWN      *  COMMENT\_ISSUE      *  CREATE\_ATTACHMENT      *  CREATE\_ISSUE      *  DELETE\_ISSUE      *  EDIT\_ISSUE      *  LINK\_ISSUE      *  MANAGE\_WATCHER\_LIST      *  MODIFY\_REPORTER      *  MOVE\_ISSUE      *  PROJECT\_ADMIN      *  RESOLVE\_ISSUE      *  SCHEDULE\_ISSUE      *  SET\_ISSUE\_SECURITY      *  TRANSITION\_ISSUE      *  VIEW\_VERSION\_CONTROL      *  VIEW\_VOTERS\_AND\_WATCHERS      *  VIEW\_WORKFLOW\_READONLY      *  WORKLOG\_DELETE\_ALL      *  WORKLOG\_DELETE\_OWN      *  WORKLOG\_EDIT\_ALL      *  WORKLOG\_EDIT\_OWN      *  WORK\_ISSUE
@@ -10931,7 +10931,7 @@ export def "rest-3-user-permission-search findUsersWithAllPermissions" [
 ]: nothing -> table<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "accountId" $accountId "scalar") (serialize-qp "permissions" $permissions "scalar") (serialize-qp "issueKey" $issueKey "scalar") (serialize-qp "projectKey" $projectKey "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "accountId" $accountId "scalar") (serialize-qp "permissions" $permissions "scalar") (serialize-qp "issueKey" $issueKey "scalar") (serialize-qp "projectKey" $projectKey "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/permission/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10951,7 +10951,7 @@ export def "rest-3-user-picker findUsersForPicker" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A query string that is matched against user attributes, such as `displayName`, and `emailAddress`, to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*.
+  --query: string # A query string that is matched against user attributes, such as `displayName`, and `emailAddress`, to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*.
   --maxResults: int # The maximum number of items to return. The total number of matched users is returned in `total`. (format: int32, default: 50)
   --showAvatar: oneof<nothing, bool> # Include the URI to the user's avatar. (default: false)
   --exclude: list # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
@@ -10961,7 +10961,7 @@ export def "rest-3-user-picker findUsersForPicker" [
 ]: nothing -> record<header: string, total: int, users: table<accountId: string, avatarUrl: string, displayName: string, html: string, key: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "showAvatar" $showAvatar "scalar") (serialize-qp "exclude" $exclude "multi") (serialize-qp "excludeAccountIds" $excludeAccountIds "multi") (serialize-qp "avatarSize" $avatarSize "scalar") (serialize-qp "excludeConnectUsers" $excludeConnectUsers "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "showAvatar" $showAvatar "scalar") (serialize-qp "exclude" $exclude "multi") (serialize-qp "excludeAccountIds" $excludeAccountIds "multi") (serialize-qp "avatarSize" $avatarSize "scalar") (serialize-qp "excludeConnectUsers" $excludeConnectUsers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/picker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11091,7 +11091,7 @@ export def "rest-3-user-search findUsers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A query string that is matched against user attributes ( `displayName`, and `emailAddress`) to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*. Required, unless `accountId` or `property` is specified. (e.g. query)
+  --query: string # A query string that is matched against user attributes ( `displayName`, and `emailAddress`) to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*. Required, unless `accountId` or `property` is specified. (e.g. query)
   --username: string
   --accountId: string # A query string that is matched exactly against a user `accountId`. Required, unless `query` or `property` is specified.
   --startAt: int # The index of the first item to return in a page of filtered results (page offset). (format: int32, default: 0)
@@ -11100,7 +11100,7 @@ export def "rest-3-user-search findUsers" [
 ]: nothing -> table<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "accountId" $accountId "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "property" $property "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "accountId" $accountId "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "property" $property "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11120,13 +11120,13 @@ export def "rest-3-user-search-query findUsersByQuery" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The search query.
+  --query: string # The search query.
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 100)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<accountId: string, accountType: string, active: bool, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, key: string, locale: string, name: string, self: string, timeZone: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/search/query" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11146,13 +11146,13 @@ export def "rest-3-user-search-query-key findUserKeysByQuery" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The search query.
+  --query: string # The search query.
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 100)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<accountId: string, key: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/search/query/key" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11172,7 +11172,7 @@ export def "rest-3-user-viewissue-search findUsersWithBrowsePermission" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A query string that is matched against user attributes, such as `displayName` and `emailAddress`, to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*. Required, unless `accountId` is specified. (e.g. query)
+  --query: string # A query string that is matched against user attributes, such as `displayName` and `emailAddress`, to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*. Required, unless `accountId` is specified. (e.g. query)
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --accountId: string # A query string that is matched exactly against user `accountId`. Required, unless `query` is specified.
   --issueKey: string # The issue key for the issue. Required, unless `projectKey` is specified.
@@ -11182,7 +11182,7 @@ export def "rest-3-user-viewissue-search findUsersWithBrowsePermission" [
 ]: nothing -> table<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "accountId" $accountId "scalar") (serialize-qp "issueKey" $issueKey "scalar") (serialize-qp "projectKey" $projectKey "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "accountId" $accountId "scalar") (serialize-qp "issueKey" $issueKey "scalar") (serialize-qp "projectKey" $projectKey "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/viewissue/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

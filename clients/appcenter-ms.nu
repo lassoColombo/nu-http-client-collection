@@ -6688,11 +6688,11 @@ export def "v01-apps-test-series get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # A query string to filter test series
+  --query: string # A query string to filter test series
 ]: nothing -> table<mostRecentActivity: string, name: string, slug: string, testRuns: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

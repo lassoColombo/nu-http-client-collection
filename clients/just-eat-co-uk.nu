@@ -1066,7 +1066,7 @@ export def "menu-ingestion-complete post" [
   --correlationId: string # The ID of the execution which has been completed
   --fault: record # Details of the fault which caused the menu ingestion to fail. This is only present if menu ingestion did not complete successfully — shape: {errors?: list, id?: string}
   --restaurantId: string # The Just Eat restaurant ID
-  --body-result: string@result-completer # The result of the menu ingestion process (format: enum)
+  --result: string@result-completer # The result of the menu ingestion process (format: enum)
   --tenant: string@tenant-completer # Country code for the market the restaurant is in (format: enum)
   --timestamp: string # The ISO-8601 datetime at which the menu ingestion completed (format: date-time)
 ]: any -> any {
@@ -1074,7 +1074,7 @@ export def "menu-ingestion-complete post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/menu-ingestion-complete")
-  let body = {correlationId: $correlationId, fault: $fault, restaurantId: $restaurantId, result: $body_result, tenant: $tenant, timestamp: $timestamp} | compact
+  let body = {correlationId: $correlationId, fault: $fault, restaurantId: $restaurantId, result: $result, tenant: $tenant, timestamp: $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -113,12 +113,12 @@ export def "articles get" [
   --page: int # default: 1
   --per-page: int # default: 24
   --offset: int
-  --qp-query: string # What's being searched for
+  --query: string # What's being searched for
   --exclude-featured: int # Number of featured articles to exclude
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "exclude_featured" $exclude_featured "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "exclude_featured" $exclude_featured "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/articles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -633,7 +633,7 @@ export def "handpicked get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search query.
+  --query: string # Search query.
   --auction-price-max: float # Maximum current auction price (format: float)
   --category: string # Category slug from /api/categories
   --product-type: string # Product type slug from /api/categories
@@ -670,7 +670,7 @@ export def "handpicked get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "auction_price_max" $auction_price_max "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "product_type" $product_type "scalar") (serialize-qp "conditions" $conditions "csv") (serialize-qp "decade" $decade "scalar") (serialize-qp "finish" $finish "scalar") (serialize-qp "handmade" $handmade "scalar") (serialize-qp "item_city" $item_city "scalar") (serialize-qp "item_country" $item_country "scalar") (serialize-qp "item_region" $item_region "scalar") (serialize-qp "item_state" $item_state "scalar") (serialize-qp "make" $make "csv") (serialize-qp "model" $model "scalar") (serialize-qp "must_not" $must_not "scalar") (serialize-qp "price_max" $price_max "scalar") (serialize-qp "price_min" $price_min "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "year_max" $year_max "scalar") (serialize-qp "year_min" $year_min "scalar") (serialize-qp "accepts_gift_cards" $accepts_gift_cards "scalar") (serialize-qp "preferred_seller" $preferred_seller "scalar") (serialize-qp "shop" $shop "scalar") (serialize-qp "shop_id" $shop_id "scalar") (serialize-qp "listing_type" $listing_type "scalar") (serialize-qp "ships_to" $ships_to "scalar") (serialize-qp "exclude_auctions" $exclude_auctions "scalar") (serialize-qp "accepts_payment_plans" $accepts_payment_plans "scalar") (serialize-qp "watchers_count_min" $watchers_count_min "scalar") (serialize-qp "not_ids" $not_ids "csv") (serialize-qp "local_pickup" $local_pickup "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "auction_price_max" $auction_price_max "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "product_type" $product_type "scalar") (serialize-qp "conditions" $conditions "csv") (serialize-qp "decade" $decade "scalar") (serialize-qp "finish" $finish "scalar") (serialize-qp "handmade" $handmade "scalar") (serialize-qp "item_city" $item_city "scalar") (serialize-qp "item_country" $item_country "scalar") (serialize-qp "item_region" $item_region "scalar") (serialize-qp "item_state" $item_state "scalar") (serialize-qp "make" $make "csv") (serialize-qp "model" $model "scalar") (serialize-qp "must_not" $must_not "scalar") (serialize-qp "price_max" $price_max "scalar") (serialize-qp "price_min" $price_min "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "year_max" $year_max "scalar") (serialize-qp "year_min" $year_min "scalar") (serialize-qp "accepts_gift_cards" $accepts_gift_cards "scalar") (serialize-qp "preferred_seller" $preferred_seller "scalar") (serialize-qp "shop" $shop "scalar") (serialize-qp "shop_id" $shop_id "scalar") (serialize-qp "listing_type" $listing_type "scalar") (serialize-qp "ships_to" $ships_to "scalar") (serialize-qp "exclude_auctions" $exclude_auctions "scalar") (serialize-qp "accepts_payment_plans" $accepts_payment_plans "scalar") (serialize-qp "watchers_count_min" $watchers_count_min "scalar") (serialize-qp "not_ids" $not_ids "csv") (serialize-qp "local_pickup" $local_pickup "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/handpicked/($slug)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -710,7 +710,7 @@ export def "listings list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search query.
+  --query: string # Search query.
   --auction-price-max: float # Maximum current auction price (format: float)
   --category: string # Category slug from /api/categories
   --product-type: string # Product type slug from /api/categories
@@ -747,7 +747,7 @@ export def "listings list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "auction_price_max" $auction_price_max "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "product_type" $product_type "scalar") (serialize-qp "conditions" $conditions "csv") (serialize-qp "decade" $decade "scalar") (serialize-qp "finish" $finish "scalar") (serialize-qp "handmade" $handmade "scalar") (serialize-qp "item_city" $item_city "scalar") (serialize-qp "item_country" $item_country "scalar") (serialize-qp "item_region" $item_region "scalar") (serialize-qp "item_state" $item_state "scalar") (serialize-qp "make" $make "csv") (serialize-qp "model" $model "scalar") (serialize-qp "must_not" $must_not "scalar") (serialize-qp "price_max" $price_max "scalar") (serialize-qp "price_min" $price_min "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "year_max" $year_max "scalar") (serialize-qp "year_min" $year_min "scalar") (serialize-qp "accepts_gift_cards" $accepts_gift_cards "scalar") (serialize-qp "preferred_seller" $preferred_seller "scalar") (serialize-qp "shop" $shop "scalar") (serialize-qp "shop_id" $shop_id "scalar") (serialize-qp "listing_type" $listing_type "scalar") (serialize-qp "ships_to" $ships_to "scalar") (serialize-qp "exclude_auctions" $exclude_auctions "scalar") (serialize-qp "accepts_payment_plans" $accepts_payment_plans "scalar") (serialize-qp "watchers_count_min" $watchers_count_min "scalar") (serialize-qp "not_ids" $not_ids "csv") (serialize-qp "local_pickup" $local_pickup "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "auction_price_max" $auction_price_max "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "product_type" $product_type "scalar") (serialize-qp "conditions" $conditions "csv") (serialize-qp "decade" $decade "scalar") (serialize-qp "finish" $finish "scalar") (serialize-qp "handmade" $handmade "scalar") (serialize-qp "item_city" $item_city "scalar") (serialize-qp "item_country" $item_country "scalar") (serialize-qp "item_region" $item_region "scalar") (serialize-qp "item_state" $item_state "scalar") (serialize-qp "make" $make "csv") (serialize-qp "model" $model "scalar") (serialize-qp "must_not" $must_not "scalar") (serialize-qp "price_max" $price_max "scalar") (serialize-qp "price_min" $price_min "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "year_max" $year_max "scalar") (serialize-qp "year_min" $year_min "scalar") (serialize-qp "accepts_gift_cards" $accepts_gift_cards "scalar") (serialize-qp "preferred_seller" $preferred_seller "scalar") (serialize-qp "shop" $shop "scalar") (serialize-qp "shop_id" $shop_id "scalar") (serialize-qp "listing_type" $listing_type "scalar") (serialize-qp "ships_to" $ships_to "scalar") (serialize-qp "exclude_auctions" $exclude_auctions "scalar") (serialize-qp "accepts_payment_plans" $accepts_payment_plans "scalar") (serialize-qp "watchers_count_min" $watchers_count_min "scalar") (serialize-qp "not_ids" $not_ids "csv") (serialize-qp "local_pickup" $local_pickup "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -830,7 +830,7 @@ export def "listings-all get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search query.
+  --query: string # Search query.
   --auction-price-max: float # Maximum current auction price (format: float)
   --category: string # Category slug from /api/categories
   --product-type: string # Product type slug from /api/categories
@@ -867,7 +867,7 @@ export def "listings-all get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "auction_price_max" $auction_price_max "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "product_type" $product_type "scalar") (serialize-qp "conditions" $conditions "csv") (serialize-qp "decade" $decade "scalar") (serialize-qp "finish" $finish "scalar") (serialize-qp "handmade" $handmade "scalar") (serialize-qp "item_city" $item_city "scalar") (serialize-qp "item_country" $item_country "scalar") (serialize-qp "item_region" $item_region "scalar") (serialize-qp "item_state" $item_state "scalar") (serialize-qp "make" $make "csv") (serialize-qp "model" $model "scalar") (serialize-qp "must_not" $must_not "scalar") (serialize-qp "price_max" $price_max "scalar") (serialize-qp "price_min" $price_min "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "year_max" $year_max "scalar") (serialize-qp "year_min" $year_min "scalar") (serialize-qp "accepts_gift_cards" $accepts_gift_cards "scalar") (serialize-qp "preferred_seller" $preferred_seller "scalar") (serialize-qp "shop" $shop "scalar") (serialize-qp "shop_id" $shop_id "scalar") (serialize-qp "listing_type" $listing_type "scalar") (serialize-qp "ships_to" $ships_to "scalar") (serialize-qp "exclude_auctions" $exclude_auctions "scalar") (serialize-qp "accepts_payment_plans" $accepts_payment_plans "scalar") (serialize-qp "watchers_count_min" $watchers_count_min "scalar") (serialize-qp "not_ids" $not_ids "csv") (serialize-qp "local_pickup" $local_pickup "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "auction_price_max" $auction_price_max "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "product_type" $product_type "scalar") (serialize-qp "conditions" $conditions "csv") (serialize-qp "decade" $decade "scalar") (serialize-qp "finish" $finish "scalar") (serialize-qp "handmade" $handmade "scalar") (serialize-qp "item_city" $item_city "scalar") (serialize-qp "item_country" $item_country "scalar") (serialize-qp "item_region" $item_region "scalar") (serialize-qp "item_state" $item_state "scalar") (serialize-qp "make" $make "csv") (serialize-qp "model" $model "scalar") (serialize-qp "must_not" $must_not "scalar") (serialize-qp "price_max" $price_max "scalar") (serialize-qp "price_min" $price_min "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "year_max" $year_max "scalar") (serialize-qp "year_min" $year_min "scalar") (serialize-qp "accepts_gift_cards" $accepts_gift_cards "scalar") (serialize-qp "preferred_seller" $preferred_seller "scalar") (serialize-qp "shop" $shop "scalar") (serialize-qp "shop_id" $shop_id "scalar") (serialize-qp "listing_type" $listing_type "scalar") (serialize-qp "ships_to" $ships_to "scalar") (serialize-qp "exclude_auctions" $exclude_auctions "scalar") (serialize-qp "accepts_payment_plans" $accepts_payment_plans "scalar") (serialize-qp "watchers_count_min" $watchers_count_min "scalar") (serialize-qp "not_ids" $not_ids "csv") (serialize-qp "local_pickup" $local_pickup "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listings/all" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2220,7 +2220,7 @@ export def "my-follows-search post" [
   --price-max: float # Maximum price of search results (USD) (format: float)
   --price-min: float # Minimum price of search results (USD) (format: float)
   --product-type: string # Product type slug from /api/categories
-  --body-query: string # Search query.
+  --query: string # Search query.
   --ships-to: string # Limit search to items that ship to this country code
   --shop: string # Slug of shop to search
   --shop-id: string # ID of shop to search
@@ -2232,7 +2232,7 @@ export def "my-follows-search post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/my/follows/search")
-  let body = {accepts_gift_cards: $accepts_gift_cards, accepts_payment_plans: $accepts_payment_plans, auction_price_max: $auction_price_max, category: $category, conditions: $conditions, currency: $currency, decade: $decade, exclude_auctions: $exclude_auctions, finish: $finish, handmade: $handmade, item_city: $item_city, item_country: $item_country, item_region: $item_region, item_state: $item_state, listing_type: $listing_type, local_pickup: $local_pickup, make: $make, model: $model, must_not: $must_not, not_ids: $not_ids, preferred_seller: $preferred_seller, price_max: $price_max, price_min: $price_min, product_type: $product_type, query: $body_query, ships_to: $ships_to, shop: $shop, shop_id: $shop_id, watchers_count_min: $watchers_count_min, year_max: $year_max, year_min: $year_min} | compact
+  let body = {accepts_gift_cards: $accepts_gift_cards, accepts_payment_plans: $accepts_payment_plans, auction_price_max: $auction_price_max, category: $category, conditions: $conditions, currency: $currency, decade: $decade, exclude_auctions: $exclude_auctions, finish: $finish, handmade: $handmade, item_city: $item_city, item_country: $item_country, item_region: $item_region, item_state: $item_state, listing_type: $listing_type, local_pickup: $local_pickup, make: $make, model: $model, must_not: $must_not, not_ids: $not_ids, preferred_seller: $preferred_seller, price_max: $price_max, price_min: $price_min, product_type: $product_type, query: $query, ships_to: $ships_to, shop: $shop, shop_id: $shop_id, watchers_count_min: $watchers_count_min, year_max: $year_max, year_min: $year_min} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2379,7 +2379,7 @@ export def "my-listings get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search query.
+  --query: string # Search query.
   --auction-price-max: float # Maximum current auction price (format: float)
   --category: string # Category slug from /api/categories
   --product-type: string # Product type slug from /api/categories
@@ -2415,7 +2415,7 @@ export def "my-listings get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "auction_price_max" $auction_price_max "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "product_type" $product_type "scalar") (serialize-qp "conditions" $conditions "csv") (serialize-qp "decade" $decade "scalar") (serialize-qp "finish" $finish "scalar") (serialize-qp "handmade" $handmade "scalar") (serialize-qp "item_city" $item_city "scalar") (serialize-qp "item_country" $item_country "scalar") (serialize-qp "item_region" $item_region "scalar") (serialize-qp "item_state" $item_state "scalar") (serialize-qp "make" $make "csv") (serialize-qp "model" $model "scalar") (serialize-qp "must_not" $must_not "scalar") (serialize-qp "price_max" $price_max "scalar") (serialize-qp "price_min" $price_min "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "year_max" $year_max "scalar") (serialize-qp "year_min" $year_min "scalar") (serialize-qp "accepts_gift_cards" $accepts_gift_cards "scalar") (serialize-qp "preferred_seller" $preferred_seller "scalar") (serialize-qp "shop" $shop "scalar") (serialize-qp "shop_id" $shop_id "scalar") (serialize-qp "listing_type" $listing_type "scalar") (serialize-qp "ships_to" $ships_to "scalar") (serialize-qp "exclude_auctions" $exclude_auctions "scalar") (serialize-qp "accepts_payment_plans" $accepts_payment_plans "scalar") (serialize-qp "watchers_count_min" $watchers_count_min "scalar") (serialize-qp "not_ids" $not_ids "csv") (serialize-qp "local_pickup" $local_pickup "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "sku" $sku "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "auction_price_max" $auction_price_max "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "product_type" $product_type "scalar") (serialize-qp "conditions" $conditions "csv") (serialize-qp "decade" $decade "scalar") (serialize-qp "finish" $finish "scalar") (serialize-qp "handmade" $handmade "scalar") (serialize-qp "item_city" $item_city "scalar") (serialize-qp "item_country" $item_country "scalar") (serialize-qp "item_region" $item_region "scalar") (serialize-qp "item_state" $item_state "scalar") (serialize-qp "make" $make "csv") (serialize-qp "model" $model "scalar") (serialize-qp "must_not" $must_not "scalar") (serialize-qp "price_max" $price_max "scalar") (serialize-qp "price_min" $price_min "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "year_max" $year_max "scalar") (serialize-qp "year_min" $year_min "scalar") (serialize-qp "accepts_gift_cards" $accepts_gift_cards "scalar") (serialize-qp "preferred_seller" $preferred_seller "scalar") (serialize-qp "shop" $shop "scalar") (serialize-qp "shop_id" $shop_id "scalar") (serialize-qp "listing_type" $listing_type "scalar") (serialize-qp "ships_to" $ships_to "scalar") (serialize-qp "exclude_auctions" $exclude_auctions "scalar") (serialize-qp "accepts_payment_plans" $accepts_payment_plans "scalar") (serialize-qp "watchers_count_min" $watchers_count_min "scalar") (serialize-qp "not_ids" $not_ids "csv") (serialize-qp "local_pickup" $local_pickup "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "sku" $sku "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/listings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2434,7 +2434,7 @@ export def "my-listings-drafts get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search query.
+  --query: string # Search query.
   --auction-price-max: float # Maximum current auction price (format: float)
   --category: string # Category slug from /api/categories
   --product-type: string # Product type slug from /api/categories
@@ -2468,7 +2468,7 @@ export def "my-listings-drafts get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "auction_price_max" $auction_price_max "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "product_type" $product_type "scalar") (serialize-qp "conditions" $conditions "csv") (serialize-qp "decade" $decade "scalar") (serialize-qp "finish" $finish "scalar") (serialize-qp "handmade" $handmade "scalar") (serialize-qp "item_city" $item_city "scalar") (serialize-qp "item_country" $item_country "scalar") (serialize-qp "item_region" $item_region "scalar") (serialize-qp "item_state" $item_state "scalar") (serialize-qp "make" $make "csv") (serialize-qp "model" $model "scalar") (serialize-qp "must_not" $must_not "scalar") (serialize-qp "price_max" $price_max "scalar") (serialize-qp "price_min" $price_min "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "year_max" $year_max "scalar") (serialize-qp "year_min" $year_min "scalar") (serialize-qp "accepts_gift_cards" $accepts_gift_cards "scalar") (serialize-qp "preferred_seller" $preferred_seller "scalar") (serialize-qp "shop" $shop "scalar") (serialize-qp "shop_id" $shop_id "scalar") (serialize-qp "listing_type" $listing_type "scalar") (serialize-qp "ships_to" $ships_to "scalar") (serialize-qp "exclude_auctions" $exclude_auctions "scalar") (serialize-qp "accepts_payment_plans" $accepts_payment_plans "scalar") (serialize-qp "watchers_count_min" $watchers_count_min "scalar") (serialize-qp "not_ids" $not_ids "csv") (serialize-qp "local_pickup" $local_pickup "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "auction_price_max" $auction_price_max "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "product_type" $product_type "scalar") (serialize-qp "conditions" $conditions "csv") (serialize-qp "decade" $decade "scalar") (serialize-qp "finish" $finish "scalar") (serialize-qp "handmade" $handmade "scalar") (serialize-qp "item_city" $item_city "scalar") (serialize-qp "item_country" $item_country "scalar") (serialize-qp "item_region" $item_region "scalar") (serialize-qp "item_state" $item_state "scalar") (serialize-qp "make" $make "csv") (serialize-qp "model" $model "scalar") (serialize-qp "must_not" $must_not "scalar") (serialize-qp "price_max" $price_max "scalar") (serialize-qp "price_min" $price_min "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "year_max" $year_max "scalar") (serialize-qp "year_min" $year_min "scalar") (serialize-qp "accepts_gift_cards" $accepts_gift_cards "scalar") (serialize-qp "preferred_seller" $preferred_seller "scalar") (serialize-qp "shop" $shop "scalar") (serialize-qp "shop_id" $shop_id "scalar") (serialize-qp "listing_type" $listing_type "scalar") (serialize-qp "ships_to" $ships_to "scalar") (serialize-qp "exclude_auctions" $exclude_auctions "scalar") (serialize-qp "accepts_payment_plans" $accepts_payment_plans "scalar") (serialize-qp "watchers_count_min" $watchers_count_min "scalar") (serialize-qp "not_ids" $not_ids "csv") (serialize-qp "local_pickup" $local_pickup "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/listings/drafts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

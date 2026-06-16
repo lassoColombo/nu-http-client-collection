@@ -424,13 +424,13 @@ export def "enm-substance-study-summary get" [
   --category: string # Endpoint category (The value in the protocol.category.code field)
   --property-uri: string # Property URI https://data.enanomapper.net/property/{UUID} , see Property service
   --property: string # Property UUID, see Property service
-  --qp-result: oneof<nothing, bool> # If true will group by topcategory,endpointcategory,interpretation result
+  --result: oneof<nothing, bool> # If true will group by topcategory,endpointcategory,interpretation result
   --page: int # Starting page (e.g. 0)
   --pagesize: int # Page size (e.g. 10)
 ]: nothing -> record<facet: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "top" $top "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "property_uri" $property_uri "scalar") (serialize-qp "property" $property "scalar") (serialize-qp "result" $qp_result "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "top" $top "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "property_uri" $property_uri "scalar") (serialize-qp "property" $property "scalar") (serialize-qp "result" $result "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/enm/($db)/substance/($uuid)/studySummary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -1534,13 +1534,13 @@ export def "org-project-issue-jira-issue Create-jira-issue" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-fields: record # shape: {issuetype?: record, project?: record, summary?: string}
+  --fields: record # shape: {issuetype?: record, project?: record, summary?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/org/($orgId)/project/($projectId)/issue/($issueId)/jira-issue")
-  let body = {fields: $body_fields} | compact
+  let body = {fields: $fields} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

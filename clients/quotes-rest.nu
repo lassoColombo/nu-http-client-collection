@@ -518,7 +518,7 @@ export def "quote-authors-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Text string to search for in author names (format: string)
+  --query: string # Text string to search for in author names (format: string)
   --language: string # Language. A same author may have quotes in two or more different languages. So for example 'Mahatma Gandhi' may be returned for language "en"(English), and "மஹாத்மா காந்தி" may be returned when the language is "ta" (Tamil). (format: string, default: en)
   --detailed: oneof<nothing, bool> # Should return detailed author information such as `birthday`, `death date`, `occupation`, `description` etc. Only available at certain subscription levels. (format: boolean, default: false)
   --start: int # Response is paged. This parameter controls where response starts the listing at (format: int32, default: 0)
@@ -526,7 +526,7 @@ export def "quote-authors-search get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "detailed" $detailed "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "detailed" $detailed "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote/authors/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -569,13 +569,13 @@ export def "quote-categories-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Text string to search for in the categories (format: string, default: 0)
+  --query: string # Text string to search for in the categories (format: string, default: 0)
   --start: int # Response is paged. This parameter controls where response starts the listing at (format: int32, default: 0)
   --limit: int # Response is paged. This parameter controls how many is returned in the result. The maximum depends on the subscription level. (format: int32, default: 2)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote/categories/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -816,11 +816,11 @@ export def "quote-image-background-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Tag string (format: string)
+  --query: string # Tag string (format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote/image/background/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -959,11 +959,11 @@ export def "quote-image-font-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Tag string (format: string)
+  --query: string # Tag string (format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote/image/font/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1178,7 +1178,7 @@ export def "quote-search get" [
   --author: string # Quote Author (format: string)
   --minlength: int # Quote minimum Length (format: int32, default: 100)
   --maxlength: int # Quote maximum Length (format: int32, default: 300)
-  --qp-query: string # keyword to search for in the quote (format: string)
+  --query: string # keyword to search for in the quote (format: string)
   --private: oneof<nothing, bool> # Should search private collection? Default searches public collection. (format: boolean, default: false)
   --language: string # Language of the Quote. The language must be supported in our system. (format: string, default: en)
   --limit: int # No of quotes to return. The max limit depends on the subscription level. (format: integer, default: 1)
@@ -1186,7 +1186,7 @@ export def "quote-search get" [
 ]: nothing -> record<contents: record<quotes: list<record>>, success: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "minlength" $minlength "scalar") (serialize-qp "maxlength" $maxlength "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "private" $private "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sfw" $sfw "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "minlength" $minlength "scalar") (serialize-qp "maxlength" $maxlength "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "private" $private "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sfw" $sfw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

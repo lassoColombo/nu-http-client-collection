@@ -106,7 +106,7 @@ export def "v1beta1 bindingsdelete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --callback: string # JSONP
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -123,7 +123,7 @@ export def "v1beta1 bindingsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "acceptsIncomplete" $acceptsIncomplete "scalar") (serialize-qp "planId" $planId "scalar") (serialize-qp "serviceId" $serviceId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "acceptsIncomplete" $acceptsIncomplete "scalar") (serialize-qp "planId" $planId "scalar") (serialize-qp "serviceId" $serviceId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($name)" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -144,7 +144,7 @@ export def "v1beta1 bindingsget" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --callback: string # JSONP
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -160,7 +160,7 @@ export def "v1beta1 bindingsget" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "planId" $planId "scalar") (serialize-qp "serviceId" $serviceId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "planId" $planId "scalar") (serialize-qp "serviceId" $serviceId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($name)" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -181,7 +181,7 @@ export def "v1beta1 instancespatch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --callback: string # JSONP
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -209,7 +209,7 @@ export def "v1beta1 instancespatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "acceptsIncomplete" $acceptsIncomplete "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "acceptsIncomplete" $acceptsIncomplete "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($name)" $qp)
   let body = {context: $context, createTime: $createTime, deploymentName: $deploymentName, description: $description, instance_id: $instance_id, organization_guid: $organization_guid, parameters: $parameters, plan_id: $plan_id, previous_values: $previous_values, resourceName: $resourceName, service_id: $service_id, space_guid: $space_guid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -232,7 +232,7 @@ export def "v1beta1-last-operation operation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --callback: string # JSONP
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -249,7 +249,7 @@ export def "v1beta1-last-operation operation" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "operation" $operation "scalar") (serialize-qp "planId" $planId "scalar") (serialize-qp "serviceId" $serviceId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "operation" $operation "scalar") (serialize-qp "planId" $planId "scalar") (serialize-qp "serviceId" $serviceId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($name)/last_operation" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -270,7 +270,7 @@ export def "v1beta1-bindings servicebrokerprojectsbrokersinstancesbindingslist" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --callback: string # JSONP
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -286,7 +286,7 @@ export def "v1beta1-bindings servicebrokerprojectsbrokersinstancesbindingslist" 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/bindings" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -307,7 +307,7 @@ export def "v1beta1-brokers servicebrokerprojectsbrokerslist" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --callback: string # JSONP
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -323,7 +323,7 @@ export def "v1beta1-brokers servicebrokerprojectsbrokerslist" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/brokers" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -344,7 +344,7 @@ export def "v1beta1-brokers servicebrokerprojectsbrokerscreate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --callback: string # JSONP
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -363,7 +363,7 @@ export def "v1beta1-brokers servicebrokerprojectsbrokerscreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/brokers" $qp)
   let body = {createTime: $createTime, name: $name, title: $title, url: $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -386,7 +386,7 @@ export def "v1beta1-instances servicebrokerprojectsbrokersinstanceslist" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --callback: string # JSONP
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -402,7 +402,7 @@ export def "v1beta1-instances servicebrokerprojectsbrokersinstanceslist" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/instances" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -424,7 +424,7 @@ export def "v1beta1-service-bindings bindingscreate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --callback: string # JSONP
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -448,7 +448,7 @@ export def "v1beta1-service-bindings bindingscreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "acceptsIncomplete" $acceptsIncomplete "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "acceptsIncomplete" $acceptsIncomplete "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/service_bindings/($binding_id)" $qp)
   let body = {bind_resource: $bind_resource, binding_id: $body_binding_id, createTime: $createTime, deploymentName: $deploymentName, parameters: $parameters, plan_id: $plan_id, resourceName: $resourceName, service_id: $service_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -471,7 +471,7 @@ export def "v1beta1-catalog servicebrokerprojectsbrokersv2cataloglist" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --callback: string # JSONP
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -487,7 +487,7 @@ export def "v1beta1-catalog servicebrokerprojectsbrokersv2cataloglist" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/v2/catalog" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -509,7 +509,7 @@ export def "v1beta1-service-instances instancescreate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --callback: string # JSONP
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -537,7 +537,7 @@ export def "v1beta1-service-instances instancescreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "acceptsIncomplete" $acceptsIncomplete "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "acceptsIncomplete" $acceptsIncomplete "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($parent)/v2/service_instances/($instance_id)" $qp)
   let body = {context: $context, createTime: $createTime, deploymentName: $deploymentName, description: $description, instance_id: $body_instance_id, organization_guid: $organization_guid, parameters: $parameters, plan_id: $plan_id, previous_values: $previous_values, resourceName: $resourceName, service_id: $service_id, space_guid: $space_guid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -560,7 +560,7 @@ export def "v1beta1 servicebrokergetIamPolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --callback: string # JSONP
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -575,7 +575,7 @@ export def "v1beta1 servicebrokergetIamPolicy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "options.requestedPolicyVersion" $optionsrequestedPolicyVersion "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "options.requestedPolicyVersion" $optionsrequestedPolicyVersion "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($resource):getIamPolicy" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -597,7 +597,7 @@ export def "v1beta1 servicebrokersetIamPolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --callback: string # JSONP
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -613,7 +613,7 @@ export def "v1beta1 servicebrokersetIamPolicy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($resource):setIamPolicy" $qp)
   let body = {policy: $policy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -636,7 +636,7 @@ export def "v1beta1 servicebrokertestIamPermissions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --callback: string # JSONP
   --oauth-token: string # OAuth 2.0 token for the current user.
@@ -652,7 +652,7 @@ export def "v1beta1 servicebrokertestIamPermissions" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1beta1/($resource):testIamPermissions" $qp)
   let body = {permissions: $permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }

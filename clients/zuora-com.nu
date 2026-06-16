@@ -5866,13 +5866,13 @@ export def "object-account GETAccount" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/account/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -5957,13 +5957,13 @@ export def "object-amendment GETAmendment" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/amendment/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -6080,13 +6080,13 @@ export def "object-bill-run GETBillRun" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/bill-run/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -6142,13 +6142,13 @@ export def "object-communication-profile GETCommunicationProfile" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/communication-profile/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -6232,13 +6232,13 @@ export def "object-contact GETContact" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/contact/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -6327,13 +6327,13 @@ export def "object-credit-balance-adjustment GETCreditBalanceAdjustment" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/credit-balance-adjustment/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -6422,13 +6422,13 @@ export def "object-export GETExport" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/export/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -6512,13 +6512,13 @@ export def "object-feature GETFeature" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/feature/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -6609,13 +6609,13 @@ export def "object-import GETImport" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/import/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -6698,13 +6698,13 @@ export def "object-invoice-adjustment GETInvoiceAdjustment" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/invoice-adjustment/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -6787,13 +6787,13 @@ export def "object-invoice-item-adjustment GETInvoiceItemAdjustment" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/invoice-item-adjustment/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -6817,13 +6817,13 @@ export def "object-invoice-item GETInvoiceItem" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/invoice-item/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -6879,13 +6879,13 @@ export def "object-invoice-payment GETInvoicePayment" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/invoice-payment/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -6941,13 +6941,13 @@ export def "object-invoice-split-item GETInvoiceSplitItem" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/invoice-split-item/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -6971,13 +6971,13 @@ export def "object-invoice-split GETInvoiceSplit" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/invoice-split/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -7029,13 +7029,13 @@ export def "object-invoice GETInvoice" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/invoice/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -7156,13 +7156,13 @@ export def "object-payment-method-snapshot GETPaymentMethodSnapshot" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/payment-method-snapshot/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -7185,13 +7185,13 @@ export def "object-payment-method-transaction-log GETPaymentMethodTransactionLog
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/payment-method-transaction-log/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -7243,13 +7243,13 @@ export def "object-payment-method GETPaymentMethod" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/payment-method/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -7483,13 +7483,13 @@ export def "object-product-feature GETProductFeature" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/product-feature/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -7578,13 +7578,13 @@ export def "object-product-rate-plan-charge-tier GETProductRatePlanChargeTier" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/product-rate-plan-charge-tier/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -7669,13 +7669,13 @@ export def "object-product-rate-plan-charge GETProductRatePlanCharge" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/product-rate-plan-charge/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -7761,13 +7761,13 @@ export def "object-product-rate-plan GETProductRatePlan" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/product-rate-plan/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -7852,13 +7852,13 @@ export def "object-product GETProduct" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/product/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -7915,13 +7915,13 @@ export def "object-rate-plan-charge-tier GETRatePlanChargeTier" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/rate-plan-charge-tier/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -7945,13 +7945,13 @@ export def "object-rate-plan-charge GETRatePlanCharge" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/rate-plan-charge/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -8008,13 +8008,13 @@ export def "object-rate-plan GETRatePlan" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/rate-plan/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -8069,13 +8069,13 @@ export def "object-refund-invoice-payment GETRefundInvoicePayment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/refund-invoice-payment/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -8099,13 +8099,13 @@ export def "object-refund-transaction-log GETRefundTransactionLog" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/refund-transaction-log/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -8157,13 +8157,13 @@ export def "object-refund GETRefund" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/refund/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -8220,13 +8220,13 @@ export def "object-subscription-product-feature GETSubscriptionProductFeature" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/subscription-product-feature/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -8278,14 +8278,14 @@ export def "object-subscription GETSubscription" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --X-Zuora-WSDL-Version: string # Zuora WSDL version number.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/subscription/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id, "X-Zuora-WSDL-Version": $X_Zuora_WSDL_Version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -8401,13 +8401,13 @@ export def "object-taxation-item GETTaxationItem" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/taxation-item/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -8522,13 +8522,13 @@ export def "object-unit-of-measure GETUnitOfMeasure" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/unit-of-measure/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -8643,13 +8643,13 @@ export def "object-usage GETUsage" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-fields: string # Object fields to return
+  --fields: string # Object fields to return
   --Zuora-Entity-Ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --Zuora-Track-Id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue.  The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/object/usage/($id)" $qp)
   let extra_headers = {"Zuora-Entity-Ids": $Zuora_Entity_Ids, "Zuora-Track-Id": $Zuora_Track_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

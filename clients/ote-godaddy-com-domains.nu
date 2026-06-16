@@ -377,7 +377,7 @@ export def "domains-suggest suggest" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-query: string # Domain name or set of keywords for which alternative domain names will be suggested
+  --query: string # Domain name or set of keywords for which alternative domain names will be suggested
   --country: string@country-completer # Two-letter ISO country code to be used as a hint for target region<br/><br/> NOTE: These are sample values, there are many <a href="http://www.iso.org/iso/country_codes.htm">more</a> (format: iso-country-code)
   --city: string # Name of city to be used as a hint for target region (format: city-name)
   --sources: list # Sources to be queried<br/><br/><ul> <li><strong>CC_TLD</strong> - Varies the TLD using Country Codes</li> <li><strong>EXTENSION</strong> - Varies the TLD</li> <li><strong>KEYWORD_SPIN</strong> - Identifies keywords and then rotates each one</li> <li><strong>PREMIUM</strong> - Includes variations with premium prices</li></ul>
@@ -390,7 +390,7 @@ export def "domains-suggest suggest" [
 ]: nothing -> table<domain: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "sources" $sources "csv") (serialize-qp "tlds" $tlds "csv") (serialize-qp "lengthMax" $lengthMax "scalar") (serialize-qp "lengthMin" $lengthMin "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "waitMs" $waitMs "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "sources" $sources "csv") (serialize-qp "tlds" $tlds "csv") (serialize-qp "lengthMax" $lengthMax "scalar") (serialize-qp "lengthMin" $lengthMin "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "waitMs" $waitMs "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/domains/suggest" $qp)
   let extra_headers = {"X-Shopper-Id": $X_Shopper_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

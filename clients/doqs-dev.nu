@@ -400,14 +400,14 @@ export def "templates update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-fields: list
+  fields: list
   --name: string
 ]: any -> record<results: record<created_at: string, fields: list<any>, id: string, name: string, pages: int, size_bytes: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/templates/($id)")
-  let body = {fields: $body_fields, name: $name} | compact
+  let body = {fields: $fields, name: $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -977,7 +977,7 @@ export def "messages-search-time-seriesjson post" [
   --date-from: string
   --date-to: string
   --key: string
-  --body-query: string
+  --query: string
   --senders: list
   --tags: list
 ]: any -> table<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, time: string, unique_clicks: int, unique_opens: int, unsubs: int> {
@@ -985,7 +985,7 @@ export def "messages-search-time-seriesjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/search-time-series.json")
-  let body = {date_from: $date_from, date_to: $date_to, key: $key, query: $body_query, senders: $senders, tags: $tags} | compact
+  let body = {date_from: $date_from, date_to: $date_to, key: $key, query: $query, senders: $senders, tags: $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1009,7 +1009,7 @@ export def "messages-searchjson post" [
   --date-to: string
   --key: string
   --limit: int
-  --body-query: string
+  --query: string
   --senders: list
   --tags: list
 ]: any -> table<_id: string, clicks: int, clicks_detail: list<record>, email: string, metadata: record<user_id: string, website: string>, opens: int, opens_detail: list<record>, sender: string, state: string, subject: string, tags: list<string>, template: string, ts: int> {
@@ -1017,7 +1017,7 @@ export def "messages-searchjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/search.json")
-  let body = {api_keys: $api_keys, date_from: $date_from, date_to: $date_to, key: $key, limit: $limit, query: $body_query, senders: $senders, tags: $tags} | compact
+  let body = {api_keys: $api_keys, date_from: $date_from, date_to: $date_to, key: $key, limit: $limit, query: $query, senders: $senders, tags: $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

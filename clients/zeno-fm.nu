@@ -200,13 +200,13 @@ export def "podcasts-search searchPodcasts" [
   --filters: record # Filters for podcast search — shape: {category?: list, country?: list, language?: list, podcastType?: "podcasts"|"shows"}
   --hitsPerPage: int # format: int32, default: 10
   --page: int # format: int32, default: 1
-  --body-query: string
+  --query: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/podcasts/search")
-  let body = {filters: $filters, hitsPerPage: $hitsPerPage, page: $page, query: $body_query} | compact
+  let body = {filters: $filters, hitsPerPage: $hitsPerPage, page: $page, query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -530,13 +530,13 @@ export def "stations-search searchStations" [
   --filters: record # Filters for station search — shape: {country?: list, genre?: list, language?: list}
   --hitsPerPage: int # format: int32, default: 10
   --page: int # format: int32, default: 1
-  --body-query: string
+  --query: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/stations/search")
-  let body = {filters: $filters, hitsPerPage: $hitsPerPage, page: $page, query: $body_query} | compact
+  let body = {filters: $filters, hitsPerPage: $hitsPerPage, page: $page, query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

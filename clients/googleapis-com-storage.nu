@@ -110,7 +110,7 @@ export def "b storagebucketslist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -126,7 +126,7 @@ export def "b storagebucketslist" [
 ]: nothing -> record<items: table<acl: list, autoclass: record, billing: record, cors: list, customPlacementConfig: record, defaultEventBasedHold: bool, defaultObjectAcl: list, encryption: record, etag: string, iamConfiguration: record, id: string, kind: string, labels: record, lifecycle: record, location: string, locationType: string, logging: record, metageneration: string, name: string, owner: record, projectNumber: string, retentionPolicy: record, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record, website: record>, kind: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/b" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -161,7 +161,7 @@ export def "b storagebucketsinsert" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -207,7 +207,7 @@ export def "b storagebucketsinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "predefinedAcl" $predefinedAcl "scalar") (serialize-qp "predefinedDefaultObjectAcl" $predefinedDefaultObjectAcl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "predefinedAcl" $predefinedAcl "scalar") (serialize-qp "predefinedDefaultObjectAcl" $predefinedDefaultObjectAcl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/b" $qp)
   let body = {acl: $acl, autoclass: $autoclass, billing: $billing, cors: $cors, customPlacementConfig: $customPlacementConfig, defaultEventBasedHold: $defaultEventBasedHold, defaultObjectAcl: $defaultObjectAcl, encryption: $encryption, etag: $etag, iamConfiguration: $iamConfiguration, id: $id, kind: $kind, labels: $labels, lifecycle: $lifecycle, location: $location, locationType: $locationType, logging: $logging, metageneration: $metageneration, name: $name, owner: $owner, projectNumber: $projectNumber, retentionPolicy: $retentionPolicy, rpo: $rpo, satisfiesPZS: $satisfiesPZS, selfLink: $selfLink, storageClass: $storageClass, timeCreated: $timeCreated, updated: $updated, versioning: $versioning, website: $website} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -231,7 +231,7 @@ export def "b storagebucketsdelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -244,7 +244,7 @@ export def "b storagebucketsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -266,7 +266,7 @@ export def "b storagebucketsget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -280,7 +280,7 @@ export def "b storagebucketsget" [
 ]: nothing -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -316,7 +316,7 @@ export def "b storagebucketspatch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -363,7 +363,7 @@ export def "b storagebucketspatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "predefinedAcl" $predefinedAcl "scalar") (serialize-qp "predefinedDefaultObjectAcl" $predefinedDefaultObjectAcl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "predefinedAcl" $predefinedAcl "scalar") (serialize-qp "predefinedDefaultObjectAcl" $predefinedDefaultObjectAcl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)" $qp)
   let body = {acl: $acl, autoclass: $autoclass, billing: $billing, cors: $cors, customPlacementConfig: $customPlacementConfig, defaultEventBasedHold: $defaultEventBasedHold, defaultObjectAcl: $defaultObjectAcl, encryption: $encryption, etag: $etag, iamConfiguration: $iamConfiguration, id: $id, kind: $kind, labels: $labels, lifecycle: $lifecycle, location: $location, locationType: $locationType, logging: $logging, metageneration: $metageneration, name: $name, owner: $owner, projectNumber: $projectNumber, retentionPolicy: $retentionPolicy, rpo: $rpo, satisfiesPZS: $satisfiesPZS, selfLink: $selfLink, storageClass: $storageClass, timeCreated: $timeCreated, updated: $updated, versioning: $versioning, website: $website} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -401,7 +401,7 @@ export def "b storagebucketsupdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -448,7 +448,7 @@ export def "b storagebucketsupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "predefinedAcl" $predefinedAcl "scalar") (serialize-qp "predefinedDefaultObjectAcl" $predefinedDefaultObjectAcl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "predefinedAcl" $predefinedAcl "scalar") (serialize-qp "predefinedDefaultObjectAcl" $predefinedDefaultObjectAcl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)" $qp)
   let body = {acl: $acl, autoclass: $autoclass, billing: $billing, cors: $cors, customPlacementConfig: $customPlacementConfig, defaultEventBasedHold: $defaultEventBasedHold, defaultObjectAcl: $defaultObjectAcl, encryption: $encryption, etag: $etag, iamConfiguration: $iamConfiguration, id: $id, kind: $kind, labels: $labels, lifecycle: $lifecycle, location: $location, locationType: $locationType, logging: $logging, metageneration: $metageneration, name: $name, owner: $owner, projectNumber: $projectNumber, retentionPolicy: $retentionPolicy, rpo: $rpo, satisfiesPZS: $satisfiesPZS, selfLink: $selfLink, storageClass: $storageClass, timeCreated: $timeCreated, updated: $updated, versioning: $versioning, website: $website} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -472,7 +472,7 @@ export def "b-acl storagebucketAccessControlslist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -483,7 +483,7 @@ export def "b-acl storagebucketAccessControlslist" [
 ]: nothing -> record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/acl" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -506,7 +506,7 @@ export def "b-acl storagebucketAccessControlsinsert" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -529,7 +529,7 @@ export def "b-acl storagebucketAccessControlsinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/acl" $qp)
   let body = {bucket: $body_bucket, domain: $domain, email: $email, entity: $entity, entityId: $entityId, etag: $etag, id: $id, kind: $kind, projectTeam: $projectTeam, role: $role, selfLink: $selfLink} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -554,7 +554,7 @@ export def "b-acl storagebucketAccessControlsdelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -565,7 +565,7 @@ export def "b-acl storagebucketAccessControlsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/acl/($entity)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -588,7 +588,7 @@ export def "b-acl storagebucketAccessControlsget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -599,7 +599,7 @@ export def "b-acl storagebucketAccessControlsget" [
 ]: nothing -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/acl/($entity)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -623,7 +623,7 @@ export def "b-acl storagebucketAccessControlspatch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -646,7 +646,7 @@ export def "b-acl storagebucketAccessControlspatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/acl/($entity)" $qp)
   let body = {bucket: $body_bucket, domain: $domain, email: $email, entity: $body_entity, entityId: $entityId, etag: $etag, id: $id, kind: $kind, projectTeam: $projectTeam, role: $role, selfLink: $selfLink} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -672,7 +672,7 @@ export def "b-acl storagebucketAccessControlsupdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -695,7 +695,7 @@ export def "b-acl storagebucketAccessControlsupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/acl/($entity)" $qp)
   let body = {bucket: $body_bucket, domain: $domain, email: $email, entity: $body_entity, entityId: $entityId, etag: $etag, id: $id, kind: $kind, projectTeam: $projectTeam, role: $role, selfLink: $selfLink} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -719,7 +719,7 @@ export def "b-default-object-acl storagedefaultObjectAccessControlslist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -732,7 +732,7 @@ export def "b-default-object-acl storagedefaultObjectAccessControlslist" [
 ]: nothing -> record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/defaultObjectAcl" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -755,7 +755,7 @@ export def "b-default-object-acl storagedefaultObjectAccessControlsinsert" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -780,7 +780,7 @@ export def "b-default-object-acl storagedefaultObjectAccessControlsinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/defaultObjectAcl" $qp)
   let body = {bucket: $body_bucket, domain: $domain, email: $email, entity: $entity, entityId: $entityId, etag: $etag, generation: $generation, id: $id, kind: $kind, object: $object, projectTeam: $projectTeam, role: $role, selfLink: $selfLink} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -805,7 +805,7 @@ export def "b-default-object-acl storagedefaultObjectAccessControlsdelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -816,7 +816,7 @@ export def "b-default-object-acl storagedefaultObjectAccessControlsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/defaultObjectAcl/($entity)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -839,7 +839,7 @@ export def "b-default-object-acl storagedefaultObjectAccessControlsget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -850,7 +850,7 @@ export def "b-default-object-acl storagedefaultObjectAccessControlsget" [
 ]: nothing -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/defaultObjectAcl/($entity)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -874,7 +874,7 @@ export def "b-default-object-acl storagedefaultObjectAccessControlspatch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -899,7 +899,7 @@ export def "b-default-object-acl storagedefaultObjectAccessControlspatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/defaultObjectAcl/($entity)" $qp)
   let body = {bucket: $body_bucket, domain: $domain, email: $email, entity: $body_entity, entityId: $entityId, etag: $etag, generation: $generation, id: $id, kind: $kind, object: $object, projectTeam: $projectTeam, role: $role, selfLink: $selfLink} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -925,7 +925,7 @@ export def "b-default-object-acl storagedefaultObjectAccessControlsupdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -950,7 +950,7 @@ export def "b-default-object-acl storagedefaultObjectAccessControlsupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/defaultObjectAcl/($entity)" $qp)
   let body = {bucket: $body_bucket, domain: $domain, email: $email, entity: $body_entity, entityId: $entityId, etag: $etag, generation: $generation, id: $id, kind: $kind, object: $object, projectTeam: $projectTeam, role: $role, selfLink: $selfLink} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -974,7 +974,7 @@ export def "b-iam storagebucketsgetIamPolicy" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -986,7 +986,7 @@ export def "b-iam storagebucketsgetIamPolicy" [
 ]: nothing -> record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "optionsRequestedPolicyVersion" $optionsRequestedPolicyVersion "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "optionsRequestedPolicyVersion" $optionsRequestedPolicyVersion "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/iam" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1009,7 +1009,7 @@ export def "b-iam storagebucketssetIamPolicy" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1026,7 +1026,7 @@ export def "b-iam storagebucketssetIamPolicy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/iam" $qp)
   let body = {bindings: $bindings, etag: $etag, kind: $kind, resourceId: $resourceId, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1050,7 +1050,7 @@ export def "b-iam-test-permissions storagebucketstestIamPermissions" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1062,7 +1062,7 @@ export def "b-iam-test-permissions storagebucketstestIamPermissions" [
 ]: nothing -> record<kind: string, permissions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "permissions" $permissions "multi") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "permissions" $permissions "multi") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/iam/testPermissions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1084,7 +1084,7 @@ export def "b-lock-retention-policy storagebucketslockRetentionPolicy" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1096,7 +1096,7 @@ export def "b-lock-retention-policy storagebucketslockRetentionPolicy" [
 ]: nothing -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/lockRetentionPolicy" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1118,7 +1118,7 @@ export def "b-notification-configs storagenotificationslist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1129,7 +1129,7 @@ export def "b-notification-configs storagenotificationslist" [
 ]: nothing -> record<items: table<custom_attributes: record, etag: string, event_types: list, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/notificationConfigs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1151,7 +1151,7 @@ export def "b-notification-configs storagenotificationsinsert" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1172,7 +1172,7 @@ export def "b-notification-configs storagenotificationsinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/notificationConfigs" $qp)
   let body = {custom_attributes: $custom_attributes, etag: $etag, event_types: $event_types, id: $id, kind: $kind, object_name_prefix: $object_name_prefix, payload_format: $payload_format, selfLink: $selfLink, topic: $topic} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1197,7 +1197,7 @@ export def "b-notification-configs storagenotificationsdelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1208,7 +1208,7 @@ export def "b-notification-configs storagenotificationsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/notificationConfigs/($notification)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1231,7 +1231,7 @@ export def "b-notification-configs storagenotificationsget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1242,7 +1242,7 @@ export def "b-notification-configs storagenotificationsget" [
 ]: nothing -> record<custom_attributes: record, etag: string, event_types: list<string>, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/notificationConfigs/($notification)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1264,7 +1264,7 @@ export def "b-o storageobjectslist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1285,7 +1285,7 @@ export def "b-o storageobjectslist" [
 ]: nothing -> record<items: table<acl: list, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, kind: string, nextPageToken: string, prefixes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "endOffset" $endOffset "scalar") (serialize-qp "includeTrailingDelimiter" $includeTrailingDelimiter "scalar") (serialize-qp "matchGlob" $matchGlob "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "startOffset" $startOffset "scalar") (serialize-qp "userProject" $userProject "scalar") (serialize-qp "versions" $versions "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "endOffset" $endOffset "scalar") (serialize-qp "includeTrailingDelimiter" $includeTrailingDelimiter "scalar") (serialize-qp "matchGlob" $matchGlob "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "startOffset" $startOffset "scalar") (serialize-qp "userProject" $userProject "scalar") (serialize-qp "versions" $versions "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/o" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1307,7 +1307,7 @@ export def "b-o storageobjectsinsert" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1329,7 +1329,7 @@ export def "b-o storageobjectsinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "contentEncoding" $contentEncoding "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifGenerationNotMatch" $ifGenerationNotMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "kmsKeyName" $kmsKeyName "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "predefinedAcl" $predefinedAcl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "contentEncoding" $contentEncoding "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifGenerationNotMatch" $ifGenerationNotMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "kmsKeyName" $kmsKeyName "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "predefinedAcl" $predefinedAcl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/o" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -1352,7 +1352,7 @@ export def "b-o-watch storageobjectswatchAll" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1383,7 +1383,7 @@ export def "b-o-watch storageobjectswatchAll" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "endOffset" $endOffset "scalar") (serialize-qp "includeTrailingDelimiter" $includeTrailingDelimiter "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "startOffset" $startOffset "scalar") (serialize-qp "userProject" $userProject "scalar") (serialize-qp "versions" $versions "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "endOffset" $endOffset "scalar") (serialize-qp "includeTrailingDelimiter" $includeTrailingDelimiter "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "startOffset" $startOffset "scalar") (serialize-qp "userProject" $userProject "scalar") (serialize-qp "versions" $versions "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/o/watch" $qp)
   let body = {address: $address, expiration: $expiration, id: $id, kind: $kind, params: $params, payload: $payload, resourceId: $resourceId, resourceUri: $resourceUri, token: $body_token, type: $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1408,7 +1408,7 @@ export def "b-o storageobjectsdelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1424,7 +1424,7 @@ export def "b-o storageobjectsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifGenerationNotMatch" $ifGenerationNotMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifGenerationNotMatch" $ifGenerationNotMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/o/($object)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1447,7 +1447,7 @@ export def "b-o storageobjectsget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1464,7 +1464,7 @@ export def "b-o storageobjectsget" [
 ]: nothing -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifGenerationNotMatch" $ifGenerationNotMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifGenerationNotMatch" $ifGenerationNotMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/o/($object)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1490,7 +1490,7 @@ export def "b-o storageobjectspatch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1541,7 +1541,7 @@ export def "b-o storageobjectspatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifGenerationNotMatch" $ifGenerationNotMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "predefinedAcl" $predefinedAcl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifGenerationNotMatch" $ifGenerationNotMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "predefinedAcl" $predefinedAcl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/o/($object)" $qp)
   let body = {acl: $acl, bucket: $body_bucket, cacheControl: $cacheControl, componentCount: $componentCount, contentDisposition: $contentDisposition, contentEncoding: $contentEncoding, contentLanguage: $contentLanguage, contentType: $contentType, crc32c: $crc32c, customTime: $customTime, customerEncryption: $customerEncryption, etag: $etag, eventBasedHold: $eventBasedHold, generation: $generation, id: $id, kind: $kind, kmsKeyName: $kmsKeyName, md5Hash: $md5Hash, mediaLink: $mediaLink, metadata: $metadata, metageneration: $metageneration, name: $name, owner: $owner, retentionExpirationTime: $retentionExpirationTime, selfLink: $selfLink, size: $size, storageClass: $storageClass, temporaryHold: $temporaryHold, timeCreated: $timeCreated, timeDeleted: $timeDeleted, timeStorageClassUpdated: $timeStorageClassUpdated, updated: $updated} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1569,7 +1569,7 @@ export def "b-o storageobjectsupdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1620,7 +1620,7 @@ export def "b-o storageobjectsupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifGenerationNotMatch" $ifGenerationNotMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "predefinedAcl" $predefinedAcl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifGenerationNotMatch" $ifGenerationNotMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "predefinedAcl" $predefinedAcl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/o/($object)" $qp)
   let body = {acl: $acl, bucket: $body_bucket, cacheControl: $cacheControl, componentCount: $componentCount, contentDisposition: $contentDisposition, contentEncoding: $contentEncoding, contentLanguage: $contentLanguage, contentType: $contentType, crc32c: $crc32c, customTime: $customTime, customerEncryption: $customerEncryption, etag: $etag, eventBasedHold: $eventBasedHold, generation: $generation, id: $id, kind: $kind, kmsKeyName: $kmsKeyName, md5Hash: $md5Hash, mediaLink: $mediaLink, metadata: $metadata, metageneration: $metageneration, name: $name, owner: $owner, retentionExpirationTime: $retentionExpirationTime, selfLink: $selfLink, size: $size, storageClass: $storageClass, temporaryHold: $temporaryHold, timeCreated: $timeCreated, timeDeleted: $timeDeleted, timeStorageClassUpdated: $timeStorageClassUpdated, updated: $updated} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1645,7 +1645,7 @@ export def "b-o-acl storageobjectAccessControlslist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1657,7 +1657,7 @@ export def "b-o-acl storageobjectAccessControlslist" [
 ]: nothing -> record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/o/($object)/acl" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1681,7 +1681,7 @@ export def "b-o-acl storageobjectAccessControlsinsert" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1707,7 +1707,7 @@ export def "b-o-acl storageobjectAccessControlsinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/o/($object)/acl" $qp)
   let body = {bucket: $body_bucket, domain: $domain, email: $email, entity: $entity, entityId: $entityId, etag: $etag, generation: $generation, id: $id, kind: $kind, object: $body_object, projectTeam: $projectTeam, role: $role, selfLink: $selfLink} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1733,7 +1733,7 @@ export def "b-o-acl storageobjectAccessControlsdelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1745,7 +1745,7 @@ export def "b-o-acl storageobjectAccessControlsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/o/($object)/acl/($entity)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1769,7 +1769,7 @@ export def "b-o-acl storageobjectAccessControlsget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1781,7 +1781,7 @@ export def "b-o-acl storageobjectAccessControlsget" [
 ]: nothing -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/o/($object)/acl/($entity)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1806,7 +1806,7 @@ export def "b-o-acl storageobjectAccessControlspatch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1832,7 +1832,7 @@ export def "b-o-acl storageobjectAccessControlspatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/o/($object)/acl/($entity)" $qp)
   let body = {bucket: $body_bucket, domain: $domain, email: $email, entity: $body_entity, entityId: $entityId, etag: $etag, generation: $generation, id: $id, kind: $kind, object: $body_object, projectTeam: $projectTeam, role: $role, selfLink: $selfLink} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1859,7 +1859,7 @@ export def "b-o-acl storageobjectAccessControlsupdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1885,7 +1885,7 @@ export def "b-o-acl storageobjectAccessControlsupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/o/($object)/acl/($entity)" $qp)
   let body = {bucket: $body_bucket, domain: $domain, email: $email, entity: $body_entity, entityId: $entityId, etag: $etag, generation: $generation, id: $id, kind: $kind, object: $body_object, projectTeam: $projectTeam, role: $role, selfLink: $selfLink} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1910,7 +1910,7 @@ export def "b-o-iam storageobjectsgetIamPolicy" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1922,7 +1922,7 @@ export def "b-o-iam storageobjectsgetIamPolicy" [
 ]: nothing -> record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/o/($object)/iam" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1946,7 +1946,7 @@ export def "b-o-iam storageobjectssetIamPolicy" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1964,7 +1964,7 @@ export def "b-o-iam storageobjectssetIamPolicy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/o/($object)/iam" $qp)
   let body = {bindings: $bindings, etag: $etag, kind: $kind, resourceId: $resourceId, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1989,7 +1989,7 @@ export def "b-o-iam-test-permissions storageobjectstestIamPermissions" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2002,7 +2002,7 @@ export def "b-o-iam-test-permissions storageobjectstestIamPermissions" [
 ]: nothing -> record<kind: string, permissions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "permissions" $permissions "multi") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "permissions" $permissions "multi") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($bucket)/o/($object)/iam/testPermissions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2027,7 +2027,7 @@ export def "b-o-compose storageobjectscompose" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2046,7 +2046,7 @@ export def "b-o-compose storageobjectscompose" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "destinationPredefinedAcl" $destinationPredefinedAcl "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "kmsKeyName" $kmsKeyName "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "destinationPredefinedAcl" $destinationPredefinedAcl "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "kmsKeyName" $kmsKeyName "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($destinationBucket)/o/($destinationObject)/compose" $qp)
   let body = {destination: $destination, kind: $kind, sourceObjects: $sourceObjects} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2076,7 +2076,7 @@ export def "b-o-copy-to-b-o storageobjectscopy" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2132,7 +2132,7 @@ export def "b-o-copy-to-b-o storageobjectscopy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "destinationKmsKeyName" $destinationKmsKeyName "scalar") (serialize-qp "destinationPredefinedAcl" $destinationPredefinedAcl "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifGenerationNotMatch" $ifGenerationNotMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "ifSourceGenerationMatch" $ifSourceGenerationMatch "scalar") (serialize-qp "ifSourceGenerationNotMatch" $ifSourceGenerationNotMatch "scalar") (serialize-qp "ifSourceMetagenerationMatch" $ifSourceMetagenerationMatch "scalar") (serialize-qp "ifSourceMetagenerationNotMatch" $ifSourceMetagenerationNotMatch "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "sourceGeneration" $sourceGeneration "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "destinationKmsKeyName" $destinationKmsKeyName "scalar") (serialize-qp "destinationPredefinedAcl" $destinationPredefinedAcl "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifGenerationNotMatch" $ifGenerationNotMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "ifSourceGenerationMatch" $ifSourceGenerationMatch "scalar") (serialize-qp "ifSourceGenerationNotMatch" $ifSourceGenerationNotMatch "scalar") (serialize-qp "ifSourceMetagenerationMatch" $ifSourceMetagenerationMatch "scalar") (serialize-qp "ifSourceMetagenerationNotMatch" $ifSourceMetagenerationNotMatch "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "sourceGeneration" $sourceGeneration "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($sourceBucket)/o/($sourceObject)/copyTo/b/($destinationBucket)/o/($destinationObject)" $qp)
   let body = {acl: $acl, bucket: $bucket, cacheControl: $cacheControl, componentCount: $componentCount, contentDisposition: $contentDisposition, contentEncoding: $contentEncoding, contentLanguage: $contentLanguage, contentType: $contentType, crc32c: $crc32c, customTime: $customTime, customerEncryption: $customerEncryption, etag: $etag, eventBasedHold: $eventBasedHold, generation: $generation, id: $id, kind: $kind, kmsKeyName: $kmsKeyName, md5Hash: $md5Hash, mediaLink: $mediaLink, metadata: $metadata, metageneration: $metageneration, name: $name, owner: $owner, retentionExpirationTime: $retentionExpirationTime, selfLink: $selfLink, size: $size, storageClass: $storageClass, temporaryHold: $temporaryHold, timeCreated: $timeCreated, timeDeleted: $timeDeleted, timeStorageClassUpdated: $timeStorageClassUpdated, updated: $updated} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2162,7 +2162,7 @@ export def "b-o-rewrite-to-b-o storageobjectsrewrite" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2220,7 +2220,7 @@ export def "b-o-rewrite-to-b-o storageobjectsrewrite" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "destinationKmsKeyName" $destinationKmsKeyName "scalar") (serialize-qp "destinationPredefinedAcl" $destinationPredefinedAcl "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifGenerationNotMatch" $ifGenerationNotMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "ifSourceGenerationMatch" $ifSourceGenerationMatch "scalar") (serialize-qp "ifSourceGenerationNotMatch" $ifSourceGenerationNotMatch "scalar") (serialize-qp "ifSourceMetagenerationMatch" $ifSourceMetagenerationMatch "scalar") (serialize-qp "ifSourceMetagenerationNotMatch" $ifSourceMetagenerationNotMatch "scalar") (serialize-qp "maxBytesRewrittenPerCall" $maxBytesRewrittenPerCall "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "rewriteToken" $rewriteToken "scalar") (serialize-qp "sourceGeneration" $sourceGeneration "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "destinationKmsKeyName" $destinationKmsKeyName "scalar") (serialize-qp "destinationPredefinedAcl" $destinationPredefinedAcl "scalar") (serialize-qp "ifGenerationMatch" $ifGenerationMatch "scalar") (serialize-qp "ifGenerationNotMatch" $ifGenerationNotMatch "scalar") (serialize-qp "ifMetagenerationMatch" $ifMetagenerationMatch "scalar") (serialize-qp "ifMetagenerationNotMatch" $ifMetagenerationNotMatch "scalar") (serialize-qp "ifSourceGenerationMatch" $ifSourceGenerationMatch "scalar") (serialize-qp "ifSourceGenerationNotMatch" $ifSourceGenerationNotMatch "scalar") (serialize-qp "ifSourceMetagenerationMatch" $ifSourceMetagenerationMatch "scalar") (serialize-qp "ifSourceMetagenerationNotMatch" $ifSourceMetagenerationNotMatch "scalar") (serialize-qp "maxBytesRewrittenPerCall" $maxBytesRewrittenPerCall "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "rewriteToken" $rewriteToken "scalar") (serialize-qp "sourceGeneration" $sourceGeneration "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/b/($sourceBucket)/o/($sourceObject)/rewriteTo/b/($destinationBucket)/o/($destinationObject)" $qp)
   let body = {acl: $acl, bucket: $bucket, cacheControl: $cacheControl, componentCount: $componentCount, contentDisposition: $contentDisposition, contentEncoding: $contentEncoding, contentLanguage: $contentLanguage, contentType: $contentType, crc32c: $crc32c, customTime: $customTime, customerEncryption: $customerEncryption, etag: $etag, eventBasedHold: $eventBasedHold, generation: $generation, id: $id, kind: $kind, kmsKeyName: $kmsKeyName, md5Hash: $md5Hash, mediaLink: $mediaLink, metadata: $metadata, metageneration: $metageneration, name: $name, owner: $owner, retentionExpirationTime: $retentionExpirationTime, selfLink: $selfLink, size: $size, storageClass: $storageClass, temporaryHold: $temporaryHold, timeCreated: $timeCreated, timeDeleted: $timeDeleted, timeStorageClassUpdated: $timeStorageClassUpdated, updated: $updated} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2243,7 +2243,7 @@ export def "channels-stop storagechannelsstop" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2264,7 +2264,7 @@ export def "channels-stop storagechannelsstop" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels/stop" $qp)
   let body = {address: $address, expiration: $expiration, id: $id, kind: $kind, params: $params, payload: $payload, resourceId: $resourceId, resourceUri: $resourceUri, token: $body_token, type: $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2288,7 +2288,7 @@ export def "projects-hmac-keys storageprojectshmacKeyslist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2303,7 +2303,7 @@ export def "projects-hmac-keys storageprojectshmacKeyslist" [
 ]: nothing -> record<items: table<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>, kind: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "serviceAccountEmail" $serviceAccountEmail "scalar") (serialize-qp "showDeletedKeys" $showDeletedKeys "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "serviceAccountEmail" $serviceAccountEmail "scalar") (serialize-qp "showDeletedKeys" $showDeletedKeys "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/hmacKeys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2325,7 +2325,7 @@ export def "projects-hmac-keys storageprojectshmacKeyscreate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2337,7 +2337,7 @@ export def "projects-hmac-keys storageprojectshmacKeyscreate" [
 ]: nothing -> record<kind: string, metadata: record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>, secret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "serviceAccountEmail" $serviceAccountEmail "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "serviceAccountEmail" $serviceAccountEmail "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/hmacKeys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2360,7 +2360,7 @@ export def "projects-hmac-keys storageprojectshmacKeysdelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2371,7 +2371,7 @@ export def "projects-hmac-keys storageprojectshmacKeysdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/hmacKeys/($accessId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2394,7 +2394,7 @@ export def "projects-hmac-keys storageprojectshmacKeysget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2405,7 +2405,7 @@ export def "projects-hmac-keys storageprojectshmacKeysget" [
 ]: nothing -> record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/hmacKeys/($accessId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2428,7 +2428,7 @@ export def "projects-hmac-keys storageprojectshmacKeysupdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2450,7 +2450,7 @@ export def "projects-hmac-keys storageprojectshmacKeysupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/hmacKeys/($accessId)" $qp)
   let body = {accessId: $body_accessId, etag: $etag, id: $id, kind: $kind, projectId: $body_projectId, selfLink: $selfLink, serviceAccountEmail: $serviceAccountEmail, state: $state, timeCreated: $timeCreated, updated: $updated} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2474,7 +2474,7 @@ export def "projects-service-account storageprojectsserviceAccountget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -2485,7 +2485,7 @@ export def "projects-service-account storageprojectsserviceAccountget" [
 ]: nothing -> record<email_address: string, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "userProject" $userProject "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/serviceAccount" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

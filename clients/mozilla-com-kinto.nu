@@ -241,13 +241,13 @@ export def "buckets buckets" [
   --before: int
   --id: string
   --last-modified: int
-  --qp-fields: list
+  --fields: list
   --If-Match: string
   --If-None-Match: string
 ]: nothing -> record<data: table<collection_schema: record, group_schema: record, record_schema: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/buckets" $qp)
   let extra_headers = {"If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -276,13 +276,13 @@ export def "buckets-monitor-collections-changes-records changess" [
   --before: int
   --id: string
   --last-modified: int
-  --qp-fields: list
+  --fields: list
   --If-Match: string
   --If-None-Match: string
 ]: nothing -> record<data: table<bucket: string, collection: string, host: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/buckets/monitor/collections/changes/records" $qp)
   let extra_headers = {"If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -341,13 +341,13 @@ export def "buckets-collections collections" [
   --before: int
   --id: string
   --last-modified: int
-  --qp-fields: list
+  --fields: list
   --If-Match: string
   --If-None-Match: string
 ]: nothing -> record<data: table<cache_expires: int, schema: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/buckets/($bucket_id)/collections" $qp)
   let extra_headers = {"If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -378,13 +378,13 @@ export def "buckets-collections-records records" [
   --before: int
   --id: string
   --last-modified: int
-  --qp-fields: list
+  --fields: list
   --If-Match: string
   --If-None-Match: string
 ]: nothing -> record<data: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/buckets/($bucket_id)/collections/($collection_id)/records" $qp)
   let extra_headers = {"If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -408,13 +408,13 @@ export def "buckets-collections-records record" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list
+  --fields: list
   --If-Match: string
   --If-None-Match: string
 ]: nothing -> record<data: record, permissions: record<read: list<string>, write: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "_fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/buckets/($bucket_id)/collections/($collection_id)/records/($id)" $qp)
   let extra_headers = {"If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -485,13 +485,13 @@ export def "buckets-collections collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list
+  --fields: list
   --If-Match: string
   --If-None-Match: string
 ]: nothing -> record<data: record<cache_expires: int, schema: record>, permissions: record<read: list<string>, record_create: list<string>, write: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "_fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/buckets/($bucket_id)/collections/($id)" $qp)
   let extra_headers = {"If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -521,13 +521,13 @@ export def "buckets-groups groups" [
   --before: int
   --id: string
   --last-modified: int
-  --qp-fields: list
+  --fields: list
   --If-Match: string
   --If-None-Match: string
 ]: nothing -> record<data: table<members: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/buckets/($bucket_id)/groups" $qp)
   let extra_headers = {"If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -550,13 +550,13 @@ export def "buckets-groups group" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list
+  --fields: list
   --If-Match: string
   --If-None-Match: string
 ]: nothing -> record<data: record<members: list<string>>, permissions: record<read: list<string>, write: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "_fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/buckets/($bucket_id)/groups/($id)" $qp)
   let extra_headers = {"If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -578,13 +578,13 @@ export def "buckets bucket" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list
+  --fields: list
   --If-Match: string
   --If-None-Match: string
 ]: nothing -> record<data: record<collection_schema: record, group_schema: record, record_schema: record>, permissions: record<collection_create: list<string>, group_create: list<string>, read: list<string>, write: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "_fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/buckets/($id)" $qp)
   let extra_headers = {"If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

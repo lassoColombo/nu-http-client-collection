@@ -234,11 +234,11 @@ export def "autocompletes get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # allows empty value
+  --query: string # allows empty value
 ]: nothing -> record<data: record<conversations: list<string>, locations: list<string>, matches: list<string>, people: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/autocompletes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -290,13 +290,13 @@ export def "conversations-searches post" [
   --gt-message-id: int # format: int32
   --limit: int # format: int32, default: 50
   --offset: int # format: int32, default: 0
-  --body-query: string
+  query: string
 ]: any -> record<data: table<message: record, relevance: record>, pagination: record<limit: float, offset: float, total_records: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations/searches")
-  let body = {date: $date, gt_message_id: $gt_message_id, limit: $limit, offset: $offset, query: $body_query} | compact
+  let body = {date: $date, gt_message_id: $gt_message_id, limit: $limit, offset: $offset, query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -467,13 +467,13 @@ export def "conversations-searches post-by-ID" [
   --gt-message-id: int # format: int32
   --limit: int # format: int32, default: 50
   --offset: int # format: int32, default: 0
-  --body-query: string
+  query: string
 ]: any -> record<data: table<message: record, relevance: record>, pagination: record<limit: float, offset: float, total_records: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/conversations/($ID)/searches")
-  let body = {date: $date, gt_message_id: $gt_message_id, limit: $limit, offset: $offset, query: $body_query} | compact
+  let body = {date: $date, gt_message_id: $gt_message_id, limit: $limit, offset: $offset, query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

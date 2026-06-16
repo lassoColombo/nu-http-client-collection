@@ -104,7 +104,7 @@ export def "addresses Addresses" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # e.g. ak_test
-  --qp-query: string # Specifies the address you wish to query. Query can be shortened to `q=`
+  --query: string # Specifies the address you wish to query. Query can be shortened to `q=`
   --limit: int # format: int32, default: 10, e.g. 5
   --page: int # format: int32, default: 0, e.g. 0
   --filter: string # e.g. line_1,line_2,line_3
@@ -131,7 +131,7 @@ export def "addresses Addresses" [
 ]: nothing -> record<code: int, message: string, result: record<hits: list<any>, limit: int, page: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "postcode_outward" $postcode_outward "scalar") (serialize-qp "postcode" $postcode "scalar") (serialize-qp "postcode_area" $postcode_area "scalar") (serialize-qp "postcode_sector" $postcode_sector "scalar") (serialize-qp "post_town" $post_town "scalar") (serialize-qp "uprn" $uprn "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "postcode_type" $postcode_type "scalar") (serialize-qp "su_organisation_indicator" $su_organisation_indicator "scalar") (serialize-qp "box" $box "scalar") (serialize-qp "bias_postcode_outward" $bias_postcode_outward "scalar") (serialize-qp "bias_postcode" $bias_postcode "scalar") (serialize-qp "bias_postcode_area" $bias_postcode_area "scalar") (serialize-qp "bias_postcode_sector" $bias_postcode_sector "scalar") (serialize-qp "bias_post_town" $bias_post_town "scalar") (serialize-qp "bias_thoroughfare" $bias_thoroughfare "scalar") (serialize-qp "bias_country" $bias_country "scalar") (serialize-qp "bias_lonlat" $bias_lonlat "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "postcode_outward" $postcode_outward "scalar") (serialize-qp "postcode" $postcode "scalar") (serialize-qp "postcode_area" $postcode_area "scalar") (serialize-qp "postcode_sector" $postcode_sector "scalar") (serialize-qp "post_town" $post_town "scalar") (serialize-qp "uprn" $uprn "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "postcode_type" $postcode_type "scalar") (serialize-qp "su_organisation_indicator" $su_organisation_indicator "scalar") (serialize-qp "box" $box "scalar") (serialize-qp "bias_postcode_outward" $bias_postcode_outward "scalar") (serialize-qp "bias_postcode" $bias_postcode "scalar") (serialize-qp "bias_postcode_area" $bias_postcode_area "scalar") (serialize-qp "bias_postcode_sector" $bias_postcode_sector "scalar") (serialize-qp "bias_post_town" $bias_post_town "scalar") (serialize-qp "bias_thoroughfare" $bias_thoroughfare "scalar") (serialize-qp "bias_country" $bias_country "scalar") (serialize-qp "bias_lonlat" $bias_lonlat "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/addresses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -152,7 +152,7 @@ export def "autocomplete-addresses AddressAutocomplete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # e.g. ak_test
-  --qp-query: string # Specifies the address you wish to query. Query can be shortened to `q=`
+  --query: string # Specifies the address you wish to query. Query can be shortened to `q=`
   --context: string
   --limit: int # Limits number of address suggestions unless a postcode is detected. In this instance entire list of addreses for that postcode is returned.  (format: int32, default: 10, e.g. 5)
   --postcode-outward: string # e.g. 1AA
@@ -177,7 +177,7 @@ export def "autocomplete-addresses AddressAutocomplete" [
 ]: nothing -> record<code: int, message: string, result: record<hits: list<any>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "postcode_outward" $postcode_outward "scalar") (serialize-qp "postcode" $postcode "scalar") (serialize-qp "postcode_area" $postcode_area "scalar") (serialize-qp "postcode_sector" $postcode_sector "scalar") (serialize-qp "post_town" $post_town "scalar") (serialize-qp "uprn" $uprn "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "postcode_type" $postcode_type "scalar") (serialize-qp "su_organisation_indicator" $su_organisation_indicator "scalar") (serialize-qp "box" $box "scalar") (serialize-qp "bias_postcode_outward" $bias_postcode_outward "scalar") (serialize-qp "bias_postcode" $bias_postcode "scalar") (serialize-qp "bias_postcode_area" $bias_postcode_area "scalar") (serialize-qp "bias_postcode_sector" $bias_postcode_sector "scalar") (serialize-qp "bias_post_town" $bias_post_town "scalar") (serialize-qp "bias_thoroughfare" $bias_thoroughfare "scalar") (serialize-qp "bias_country" $bias_country "scalar") (serialize-qp "bias_lonlat" $bias_lonlat "scalar") (serialize-qp "bias_ip" $bias_ip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "postcode_outward" $postcode_outward "scalar") (serialize-qp "postcode" $postcode "scalar") (serialize-qp "postcode_area" $postcode_area "scalar") (serialize-qp "postcode_sector" $postcode_sector "scalar") (serialize-qp "post_town" $post_town "scalar") (serialize-qp "uprn" $uprn "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "postcode_type" $postcode_type "scalar") (serialize-qp "su_organisation_indicator" $su_organisation_indicator "scalar") (serialize-qp "box" $box "scalar") (serialize-qp "bias_postcode_outward" $bias_postcode_outward "scalar") (serialize-qp "bias_postcode" $bias_postcode "scalar") (serialize-qp "bias_postcode_area" $bias_postcode_area "scalar") (serialize-qp "bias_postcode_sector" $bias_postcode_sector "scalar") (serialize-qp "bias_post_town" $bias_post_town "scalar") (serialize-qp "bias_thoroughfare" $bias_thoroughfare "scalar") (serialize-qp "bias_country" $bias_country "scalar") (serialize-qp "bias_lonlat" $bias_lonlat "scalar") (serialize-qp "bias_ip" $bias_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/autocomplete/addresses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -248,14 +248,14 @@ export def "cleanse-addresses AddressCleanse" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # e.g. ak_test
-  --body-query: string # Freeform address input to cleanse  (e.g. 10 Downing Street, London, SW2A 2BN)
+  query: string # Freeform address input to cleanse  (e.g. 10 Downing Street, London, SW2A 2BN)
 ]: any -> record<code: int, message: string, result: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cleanse/addresses" $qp)
-  let body = {query: $body_query} | compact
+  let body = {query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -276,11 +276,11 @@ export def "emails EmailValidation" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # e.g. ak_test
-  --qp-query: string # Specifies the email address to validate
+  --query: string # Specifies the email address to validate
 ]: nothing -> record<code: int, message: string, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/emails" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -487,11 +487,11 @@ export def "keys-licensees ListLicensees" [
   --starting-after: int # Specify ID of the licensee after which you would like to list results (format: int32)
   --user-token: string # e.g. uk_B59ScW1p1HHouf1VqclEPZUx
   --limit: int # Specify the maximum number of results to return per page. Default and maximum is `100`. (format: int32, default: 10, e.g. 5)
-  --qp-query: string # Filter result by licensee name. Query can be shortened to `q=`
+  --query: string # Filter result by licensee name. Query can be shortened to `q=`
 ]: nothing -> record<code: int, message: string, result: record<hasMore: bool, licensees: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "user_token" $user_token "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "user_token" $user_token "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/keys/($key)/licensees" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -688,11 +688,11 @@ export def "phone-numbers PhoneNumberValidation" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # e.g. ak_test
-  --qp-query: string # Specifies the phone number to validate. Phone number must include a country code in acceptable format. For instance, UK phone numbers should be suffixed `+44`, `44` or `0044`.
+  --query: string # Specifies the phone number to validate. Phone number must include a country code in acceptable format. For instance, UK phone numbers should be suffixed `+44`, `44` or `0044`.
 ]: nothing -> record<code: int, message: string, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/phone_numbers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -713,7 +713,7 @@ export def "places FindPlace" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # e.g. ak_test
-  --qp-query: string # Specifies the place you wish to query. Query can be shortened to `q=`
+  --query: string # Specifies the place you wish to query. Query can be shortened to `q=`
   --country-iso: string # e.g. GBR
   --bias-country-iso: string # e.g. GBR
   --bias-lonlat: string # e.g. -2.095,57.15,100
@@ -721,7 +721,7 @@ export def "places FindPlace" [
 ]: nothing -> record<code: int, message: string, result: record<hits: list<any>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "country_iso" $country_iso "scalar") (serialize-qp "bias_country_iso" $bias_country_iso "scalar") (serialize-qp "bias_lonlat" $bias_lonlat "scalar") (serialize-qp "bias_ip" $bias_ip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "country_iso" $country_iso "scalar") (serialize-qp "bias_country_iso" $bias_country_iso "scalar") (serialize-qp "bias_lonlat" $bias_lonlat "scalar") (serialize-qp "bias_ip" $bias_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/places" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -1218,7 +1218,7 @@ export def "repositories-commit-reports createOrUpdateReport" [
   --remote-link-enabled: oneof<nothing, bool> # If enabled, a remote link is created in Jira for the issue associated with the commit the report belongs to.
   --report-type: string@report-type-completer # The type of the report.
   --reporter: string # A string to describe the tool or company who created the report.
-  --body-result: string@result-completer # The state of the report. May be set to PENDING and later updated.
+  --result: string@result-completer # The state of the report. May be set to PENDING and later updated.
   --title: string # The title of the report.
   --updated-on: string # The timestamp when the report was updated. (format: date-time)
   --uuid: string # The UUID that can be used to identify the report.
@@ -1227,7 +1227,7 @@ export def "repositories-commit-reports createOrUpdateReport" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/reports/($reportId)")
-  let body = {type: $type, created_on: $created_on, data: $data, details: $details, external_id: $external_id, link: $link, logo_url: $logo_url, remote_link_enabled: $remote_link_enabled, report_type: $report_type, reporter: $reporter, result: $body_result, title: $title, updated_on: $updated_on, uuid: $uuid} | compact
+  let body = {type: $type, created_on: $created_on, data: $data, details: $details, external_id: $external_id, link: $link, logo_url: $logo_url, remote_link_enabled: $remote_link_enabled, report_type: $report_type, reporter: $reporter, result: $result, title: $title, updated_on: $updated_on, uuid: $uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1369,7 +1369,7 @@ export def "repositories-commit-reports-annotations createOrUpdateAnnotation" [
   --line: int # The line number that the annotation should belong to. If no line number is provided, then it will default to 0 and in a pull request it will appear at the top of the file specified by the path field.
   --link: string # A URL linking to the annotation in an external tool. (format: uri)
   --path: string # The path of the file on which this annotation should be placed. This is the path of the file relative to the git repository. If no path is provided, then it will appear in the overview modal on all pull requests where the tip of the branch is the given commit, regardless of which files were modified.
-  --body-result: string@result-completer-1 # The state of the report. May be set to PENDING and later updated.
+  --result: string@result-completer-1 # The state of the report. May be set to PENDING and later updated.
   --severity: string@severity-completer # The severity of the annotation.
   --summary: string # The message to display to users.
   --updated-on: string # The timestamp when the report was updated. (format: date-time)
@@ -1379,7 +1379,7 @@ export def "repositories-commit-reports-annotations createOrUpdateAnnotation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/reports/($reportId)/annotations/($annotationId)")
-  let body = {type: $type, annotation_type: $annotation_type, created_on: $created_on, details: $details, external_id: $external_id, line: $line, link: $link, path: $path, result: $body_result, severity: $severity, summary: $summary, updated_on: $updated_on, uuid: $uuid} | compact
+  let body = {type: $type, annotation_type: $annotation_type, created_on: $created_on, details: $details, external_id: $external_id, line: $line, link: $link, path: $path, result: $result, severity: $severity, summary: $summary, updated_on: $updated_on, uuid: $uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

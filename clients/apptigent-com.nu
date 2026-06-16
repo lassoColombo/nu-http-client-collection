@@ -1819,13 +1819,13 @@ export def "query-json QueryJson" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   input: string # XML or JSON string
-  --body-query: string # XPath or JSONPath query
+  query: string # XPath or JSONPath query
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/QueryJSON")
-  let body = {input: $input, query: $body_query} | compact
+  let body = {input: $input, query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1846,13 +1846,13 @@ export def "query-xml QueryXml" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   input: string # XML or JSON string
-  --body-query: string # XPath or JSONPath query
+  query: string # XPath or JSONPath query
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/QueryXML")
-  let body = {input: $input, query: $body_query} | compact
+  let body = {input: $input, query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

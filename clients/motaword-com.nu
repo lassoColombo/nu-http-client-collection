@@ -1243,13 +1243,13 @@ export def "continuous-projects-widgets createActiveWidget" [
   --url-mode: string # When a user changes locale (or when we automatically detect and change it for them), we will change the URL of the page they are in. We can either change the path of the URL to prefix it with the locale code, or we can add a query parameter to the URL. We also use this mode to detect the locale for the current page when a user directly loads a page. When NULL, locale detection from URL will be disabled (even then, if the user has selected a locale manually, and followUser is enabled, we will still automatically translate the page in user's locale.
   --use-cache: oneof<nothing, bool> # Should we make use of local browser cache for your visitors? We will refresh the cache when Active JS detects new activity in your project.
   --use-dummy-translations: oneof<nothing, bool> # When enabled, we will translate your website with dummy content, rather than actually using MT/TM.
-  --body-variables: string # Continuous project variable definitions
+  --variables: string # Continuous project variable definitions
 ]: any -> record<allow_hash_in_url: bool, allow_query_in_url: bool, auto_detect_source_language: bool, created_at: string, elements: string, follow_user: bool, force_cache_refresh_interval: bool, id: int, language_mappings: string, live: bool, modify_links: bool, name: string, optimize_per_page: bool, pages: string, path_regex: string, position: string, query_name: string, reboot_on_url_change: bool, restricted_domains: string, sections: string, test_mode: bool, theme: string, token: string, url_change_mode: string, url_mode: string, use_cache: bool, use_dummy_translations: bool, variables: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/continuous_projects/($projectId)/widgets")
-  let body = {allow_hash_in_url: $allow_hash_in_url, allow_query_in_url: $allow_query_in_url, auto_detect_source_language: $auto_detect_source_language, created_at: $created_at, elements: $elements, follow_user: $follow_user, force_cache_refresh_interval: $force_cache_refresh_interval, id: $id, language_mappings: $language_mappings, live: $live, modify_links: $modify_links, name: $name, optimize_per_page: $optimize_per_page, pages: $pages, path_regex: $path_regex, position: $position, query_name: $query_name, reboot_on_url_change: $reboot_on_url_change, restricted_domains: $restricted_domains, sections: $sections, test_mode: $test_mode, theme: $theme, token: $body_token, url_change_mode: $url_change_mode, url_mode: $url_mode, use_cache: $use_cache, use_dummy_translations: $use_dummy_translations, variables: $body_variables} | compact
+  let body = {allow_hash_in_url: $allow_hash_in_url, allow_query_in_url: $allow_query_in_url, auto_detect_source_language: $auto_detect_source_language, created_at: $created_at, elements: $elements, follow_user: $follow_user, force_cache_refresh_interval: $force_cache_refresh_interval, id: $id, language_mappings: $language_mappings, live: $live, modify_links: $modify_links, name: $name, optimize_per_page: $optimize_per_page, pages: $pages, path_regex: $path_regex, position: $position, query_name: $query_name, reboot_on_url_change: $reboot_on_url_change, restricted_domains: $restricted_domains, sections: $sections, test_mode: $test_mode, theme: $theme, token: $body_token, url_change_mode: $url_change_mode, url_mode: $url_mode, use_cache: $use_cache, use_dummy_translations: $use_dummy_translations, variables: $variables} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1346,13 +1346,13 @@ export def "continuous-projects-widgets updateActiveWidget" [
   --url-mode: string # When a user changes locale (or when we automatically detect and change it for them), we will change the URL of the page they are in. We can either change the path of the URL to prefix it with the locale code, or we can add a query parameter to the URL. We also use this mode to detect the locale for the current page when a user directly loads a page. When NULL, locale detection from URL will be disabled (even then, if the user has selected a locale manually, and followUser is enabled, we will still automatically translate the page in user's locale.
   --use-cache: oneof<nothing, bool> # Should we make use of local browser cache for your visitors? We will refresh the cache when Active JS detects new activity in your project.
   --use-dummy-translations: oneof<nothing, bool> # When enabled, we will translate your website with dummy content, rather than actually using MT/TM.
-  --body-variables: string # Continuous project variable definitions
+  --variables: string # Continuous project variable definitions
 ]: any -> record<allow_hash_in_url: bool, allow_query_in_url: bool, auto_detect_source_language: bool, created_at: string, elements: string, follow_user: bool, force_cache_refresh_interval: bool, id: int, language_mappings: string, live: bool, modify_links: bool, name: string, optimize_per_page: bool, pages: string, path_regex: string, position: string, query_name: string, reboot_on_url_change: bool, restricted_domains: string, sections: string, test_mode: bool, theme: string, token: string, url_change_mode: string, url_mode: string, use_cache: bool, use_dummy_translations: bool, variables: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/continuous_projects/($projectId)/widgets/($widgetId)")
-  let body = {allow_hash_in_url: $allow_hash_in_url, allow_query_in_url: $allow_query_in_url, auto_detect_source_language: $auto_detect_source_language, created_at: $created_at, elements: $elements, follow_user: $follow_user, force_cache_refresh_interval: $force_cache_refresh_interval, id: $id, language_mappings: $language_mappings, live: $live, modify_links: $modify_links, name: $name, optimize_per_page: $optimize_per_page, pages: $pages, path_regex: $path_regex, position: $position, query_name: $query_name, reboot_on_url_change: $reboot_on_url_change, restricted_domains: $restricted_domains, sections: $sections, test_mode: $test_mode, theme: $theme, token: $body_token, url_change_mode: $url_change_mode, url_mode: $url_mode, use_cache: $use_cache, use_dummy_translations: $use_dummy_translations, variables: $body_variables} | compact
+  let body = {allow_hash_in_url: $allow_hash_in_url, allow_query_in_url: $allow_query_in_url, auto_detect_source_language: $auto_detect_source_language, created_at: $created_at, elements: $elements, follow_user: $follow_user, force_cache_refresh_interval: $force_cache_refresh_interval, id: $id, language_mappings: $language_mappings, live: $live, modify_links: $modify_links, name: $name, optimize_per_page: $optimize_per_page, pages: $pages, path_regex: $path_regex, position: $position, query_name: $query_name, reboot_on_url_change: $reboot_on_url_change, restricted_domains: $restricted_domains, sections: $sections, test_mode: $test_mode, theme: $theme, token: $body_token, url_change_mode: $url_change_mode, url_mode: $url_mode, use_cache: $use_cache, use_dummy_translations: $use_dummy_translations, variables: $variables} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4527,14 +4527,14 @@ export def "search searchEverywhere" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search query term
+  --query: string # Search query term
   --include: list # Search in these entities. Current oprions are projects, documents, strings. Can be multiple. When not provided, we'll search through all entities.
   --page: int # format: int64, default: 1
   --per-page: int # format: int64, default: 10
 ]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, result: record<documents: list<record>, projects: list<record>, strings: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "include[]" $include "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "include[]" $include "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6015,13 +6015,13 @@ export def "user-groups updateUserGroup" [
   --url-mode: string # When a user changes locale (or when we automatically detect and change it for them), we will change the URL of the page they are in. We can either change the path of the URL to prefix it with the locale code, or we can add a query parameter to the URL. We also use this mode to detect the locale for the current page when a user directly loads a page. When NULL, locale detection from URL will be disabled (even then, if the user has selected a locale manually, and followUser is enabled, we will still automatically translate the page in user's locale.
   --use-cache: oneof<nothing, bool> # Should we make use of local browser cache for your visitors? We will refresh the cache when Active JS detects new activity in your project.
   --use-dummy-translations: oneof<nothing, bool> # When enabled, we will translate your website with dummy content, rather than actually using MT/TM.
-  --body-variables: string # Continuous project variable definitions
+  --variables: string # Continuous project variable definitions
 ]: any -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/($userId)/user-groups")
-  let body = {allow_hash_in_url: $allow_hash_in_url, allow_query_in_url: $allow_query_in_url, auto_detect_source_language: $auto_detect_source_language, created_at: $created_at, elements: $elements, follow_user: $follow_user, force_cache_refresh_interval: $force_cache_refresh_interval, id: $id, language_mappings: $language_mappings, live: $live, modify_links: $modify_links, name: $name, optimize_per_page: $optimize_per_page, pages: $pages, path_regex: $path_regex, position: $position, query_name: $query_name, reboot_on_url_change: $reboot_on_url_change, restricted_domains: $restricted_domains, sections: $sections, test_mode: $test_mode, theme: $theme, token: $body_token, url_change_mode: $url_change_mode, url_mode: $url_mode, use_cache: $use_cache, use_dummy_translations: $use_dummy_translations, variables: $body_variables} | compact
+  let body = {allow_hash_in_url: $allow_hash_in_url, allow_query_in_url: $allow_query_in_url, auto_detect_source_language: $auto_detect_source_language, created_at: $created_at, elements: $elements, follow_user: $follow_user, force_cache_refresh_interval: $force_cache_refresh_interval, id: $id, language_mappings: $language_mappings, live: $live, modify_links: $modify_links, name: $name, optimize_per_page: $optimize_per_page, pages: $pages, path_regex: $path_regex, position: $position, query_name: $query_name, reboot_on_url_change: $reboot_on_url_change, restricted_domains: $restricted_domains, sections: $sections, test_mode: $test_mode, theme: $theme, token: $body_token, url_change_mode: $url_change_mode, url_mode: $url_mode, use_cache: $use_cache, use_dummy_translations: $use_dummy_translations, variables: $variables} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

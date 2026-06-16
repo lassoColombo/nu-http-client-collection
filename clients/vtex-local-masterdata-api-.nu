@@ -654,7 +654,7 @@ export def "dataentities-search Searchdocuments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Fields that will be returned by document (default: email,firstName,document)
+  --fields: string # Fields that will be returned by document (default: email,firstName,document)
   --qp-where: string # Specification of filters. As seen below (default: firstName is not null)
   --schema: string # Enter with the name of the schema to filter documents by compatibility of the schema. (default: {{schema}})
   --keyword: string # String to search (default: String to search)
@@ -665,7 +665,7 @@ export def "dataentities-search Searchdocuments" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "_fields" $qp_fields "scalar") (serialize-qp "_where" $qp_where "scalar") (serialize-qp "_schema" $schema "scalar") (serialize-qp "_keyword" $keyword "scalar") (serialize-qp "_sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "_fields" $fields "scalar") (serialize-qp "_where" $qp_where "scalar") (serialize-qp "_schema" $schema "scalar") (serialize-qp "_keyword" $keyword "scalar") (serialize-qp "_sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/dataentities/($acronym)/search" $qp)
   let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept, "REST-Range": $REST_Range} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

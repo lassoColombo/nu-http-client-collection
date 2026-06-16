@@ -1403,11 +1403,11 @@ export def "networks-clients-latency-stats list" [
   --ssid: int # Filter results by SSID
   --vlan: int # Filter results by VLAN
   --apTag: string # Filter results by AP Tag
-  --qp-fields: string # Partial selection: If present, this call will return only the selected fields of ["rawDistribution", "avg"]. All fields will be returned by default. Selected fields must be entered as a comma separated string.
+  --fields: string # Partial selection: If present, this call will return only the selected fields of ["rawDistribution", "avg"]. All fields will be returned by default. Selected fields must be entered as a comma separated string.
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "apTag" $apTag "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "apTag" $apTag "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/networks/($networkId)/clients/latencyStats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1583,11 +1583,11 @@ export def "networks-clients-latency-stats get" [
   --ssid: int # Filter results by SSID
   --vlan: int # Filter results by VLAN
   --apTag: string # Filter results by AP Tag
-  --qp-fields: string # Partial selection: If present, this call will return only the selected fields of ["rawDistribution", "avg"]. All fields will be returned by default. Selected fields must be entered as a comma separated string.
+  --fields: string # Partial selection: If present, this call will return only the selected fields of ["rawDistribution", "avg"]. All fields will be returned by default. Selected fields must be entered as a comma separated string.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "apTag" $apTag "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "apTag" $apTag "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/networks/($networkId)/clients/($clientId)/latencyStats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1934,11 +1934,11 @@ export def "networks-devices-latency-stats list" [
   --ssid: int # Filter results by SSID
   --vlan: int # Filter results by VLAN
   --apTag: string # Filter results by AP Tag
-  --qp-fields: string # Partial selection: If present, this call will return only the selected fields of ["rawDistribution", "avg"]. All fields will be returned by default. Selected fields must be entered as a comma separated string.
+  --fields: string # Partial selection: If present, this call will return only the selected fields of ["rawDistribution", "avg"]. All fields will be returned by default. Selected fields must be entered as a comma separated string.
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "apTag" $apTag "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "apTag" $apTag "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/networks/($networkId)/devices/latencyStats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2059,11 +2059,11 @@ export def "networks-devices-latency-stats get" [
   --ssid: int # Filter results by SSID
   --vlan: int # Filter results by VLAN
   --apTag: string # Filter results by AP Tag
-  --qp-fields: string # Partial selection: If present, this call will return only the selected fields of ["rawDistribution", "avg"]. All fields will be returned by default. Selected fields must be entered as a comma separated string.
+  --fields: string # Partial selection: If present, this call will return only the selected fields of ["rawDistribution", "avg"]. All fields will be returned by default. Selected fields must be entered as a comma separated string.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "apTag" $apTag "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "apTag" $apTag "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/networks/($networkId)/devices/($serial)/latencyStats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2686,11 +2686,11 @@ export def "networks-latency-stats get" [
   --ssid: int # Filter results by SSID
   --vlan: int # Filter results by VLAN
   --apTag: string # Filter results by AP Tag
-  --qp-fields: string # Partial selection: If present, this call will return only the selected fields of ["rawDistribution", "avg"]. All fields will be returned by default. Selected fields must be entered as a comma separated string.
+  --fields: string # Partial selection: If present, this call will return only the selected fields of ["rawDistribution", "avg"]. All fields will be returned by default. Selected fields must be entered as a comma separated string.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "apTag" $apTag "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "apTag" $apTag "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/networks/($networkId)/latencyStats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3432,7 +3432,7 @@ export def "networks-sm-devices get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Additional fields that will be displayed for each device. Multiple fields can be passed in as comma separated values.     The default fields are: id, name, tags, ssid, wifiMac, osName, systemModel, uuid, and serialNumber. The additional fields are: ip,     systemType, availableDeviceCapacity, kioskAppName, biosVersion, lastConnected, missingAppsCount, userSuppliedAddress, location, lastUser,     ownerEmail, ownerUsername, publicIp, phoneNumber, diskInfoJson, deviceCapacity, isManaged, hadMdm, isSupervised, meid, imei, iccid,     simCarrierNetwork, cellularDataUsed, isHotspotEnabled, createdAt, batteryEstCharge, quarantined, avName, avRunning, asName, fwName,     isRooted, loginRequired, screenLockEnabled, screenLockDelay, autoLoginDisabled, autoTags, hasMdm, hasDesktopAgent, diskEncryptionEnabled,     hardwareEncryptionCaps, passCodeLock, usesHardwareKeystore, and androidSecurityPatchVersion.
+  --fields: string # Additional fields that will be displayed for each device. Multiple fields can be passed in as comma separated values.     The default fields are: id, name, tags, ssid, wifiMac, osName, systemModel, uuid, and serialNumber. The additional fields are: ip,     systemType, availableDeviceCapacity, kioskAppName, biosVersion, lastConnected, missingAppsCount, userSuppliedAddress, location, lastUser,     ownerEmail, ownerUsername, publicIp, phoneNumber, diskInfoJson, deviceCapacity, isManaged, hadMdm, isSupervised, meid, imei, iccid,     simCarrierNetwork, cellularDataUsed, isHotspotEnabled, createdAt, batteryEstCharge, quarantined, avName, avRunning, asName, fwName,     isRooted, loginRequired, screenLockEnabled, screenLockDelay, autoLoginDisabled, autoTags, hasMdm, hasDesktopAgent, diskEncryptionEnabled,     hardwareEncryptionCaps, passCodeLock, usesHardwareKeystore, and androidSecurityPatchVersion.
   --wifiMacs: string # Filter devices by wifi mac(s). Multiple wifi macs can be passed in as comma separated values.
   --serials: string # Filter devices by serial(s). Multiple serials can be passed in as comma separated values.
   --ids: string # Filter devices by id(s). Multiple ids can be passed in as comma separated values.
@@ -3442,7 +3442,7 @@ export def "networks-sm-devices get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "wifiMacs" $wifiMacs "scalar") (serialize-qp "serials" $serials "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "batchSize" $batchSize "scalar") (serialize-qp "batchToken" $batchToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "wifiMacs" $wifiMacs "scalar") (serialize-qp "serials" $serials "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "batchSize" $batchSize "scalar") (serialize-qp "batchToken" $batchToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/networks/($networkId)/sm/devices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

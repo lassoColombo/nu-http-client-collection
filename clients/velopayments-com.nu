@@ -379,11 +379,11 @@ export def "payor-links payorLinksV1" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --descendantsOfPayor: string # The Payor ID from which to start the query to show all descendants (format: uuid)
   --parentOfPayor: string # Query for the parent payor details for this payor id (format: uuid)
-  --qp-fields: string # <p>List of additional Payor fields to include in the response for each Payor</p> <p>The values of payorId and payorName are always included for each Payor by default</p> <p>You can add fields to the response for each payor by including them in the fields parameter separated by commas</p> <p>The supported fields are any combination of: primaryContactEmail,kycState</p>
+  --fields: string # <p>List of additional Payor fields to include in the response for each Payor</p> <p>The values of payorId and payorName are always included for each Payor by default</p> <p>You can add fields to the response for each payor by including them in the fields parameter separated by commas</p> <p>The supported fields are any combination of: primaryContactEmail,kycState</p>
 ]: nothing -> record<links: table<fromPayorId: string, linkId: string, linkType: string, toPayorId: string>, payors: table<kycState: string, payorId: string, payorName: string, primaryContactEmail: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "descendantsOfPayor" $descendantsOfPayor "scalar") (serialize-qp "parentOfPayor" $parentOfPayor "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "descendantsOfPayor" $descendantsOfPayor "scalar") (serialize-qp "parentOfPayor" $parentOfPayor "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/payorLinks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

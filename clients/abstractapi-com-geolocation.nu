@@ -102,11 +102,11 @@ export def "api get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string
   --ip-address: string # e.g. 195.154.25.40
-  --qp-fields: string # e.g. country,city,timezone
+  --fields: string # e.g. country,city,timezone
 ]: nothing -> record<city: string, city_geoname_id: int, connection: record<autonomous_system_number: int, autonomous_system_organization: string, connection_type: string, isp_name: string, organization_name: string>, continent: string, continent_code: string, continent_geoname_id: int, country: string, country_code: string, country_geoname_id: int, country_is_eu: bool, currency: record<currency_code: string, currency_name: string>, flag: record<emoji: string, png: string, svg: string, unicode: string>, ip_address: string, latitude: float, longitude: float, postal_code: string, region: string, region_geoname_id: int, region_iso_code: string, security: record<is_vpn: bool>, timezone: record<abbreviation: string, current_time: string, gmt_offset: int, is_dst: bool, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://ipgeolocation.abstractapi.com")
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "ip_address" $ip_address "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "ip_address" $ip_address "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

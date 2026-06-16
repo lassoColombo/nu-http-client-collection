@@ -546,13 +546,13 @@ export def "dataentities-documents-versions Listversions" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --load: oneof<nothing, bool> # If true, return all the fields in each version of the document (default: true)
-  --qp-fields: string # If `load` is true, the response will return only these specific fields (default: id,dataEntityId,isNewsletterOptIn,createdBy)
+  --fields: string # If `load` is true, the response will return only these specific fields (default: id,dataEntityId,isNewsletterOptIn,createdBy)
   --Content-Type: string # Type of the content being sent. (e.g. application/json)
   --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> table<date: string, document: record, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "load" $load "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "load" $load "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/dataentities/($dataEntityName)/documents/($id)/versions" $qp)
   let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -659,7 +659,7 @@ export def "dataentities-indices Putindices" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-fields: string # Comma-separted fields of the index
+  fields: string # Comma-separted fields of the index
   --multiple: oneof<nothing, bool> # Determines whether the values need to be unique. If false, values must be unique.
   name: string # Name to identify the index
 ]: any -> any {
@@ -667,7 +667,7 @@ export def "dataentities-indices Putindices" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/dataentities/($dataEntityName)/indices")
-  let body = {fields: $body_fields, multiple: $multiple, name: $name} | compact
+  let body = {fields: $fields, multiple: $multiple, name: $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -852,7 +852,7 @@ export def "dataentities-scroll Scrolldocuments" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Value of the header `X-VTEX-MD-TOKEN` returned in your first request. Send its value in this query string in the subsequent requests. The token has a timeout of 10 minutes, which refreshes after each new request. (default: {tokenValueExample})
-  --qp-fields: string # Fields that should be returned by document. Separate fields' names with commas. For example `_fields=email,firstName,document`. You can also use `_all` to fetch all fields. (default: email,firstName,document)
+  --fields: string # Fields that should be returned by document. Separate fields' names with commas. For example `_fields=email,firstName,document`. You can also use `_all` to fetch all fields. (default: email,firstName,document)
   --qp-where: string # Filter specification. (e.g. firstName is not null.)
   --schema: string # Name of the schema the document to be created needs to be compliant with. (e.g. schema)
   --keyword: string # String to search. Use quotes for a partial query. For example, `_keyword=Maria` or `_keyword="Maria"`. (e.g. String to search)
@@ -863,7 +863,7 @@ export def "dataentities-scroll Scrolldocuments" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "_token" $qp_token "scalar") (serialize-qp "_fields" $qp_fields "scalar") (serialize-qp "_where" $qp_where "scalar") (serialize-qp "_schema" $schema "scalar") (serialize-qp "_keyword" $keyword "scalar") (serialize-qp "_sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "_token" $qp_token "scalar") (serialize-qp "_fields" $fields "scalar") (serialize-qp "_where" $qp_where "scalar") (serialize-qp "_schema" $schema "scalar") (serialize-qp "_keyword" $keyword "scalar") (serialize-qp "_sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/dataentities/($dataEntityName)/scroll" $qp)
   let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept, "REST-Range": $REST_Range} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -886,7 +886,7 @@ export def "dataentities-search Searchdocuments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Fields that should be returned by document. Separate fields' names with commas. For example `_fields=email,firstName,document`. You can also use `_all` to fetch all fields. (default: email,firstName,document)
+  --fields: string # Fields that should be returned by document. Separate fields' names with commas. For example `_fields=email,firstName,document`. You can also use `_all` to fetch all fields. (default: email,firstName,document)
   --qp-where: string # Filter specification. (e.g. firstName is not null.)
   --schema: string # Name of the schema the document to be created needs to be compliant with. (e.g. schema)
   --keyword: string # String to search. Use quotes for a partial query. For example, `_keyword=Maria` or `_keyword="Maria"`. (e.g. String to search)
@@ -897,7 +897,7 @@ export def "dataentities-search Searchdocuments" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "_fields" $qp_fields "scalar") (serialize-qp "_where" $qp_where "scalar") (serialize-qp "_schema" $schema "scalar") (serialize-qp "_keyword" $keyword "scalar") (serialize-qp "_sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "_fields" $fields "scalar") (serialize-qp "_where" $qp_where "scalar") (serialize-qp "_schema" $schema "scalar") (serialize-qp "_keyword" $keyword "scalar") (serialize-qp "_sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/dataentities/($dataEntityName)/search" $qp)
   let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept, "REST-Range": $REST_Range} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

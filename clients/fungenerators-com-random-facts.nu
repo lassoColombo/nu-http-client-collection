@@ -359,13 +359,13 @@ export def "fact-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Text to search for in the facts (format: string)
+  --query: string # Text to search for in the facts (format: string)
   --category: string # Category to get the fact from (format: string)
   --subcategory: string # Sub Category to get the fact from (format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-fungenerators-api-secret"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "subcategory" $subcategory "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "subcategory" $subcategory "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fact/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

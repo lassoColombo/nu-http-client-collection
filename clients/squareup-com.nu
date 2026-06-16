@@ -835,13 +835,13 @@ export def "bookings-availability-search SearchAvailability" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-query: record # Query conditions to search for availabilities of bookings. — shape: {filter: record}
+  query: record # Query conditions to search for availabilities of bookings. — shape: {filter: record}
 ]: any -> record<availabilities: table<appointment_segments: list, location_id: string, start_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/bookings/availability/search")
-  let body = {query: $body_query} | compact
+  let body = {query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1412,13 +1412,13 @@ export def "catalog-search SearchCatalogObjects" [
   --include-related-objects: oneof<nothing, bool> # If `true`, the response will include additional objects that are related to the requested object, as follows:  If a CatalogItem is returned in the object field of the response, its associated CatalogCategory, CatalogTax objects, CatalogImage objects and CatalogModifierList objects will be included in the `related_objects` field of the response.  If a CatalogItemVariation is returned in the object field of the response, its parent CatalogItem will be included in the `related_objects` field of the response.
   --limit: int # A limit on the number of results to be returned in a single page. The limit is advisory - the implementation may return more or fewer results. If the supplied limit is negative, zero, or is higher than the maximum limit of 1,000, it will be ignored.
   --object-types: list # The desired set of object types to appear in the search results.
-  --body-query: record # A query composed of one or more different types of filters to narrow the scope of targeted objects when calling the `SearchCatalogObjects` endpoint.  Although a query can have multiple filters, only certain query types can be combined per call to [SearchCatalogObjects](https://developer.squareup.com/reference/square_2021-08-18/catalog-api/search-catalog-objects). Any combination of the following types may be used together: - [exact_query](https://developer.squareup.com/reference/square_2021-08-18/objects/CatalogQueryExact) - [prefix_query](https://developer.squareup.com/reference/square_2021-08-18/objects/CatalogQueryPrefix) - [range_query](https://developer.squareup.com/reference/square_2021-08-18/objects/CatalogQueryRange) - [sorted_attribute_query](https://developer.squareup.com/reference/square_2021-08-18/objects/CatalogQuerySortedAttribute) - [text_query](https://developer.squareup.com/reference/square_2021-08-18/objects/CatalogQueryText) All other query types cannot be combined with any others.  When a query filter is based on an attribute, the attribute must be searchable. Searchable attributes are listed as follows, along their parent types that can be searched for with applicable query filters.  * Searchable attribute and objects queryable by searchable attributes ** - `name`:  `CatalogItem`, `CatalogItemVariation`, `CatalogCategory`, `CatalogTax`, `CatalogDiscount`, `CatalogModifier`, 'CatalogModifierList`, `CatalogItemOption`, `CatalogItemOptionValue` - `description`: `CatalogItem`, `CatalogItemOptionValue` - `abbreviation`: `CatalogItem` - `upc`: `CatalogItemVariation` - `sku`: `CatalogItemVariation` - `caption`: `CatalogImage` - `display_name`: `CatalogItemOption`  For example, to search for [CatalogItem](https://developer.squareup.com/reference/square_2021-08-18/objects/CatalogItem) objects by searchable attributes, you can use the `"name"`, `"description"`, or `"abbreviation"` attribute in an applicable query filter. — shape: {exact_query?: record, item_variations_for_item_option_values_query?: record, items_for_item_options_query?: record, items_for_modifier_list_query?: record, items_for_tax_query?: record, prefix_query?: record, range_query?: record, set_query?: record, sorted_attribute_query?: record, text_query?: record}
+  --query: record # A query composed of one or more different types of filters to narrow the scope of targeted objects when calling the `SearchCatalogObjects` endpoint.  Although a query can have multiple filters, only certain query types can be combined per call to [SearchCatalogObjects](https://developer.squareup.com/reference/square_2021-08-18/catalog-api/search-catalog-objects). Any combination of the following types may be used together: - [exact_query](https://developer.squareup.com/reference/square_2021-08-18/objects/CatalogQueryExact) - [prefix_query](https://developer.squareup.com/reference/square_2021-08-18/objects/CatalogQueryPrefix) - [range_query](https://developer.squareup.com/reference/square_2021-08-18/objects/CatalogQueryRange) - [sorted_attribute_query](https://developer.squareup.com/reference/square_2021-08-18/objects/CatalogQuerySortedAttribute) - [text_query](https://developer.squareup.com/reference/square_2021-08-18/objects/CatalogQueryText) All other query types cannot be combined with any others.  When a query filter is based on an attribute, the attribute must be searchable. Searchable attributes are listed as follows, along their parent types that can be searched for with applicable query filters.  * Searchable attribute and objects queryable by searchable attributes ** - `name`:  `CatalogItem`, `CatalogItemVariation`, `CatalogCategory`, `CatalogTax`, `CatalogDiscount`, `CatalogModifier`, 'CatalogModifierList`, `CatalogItemOption`, `CatalogItemOptionValue` - `description`: `CatalogItem`, `CatalogItemOptionValue` - `abbreviation`: `CatalogItem` - `upc`: `CatalogItemVariation` - `sku`: `CatalogItemVariation` - `caption`: `CatalogImage` - `display_name`: `CatalogItemOption`  For example, to search for [CatalogItem](https://developer.squareup.com/reference/square_2021-08-18/objects/CatalogItem) objects by searchable attributes, you can use the `"name"`, `"description"`, or `"abbreviation"` attribute in an applicable query filter. — shape: {exact_query?: record, item_variations_for_item_option_values_query?: record, items_for_item_options_query?: record, items_for_modifier_list_query?: record, items_for_tax_query?: record, prefix_query?: record, range_query?: record, set_query?: record, sorted_attribute_query?: record, text_query?: record}
 ]: any -> record<cursor: string, errors: table<category: string, code: string, detail: string, field: string>, latest_time: string, objects: table<absent_at_location_ids: list, catalog_v1_ids: list, category_data: record, custom_attribute_definition_data: record, custom_attribute_values: record, discount_data: record, id: string, image_data: record, image_id: string, is_deleted: bool, item_data: record, item_option_data: record, item_option_value_data: record, item_variation_data: record, measurement_unit_data: record, modifier_data: record, modifier_list_data: record, present_at_all_locations: bool, present_at_location_ids: list, pricing_rule_data: record, product_set_data: record, quick_amounts_settings_data: record, subscription_plan_data: record, tax_data: record, time_period_data: record, type: string, updated_at: string, version: int>, related_objects: table<absent_at_location_ids: list, catalog_v1_ids: list, category_data: record, custom_attribute_definition_data: record, custom_attribute_values: record, discount_data: record, id: string, image_data: record, image_id: string, is_deleted: bool, item_data: record, item_option_data: record, item_option_value_data: record, item_variation_data: record, measurement_unit_data: record, modifier_data: record, modifier_list_data: record, present_at_all_locations: bool, present_at_location_ids: list, pricing_rule_data: record, product_set_data: record, quick_amounts_settings_data: record, subscription_plan_data: record, tax_data: record, time_period_data: record, type: string, updated_at: string, version: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/catalog/search")
-  let body = {begin_time: $begin_time, cursor: $cursor, include_deleted_objects: $include_deleted_objects, include_related_objects: $include_related_objects, limit: $limit, object_types: $object_types, query: $body_query} | compact
+  let body = {begin_time: $begin_time, cursor: $cursor, include_deleted_objects: $include_deleted_objects, include_related_objects: $include_related_objects, limit: $limit, object_types: $object_types, query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1723,13 +1723,13 @@ export def "customers-search SearchCustomers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Include the pagination cursor in subsequent calls to this endpoint to retrieve the next set of results associated with the original query.  For more information, see [Pagination](https://developer.squareup.com/docs/working-with-apis/pagination).
   --limit: int # The maximum number of results to return in a single page. This limit is advisory. The response might contain more or fewer results.  The limit is ignored if it is less than the minimum or greater than the maximum value. The default value is 100.  For more information, see [Pagination](https://developer.squareup.com/docs/working-with-apis/pagination). (format: int64)
-  --body-query: record # Represents a query (including filtering criteria, sorting criteria, or both) used to search for customer profiles. — shape: {filter?: record, sort?: record}
+  --query: record # Represents a query (including filtering criteria, sorting criteria, or both) used to search for customer profiles. — shape: {filter?: record, sort?: record}
 ]: any -> record<cursor: string, customers: table<address: record, birthday: string, cards: list, company_name: string, created_at: string, creation_source: string, email_address: string, family_name: string, given_name: string, group_ids: list, id: string, nickname: string, note: string, phone_number: string, preferences: record, reference_id: string, segment_ids: list, updated_at: string, version: int>, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/customers/search")
-  let body = {cursor: $cursor, limit: $limit, query: $body_query} | compact
+  let body = {cursor: $cursor, limit: $limit, query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2960,13 +2960,13 @@ export def "invoices-search SearchInvoices" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pagination cursor returned by a previous call to this endpoint.  Provide this cursor to retrieve the next set of results for your original query.  For more information, see [Pagination](https://developer.squareup.com/docs/working-with-apis/pagination).
   --limit: int # The maximum number of invoices to return (200 is the maximum `limit`).  If not provided, the server uses a default limit of 100 invoices.
-  --body-query: record # Describes query criteria for searching invoices. — shape: {filter: record, sort?: record}
+  query: record # Describes query criteria for searching invoices. — shape: {filter: record, sort?: record}
 ]: any -> record<cursor: string, errors: table<category: string, code: string, detail: string, field: string>, invoices: table<accepted_payment_methods: record, created_at: string, custom_fields: list, delivery_method: any, description: string, id: string, invoice_number: string, location_id: string, next_payment_amount_money: record, order_id: string, payment_requests: list, primary_recipient: record, public_url: string, scheduled_at: string, status: string, subscription_id: string, timezone: string, title: string, updated_at: string, version: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/invoices/search")
-  let body = {cursor: $cursor, limit: $limit, query: $body_query} | compact
+  let body = {cursor: $cursor, limit: $limit, query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3327,13 +3327,13 @@ export def "labor-shifts-search SearchShifts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # An opaque cursor for fetching the next page.
   --limit: int # The number of resources in a page (200 by default).
-  --body-query: record # The parameters of a `Shift` search query, which includes filter and sort options. — shape: {filter?: record, sort?: record}
+  --query: record # The parameters of a `Shift` search query, which includes filter and sort options. — shape: {filter?: record, sort?: record}
 ]: any -> record<cursor: string, errors: table<category: string, code: string, detail: string, field: string>, shifts: table<breaks: list, created_at: string, employee_id: string, end_at: string, id: string, location_id: string, start_at: string, status: string, team_member_id: string, timezone: string, updated_at: string, version: int, wage: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/labor/shifts/search")
-  let body = {cursor: $cursor, limit: $limit, query: $body_query} | compact
+  let body = {cursor: $cursor, limit: $limit, query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3900,13 +3900,13 @@ export def "loyalty-accounts-search SearchLoyaltyAccounts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pagination cursor returned by a previous call to  this endpoint. Provide this to retrieve the next set of  results for the original query.  For more information,  see [Pagination](https://developer.squareup.com/docs/basics/api101/pagination).
   --limit: int # The maximum number of results to include in the response.
-  --body-query: record # The search criteria for the loyalty accounts. — shape: {customer_ids?: list, mappings?: list}
+  --query: record # The search criteria for the loyalty accounts. — shape: {customer_ids?: list, mappings?: list}
 ]: any -> record<cursor: string, errors: table<category: string, code: string, detail: string, field: string>, loyalty_accounts: table<balance: int, created_at: string, customer_id: string, enrolled_at: string, expiring_point_deadlines: list, id: string, lifetime_points: int, mapping: record, program_id: string, updated_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/loyalty/accounts/search")
-  let body = {cursor: $cursor, limit: $limit, query: $body_query} | compact
+  let body = {cursor: $cursor, limit: $limit, query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4011,13 +4011,13 @@ export def "loyalty-events-search SearchLoyaltyEvents" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this to retrieve the next set of results for your original query. For more information, see [Pagination](https://developer.squareup.com/docs/basics/api101/pagination).
   --limit: int # The maximum number of results to include in the response.  The last page might contain fewer events.  The default is 30 events.
-  --body-query: record # Represents a query used to search for loyalty events. — shape: {filter?: record}
+  --query: record # Represents a query used to search for loyalty events. — shape: {filter?: record}
 ]: any -> record<cursor: string, errors: table<category: string, code: string, detail: string, field: string>, events: table<accumulate_points: record, adjust_points: record, create_reward: record, created_at: string, delete_reward: record, expire_points: record, id: string, location_id: string, loyalty_account_id: string, other_event: record, redeem_reward: record, source: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/loyalty/events/search")
-  let body = {cursor: $cursor, limit: $limit, query: $body_query} | compact
+  let body = {cursor: $cursor, limit: $limit, query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4142,13 +4142,13 @@ export def "loyalty-rewards-search SearchLoyaltyRewards" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pagination cursor returned by a previous call to  this endpoint. Provide this to retrieve the next set of  results for the original query. For more information,  see [Pagination](https://developer.squareup.com/docs/basics/api101/pagination).
   --limit: int # The maximum number of results to return in the response.
-  --body-query: record # The set of search requirements. — shape: {loyalty_account_id: string, status?: string}
+  --query: record # The set of search requirements. — shape: {loyalty_account_id: string, status?: string}
 ]: any -> record<cursor: string, errors: table<category: string, code: string, detail: string, field: string>, rewards: table<created_at: string, id: string, loyalty_account_id: string, order_id: string, points: int, redeemed_at: string, reward_tier_id: string, status: string, updated_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/loyalty/rewards/search")
-  let body = {cursor: $cursor, limit: $limit, query: $body_query} | compact
+  let body = {cursor: $cursor, limit: $limit, query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4377,14 +4377,14 @@ export def "orders-search SearchOrders" [
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this cursor to retrieve the next set of results for your original query. For more information, see [Pagination](https://developer.squareup.com/docs/basics/api101/pagination).
   --limit: int # The maximum number of results to be returned in a single page. It is possible to receive fewer results than the specified limit on a given page.  Default: `500`
   --location-ids: list # The location IDs for the orders to query. All locations must belong to the same merchant.  Min: 1 location ID.  Max: 10 location IDs.
-  --body-query: record # Contains query criteria for the search. — shape: {filter?: record, sort?: record}
+  --query: record # Contains query criteria for the search. — shape: {filter?: record, sort?: record}
   --return-entries: oneof<nothing, bool> # A Boolean that controls the format of the search results. If `true`, `SearchOrders` returns [OrderEntry](https://developer.squareup.com/reference/square_2021-08-18/objects/OrderEntry) objects. If `false`, `SearchOrders` returns complete order objects.  Default: `false`.
 ]: any -> record<cursor: string, errors: table<category: string, code: string, detail: string, field: string>, order_entries: table<location_id: string, order_id: string, version: int>, orders: table<closed_at: string, created_at: string, customer_id: string, discounts: list, fulfillments: list, id: string, line_items: list, location_id: string, metadata: record, net_amounts: record, pricing_options: record, reference_id: string, refunds: list, return_amounts: record, returns: list, rewards: list, rounding_adjustment: record, service_charges: list, source: record, state: string, taxes: list, tenders: list, total_discount_money: record, total_money: record, total_service_charge_money: record, total_tax_money: record, total_tip_money: record, updated_at: string, version: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/orders/search")
-  let body = {cursor: $cursor, limit: $limit, location_ids: $location_ids, query: $body_query, return_entries: $return_entries} | compact
+  let body = {cursor: $cursor, limit: $limit, location_ids: $location_ids, query: $query, return_entries: $return_entries} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4912,13 +4912,13 @@ export def "subscriptions-search SearchSubscriptions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this to retrieve the next set of results for the original query.  For more information, see [Pagination](https://developer.squareup.com/docs/working-with-apis/pagination).
   --limit: int # The upper limit on the number of subscriptions to return in the response.  Default: `200`
-  --body-query: record # Represents a query (including filtering criteria) used to search for subscriptions. — shape: {filter?: record}
+  --query: record # Represents a query (including filtering criteria) used to search for subscriptions. — shape: {filter?: record}
 ]: any -> record<cursor: string, errors: table<category: string, code: string, detail: string, field: string>, subscriptions: table<canceled_date: string, card_id: string, charged_through_date: string, created_at: string, customer_id: string, id: string, invoice_ids: list, location_id: string, plan_id: string, price_override_money: record, start_date: string, status: string, tax_percentage: string, timezone: string, version: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/subscriptions/search")
-  let body = {cursor: $cursor, limit: $limit, query: $body_query} | compact
+  let body = {cursor: $cursor, limit: $limit, query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5144,13 +5144,13 @@ export def "team-members-search SearchTeamMembers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # The opaque cursor for fetching the next page. For more information, see [pagination](https://developer.squareup.com/docs/working-with-apis/pagination).
   --limit: int # The maximum number of `TeamMember` objects in a page (100 by default).
-  --body-query: record # Represents the parameters in a search for `TeamMember` objects. — shape: {filter?: record}
+  --query: record # Represents the parameters in a search for `TeamMember` objects. — shape: {filter?: record}
 ]: any -> record<cursor: string, errors: table<category: string, code: string, detail: string, field: string>, team_members: table<assigned_locations: record, created_at: string, email_address: string, family_name: string, given_name: string, id: string, is_owner: bool, phone_number: string, reference_id: string, status: string, updated_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/team-members/search")
-  let body = {cursor: $cursor, limit: $limit, query: $body_query} | compact
+  let body = {cursor: $cursor, limit: $limit, query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5303,13 +5303,13 @@ export def "terminals-checkouts-search SearchTerminalCheckouts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this cursor to retrieve the next set of results for the original query. See [Pagination](https://developer.squareup.com/docs/basics/api101/pagination) for more information.
   --limit: int # Limits the number of results returned for a single request.
-  --body-query: record # shape: {filter?: record, sort?: record}
+  --query: record # shape: {filter?: record, sort?: record}
 ]: any -> record<checkouts: table<amount_money: record, app_id: string, cancel_reason: string, created_at: string, deadline_duration: string, device_options: record, id: string, location_id: string, note: string, payment_ids: list, payment_type: string, reference_id: string, status: string, updated_at: string>, cursor: string, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/terminals/checkouts/search")
-  let body = {cursor: $cursor, limit: $limit, query: $body_query} | compact
+  let body = {cursor: $cursor, limit: $limit, query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5406,13 +5406,13 @@ export def "terminals-refunds-search SearchTerminalRefunds" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this cursor to retrieve the next set of results for the original query.
   --limit: int # Limits the number of results returned for a single request.
-  --body-query: record # shape: {filter?: record, sort?: record}
+  --query: record # shape: {filter?: record, sort?: record}
 ]: any -> record<cursor: string, errors: table<category: string, code: string, detail: string, field: string>, refunds: table<amount_money: record, app_id: string, cancel_reason: string, created_at: string, deadline_duration: string, device_id: string, id: string, location_id: string, order_id: string, payment_id: string, reason: string, refund_id: string, status: string, updated_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/terminals/refunds/search")
-  let body = {cursor: $cursor, limit: $limit, query: $body_query} | compact
+  let body = {cursor: $cursor, limit: $limit, query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

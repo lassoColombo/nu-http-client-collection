@@ -168,14 +168,14 @@ export def "artists-images get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --artist-name: string # Name of artist for desired images (nullable)
-  --qp-fields: list # Comma separated list of fields. Allows restricting which fields are returned. If no fields are selected, the summary_set of fields are returned. (nullable)
+  --fields: list # Comma separated list of fields. Allows restricting which fields are returned. If no fields are selected, the summary_set of fields are returned. (nullable)
   --page: int # Identifies page to return. Default page is 1. (format: int32, default: 1)
   --page-size: int # Specifies page size. Default page_size is 10, maximum page_size is 100. (format: int32, default: 10)
   --Accept-Language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "artist_name" $artist_name "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "artist_name" $artist_name "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/artists/images" $qp)
   let extra_headers = {"Accept-Language": $Accept_Language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -197,14 +197,14 @@ export def "artists-videos get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --artist-name: string # Name of artist for desired images (nullable)
-  --qp-fields: list # Comma separated list of fields. Allows restricting which fields are returned. If no fields are selected, the summary_set of fields are returned. (nullable)
+  --fields: list # Comma separated list of fields. Allows restricting which fields are returned. If no fields are selected, the summary_set of fields are returned. (nullable)
   --page: int # Identifies page to return. Default page is 1. (format: int32, default: 1)
   --page-size: int # Specifies page size. Default page_size is 10, maximum page_size is 100. (format: int32, default: 10)
   --Accept-Language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "artist_name" $artist_name "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "artist_name" $artist_name "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/artists/videos" $qp)
   let extra_headers = {"Accept-Language": $Accept_Language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -851,12 +851,12 @@ export def "events list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # A comma separated list of event ids. (nullable)
-  --qp-fields: list # A comma separated list of fields to return in the response. (nullable)
+  --fields: list # A comma separated list of fields to return in the response. (nullable)
   --Accept-Language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/events" $qp)
   let extra_headers = {"Accept-Language": $Accept_Language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -878,12 +878,12 @@ export def "events get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma separated list of fields to return in the response. (nullable)
+  --fields: list # A comma separated list of fields to return in the response. (nullable)
   --Accept-Language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/v3/events/($id)" $qp)
   let extra_headers = {"Accept-Language": $Accept_Language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -905,12 +905,12 @@ export def "images list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Specifies one or more image ids to return. Use comma delimiter when requesting multiple ids.  Maximum of 100 ids. (nullable)
-  --qp-fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes, height, and width returned by 'download_sizes' field are estimates. (nullable)
+  --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes, height, and width returned by 'download_sizes' field are estimates. (nullable)
   --Accept-Language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
 ]: nothing -> record<images: any, images_not_found: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/images" $qp)
   let extra_headers = {"Accept-Language": $Accept_Language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -932,12 +932,12 @@ export def "images get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes, height, and width returned by 'download_sizes' field are estimates. (nullable)
+  --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes, height, and width returned by 'download_sizes' field are estimates. (nullable)
   --Accept-Language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
 ]: nothing -> record<images: any, images_not_found: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/v3/images/($id)" $qp)
   let extra_headers = {"Accept-Language": $Accept_Language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -986,14 +986,14 @@ export def "images-same-series get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes, height, and width returned by 'download_sizes' field are estimates. (nullable)
+  --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes, height, and width returned by 'download_sizes' field are estimates. (nullable)
   --page: int # Identifies page to return. Default is 1. (format: int32, default: 1)
   --page-size: int # Specifies page size. Default is 30, maximum page_size is 100. (format: int32, default: 30)
   --Accept-Language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
 ]: nothing -> record<images: table<allowed_use: record, alternative_ids: record, artist: string, asset_family: string, call_for_image: bool, caption: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_camera_shot: string, date_created: string, display_sizes: list, download_product: string, editorial_segments: list, event_ids: list, graphical_style: string, id: string, istock_licenses: list, keywords: list, largest_downloads: list, license_model: string, max_dimensions: record, orientation: string, people: list, product_types: list, quality_rank: int, referral_destinations: list, title: string, uri_oembed: string>, related_searches: table<phrase: string, url: string>, result_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v3/images/($id)/same-series" $qp)
   let extra_headers = {"Accept-Language": $Accept_Language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1015,14 +1015,14 @@ export def "images-similar get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes, height, and width returned by 'download_sizes' field are estimates. (nullable)
+  --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes, height, and width returned by 'download_sizes' field are estimates. (nullable)
   --page: int # Identifies page to return. Default is 1. (format: int32, default: 1)
   --page-size: int # Specifies page size. Default is 30, maximum page_size is 100. (format: int32, default: 30)
   --Accept-Language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
 ]: nothing -> record<images: table<allowed_use: record, alternative_ids: record, artist: string, asset_family: string, call_for_image: bool, caption: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_camera_shot: string, date_created: string, display_sizes: list, download_product: string, editorial_segments: list, event_ids: list, graphical_style: string, id: string, istock_licenses: list, keywords: list, largest_downloads: list, license_model: string, max_dimensions: record, orientation: string, people: list, product_types: list, quality_rank: int, referral_destinations: list, title: string, uri_oembed: string>, related_searches: table<phrase: string, url: string>, result_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v3/images/($id)/similar" $qp)
   let extra_headers = {"Accept-Language": $Accept_Language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1068,12 +1068,12 @@ export def "products get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # Comma separated list of fields. Allows product download requirements to be returned. (nullable)
+  --fields: list # Comma separated list of fields. Allows product download requirements to be returned. (nullable)
   --Accept-Language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
 ]: nothing -> record<products: table<agreement_name: string, application_website: string, credits_remaining: int, download_limit: int, download_limit_duration: string, download_limit_reset_utc_date: string, download_requirements: record, downloads_remaining: int, expiration_utc_date: string, id: int, imagepack_resolution: string, name: string, overage: record, status: string, team_credits: int, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/products" $qp)
   let extra_headers = {"Accept-Language": $Accept_Language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1152,7 +1152,7 @@ export def "search-events get" [
   --editorial-segment: string@editorial-segment-completer # Filters to events with a matching editorial segment.
   --date-from: string # Filters to events that start on or after this date. Use ISO 8601 format (e.g., 1999-12-31). Defaults to UTC unless otherwise specified. (nullable, format: date-time)
   --date-to: string # Filters to events that start on or before this date. Use ISO 8601 format (e.g., 1999-12-31). Defaults to UTC unless otherwise specified. (nullable, format: date-time)
-  --qp-fields: list # Specifies fields to return. Default set is 'id','name','start_date'. (nullable)
+  --fields: list # Specifies fields to return. Default set is 'id','name','start_date'. (nullable)
   --page: int # Request results starting at a page number (default is 1, maximum is 50). (format: int32, default: 1)
   --page-size: int # Request number of events to return in each page. Default is 30, maximum page_size is 100. (format: int32, default: 30)
   --phrase: string # Filters to events related to this phrase (nullable, default: )
@@ -1162,7 +1162,7 @@ export def "search-events get" [
 ]: nothing -> record<events: table<child_event_count: int, editorial_segments: list, hero_image: record, id: int, image_count: int, location: record, name: string, start_date: string>, result_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "editorial_segment" $editorial_segment "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "sort_order" $sort_order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "editorial_segment" $editorial_segment "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "sort_order" $sort_order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/events" $qp)
   let extra_headers = {"Accept-Language": $Accept_Language, "GI-Country-Code": $GI_Country_Code} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1194,7 +1194,7 @@ export def "search-images get" [
   --event-ids: list # Filter based on specific events (nullable)
   --ethnicity: list # Filter search results based on the ethnicity of individuals in an image. (nullable)
   --exclude-nudity: oneof<nothing, bool> # Excludes images containing nudity. The default is false. (default: false)
-  --qp-fields: list # Specifies fields to return. Defaults to 'summary_set'. (nullable)
+  --fields: list # Specifies fields to return. Defaults to 'summary_set'. (nullable)
   --file-types: list # Return only images having a specific file type. (nullable)
   --graphical-styles: list # Filter based on graphical style of the image. (nullable)
   --graphical-styles-filter-type: string@graphical-styles-filter-type-completer # Provides searching based on specified graphical style(s). The default is Include
@@ -1213,7 +1213,7 @@ export def "search-images get" [
 ]: nothing -> record<images: table<allowed_use: record, alternative_ids: record, artist: string, asset_family: string, call_for_image: bool, caption: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_camera_shot: string, date_created: string, display_sizes: list, download_product: string, editorial_segments: list, event_ids: list, graphical_style: string, id: string, istock_licenses: list, keywords: list, largest_downloads: list, license_model: string, max_dimensions: record, orientation: string, people: list, product_types: list, quality_rank: int, referral_destinations: list, title: string, uri_oembed: string>, related_searches: table<phrase: string, url: string>, result_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "embed_content_only" $embed_content_only "scalar") (serialize-qp "event_ids" $event_ids "csv") (serialize-qp "ethnicity" $ethnicity "csv") (serialize-qp "exclude_nudity" $exclude_nudity "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "file_types" $file_types "csv") (serialize-qp "graphical_styles" $graphical_styles "csv") (serialize-qp "graphical_styles_filter_type" $graphical_styles_filter_type "scalar") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "minimum_size" $minimum_size "scalar") (serialize-qp "number_of_people" $number_of_people "csv") (serialize-qp "orientations" $orientations "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "specific_people" $specific_people "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "embed_content_only" $embed_content_only "scalar") (serialize-qp "event_ids" $event_ids "csv") (serialize-qp "ethnicity" $ethnicity "csv") (serialize-qp "exclude_nudity" $exclude_nudity "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "file_types" $file_types "csv") (serialize-qp "graphical_styles" $graphical_styles "csv") (serialize-qp "graphical_styles_filter_type" $graphical_styles_filter_type "scalar") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "minimum_size" $minimum_size "scalar") (serialize-qp "number_of_people" $number_of_people "csv") (serialize-qp "orientations" $orientations "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "specific_people" $specific_people "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/images" $qp)
   let extra_headers = {"Accept-Language": $Accept_Language, "GI-Country-Code": $GI_Country_Code} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1246,7 +1246,7 @@ export def "search-images-creative get" [
   --exclude-keyword-ids: list # Return only images not tagged with specific keyword(s). Specify using a comma-separated list of keyword Ids. If keyword Ids and phrase are both specified, only those images matching the query phrase which also do not contain the requested keyword(s) are returned. (nullable)
   --exclude-nudity: oneof<nothing, bool> # Excludes images containing nudity. The default is false. (default: false)
   --exclude-editorial-use-only: oneof<nothing, bool> # Exclude images that are only available for editorial (non-commercial) use. Default value is false. (nullable)
-  --qp-fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes, height, and width returned by 'download_sizes' field are estimates. (nullable)
+  --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes, height, and width returned by 'download_sizes' field are estimates. (nullable)
   --file-types: list # Return only images having a specific file type. (nullable)
   --graphical-styles: list # Filter based on graphical style of the image. (nullable)
   --graphical-styles-filter-type: string@graphical-styles-filter-type-completer # Provides searching based on specified graphical style(s). The default is include.
@@ -1268,7 +1268,7 @@ export def "search-images-creative get" [
 ]: nothing -> record<auto_corrections: record<phrase: string>, images: table<allowed_use: record, alternative_ids: record, artist: string, asset_family: string, call_for_image: bool, caption: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_camera_shot: string, date_created: string, display_sizes: list, download_product: string, graphical_style: string, id: string, keywords: list, largest_downloads: list, license_model: string, max_dimensions: record, orientation: string, quality_rank: int, referral_destinations: list, title: string, uri_oembed: string>, related_searches: table<phrase: string, url: string>, result_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "embed_content_only" $embed_content_only "scalar") (serialize-qp "ethnicity" $ethnicity "csv") (serialize-qp "exclude_keyword_ids" $exclude_keyword_ids "csv") (serialize-qp "exclude_nudity" $exclude_nudity "scalar") (serialize-qp "exclude_editorial_use_only" $exclude_editorial_use_only "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "file_types" $file_types "csv") (serialize-qp "graphical_styles" $graphical_styles "csv") (serialize-qp "graphical_styles_filter_type" $graphical_styles_filter_type "scalar") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "minimum_size" $minimum_size "scalar") (serialize-qp "number_of_people" $number_of_people "csv") (serialize-qp "orientations" $orientations "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "safe_search" $safe_search "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "facet_max_count" $facet_max_count "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "embed_content_only" $embed_content_only "scalar") (serialize-qp "ethnicity" $ethnicity "csv") (serialize-qp "exclude_keyword_ids" $exclude_keyword_ids "csv") (serialize-qp "exclude_nudity" $exclude_nudity "scalar") (serialize-qp "exclude_editorial_use_only" $exclude_editorial_use_only "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "file_types" $file_types "csv") (serialize-qp "graphical_styles" $graphical_styles "csv") (serialize-qp "graphical_styles_filter_type" $graphical_styles_filter_type "scalar") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "minimum_size" $minimum_size "scalar") (serialize-qp "number_of_people" $number_of_people "csv") (serialize-qp "orientations" $orientations "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "safe_search" $safe_search "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "facet_max_count" $facet_max_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/images/creative" $qp)
   let extra_headers = {"Accept-Language": $Accept_Language, "GI-Country-Code": $GI_Country_Code} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1293,7 +1293,7 @@ export def "search-images-creative-by-image get" [
   --exclude-editorial-use-only: oneof<nothing, bool> # Exclude images that are only available for editorial (non-commercial) use. Default value is false. (nullable)
   --facet-fields: list # Specifies the facets to return in the response. Facets provide additional search parameters to refine your results.                     The include_facets parameter must be set to "true" for facets to be returned. (nullable)
   --facet-max-count: int # Specifies the maximum number of facets to return per type. Default is 300. (format: int32, default: 300)
-  --qp-fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes, height, and width returned by 'download_sizes' field are estimates. (nullable)
+  --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes, height, and width returned by 'download_sizes' field are estimates. (nullable)
   --image-url: string # Specifies the location of the image to use in the search. (nullable)
   --include-facets: oneof<nothing, bool> # Specifies whether or not to include facets in the result set. Default is "false". (nullable)
   --page: int # Request results starting at a page number (default is 1). (format: int32, default: 1)
@@ -1304,7 +1304,7 @@ export def "search-images-creative-by-image get" [
 ]: nothing -> record<auto_corrections: record<phrase: string>, facets: record<artists: list<record>, entertainment: list<record>, events: list<record>, locations: list<record>, specific_people: list<record>>, image_fingerprint: string, images: any, related_searches: table<phrase: string, url: string>, result_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "asset_id" $asset_id "scalar") (serialize-qp "exclude_editorial_use_only" $exclude_editorial_use_only "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "facet_max_count" $facet_max_count "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "image_url" $image_url "scalar") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "product_types" $product_types "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "asset_id" $asset_id "scalar") (serialize-qp "exclude_editorial_use_only" $exclude_editorial_use_only "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "facet_max_count" $facet_max_count "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "image_url" $image_url "scalar") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "product_types" $product_types "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/images/creative/by-image" $qp)
   let extra_headers = {"Accept-Language": $Accept_Language, "GI-Country-Code": $GI_Country_Code} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1338,7 +1338,7 @@ export def "search-images-editorial get" [
   --ethnicity: list # Filter search results based on the ethnicity of individuals in an image. (nullable)
   --event-ids: list # Filter based on specific events (nullable)
   --exclude-keyword-ids: list # Return only images not tagged with specific keyword(s). Specify using a comma-separated list of keyword Ids. If keyword Ids and phrase are both specified, only those images matching the query phrase which also do not contain the requested keyword(s) are returned. (nullable)
-  --qp-fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes, height, and width returned by 'download_sizes' field are estimates. (nullable)
+  --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes, height, and width returned by 'download_sizes' field are estimates. (nullable)
   --file-types: list # Return only images having a specific file type. (nullable)
   --graphical-styles: list # Filter based on graphical style of the image. (nullable)
   --graphical-styles-filter-type: string@graphical-styles-filter-type-completer # Provides searching based on specified graphical style(s). The default is include.
@@ -1361,7 +1361,7 @@ export def "search-images-editorial get" [
 ]: nothing -> record<images: table<allowed_use: record, alternative_ids: record, artist: string, asset_family: string, call_for_image: bool, caption: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_camera_shot: string, date_created: string, display_sizes: list, download_product: string, editorial_segments: list, editorial_source: record, event_ids: list, graphical_style: string, id: string, keywords: list, largest_downloads: list, license_model: string, max_dimensions: record, orientation: string, people: list, product_types: list, quality_rank: int, referral_destinations: list, title: string, uri_oembed: string>, related_searches: table<phrase: string, url: string>, result_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "editorial_segments" $editorial_segments "csv") (serialize-qp "embed_content_only" $embed_content_only "scalar") (serialize-qp "ethnicity" $ethnicity "csv") (serialize-qp "event_ids" $event_ids "csv") (serialize-qp "exclude_keyword_ids" $exclude_keyword_ids "csv") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "file_types" $file_types "csv") (serialize-qp "graphical_styles" $graphical_styles "csv") (serialize-qp "graphical_styles_filter_type" $graphical_styles_filter_type "scalar") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "minimum_size" $minimum_size "scalar") (serialize-qp "number_of_people" $number_of_people "csv") (serialize-qp "orientations" $orientations "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "specific_people" $specific_people "csv") (serialize-qp "minimum_quality_rank" $minimum_quality_rank "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "facet_max_count" $facet_max_count "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "editorial_segments" $editorial_segments "csv") (serialize-qp "embed_content_only" $embed_content_only "scalar") (serialize-qp "ethnicity" $ethnicity "csv") (serialize-qp "event_ids" $event_ids "csv") (serialize-qp "exclude_keyword_ids" $exclude_keyword_ids "csv") (serialize-qp "fields" $fields "csv") (serialize-qp "file_types" $file_types "csv") (serialize-qp "graphical_styles" $graphical_styles "csv") (serialize-qp "graphical_styles_filter_type" $graphical_styles_filter_type "scalar") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "minimum_size" $minimum_size "scalar") (serialize-qp "number_of_people" $number_of_people "csv") (serialize-qp "orientations" $orientations "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "specific_people" $specific_people "csv") (serialize-qp "minimum_quality_rank" $minimum_quality_rank "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "facet_max_count" $facet_max_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/images/editorial" $qp)
   let extra_headers = {"Accept-Language": $Accept_Language, "GI-Country-Code": $GI_Country_Code} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1392,7 +1392,7 @@ export def "search-videos-creative get" [
   --exclude-nudity: oneof<nothing, bool> # Excludes videos containing nudity. The default is false. (default: false)
   --exclude-editorial-use-only: oneof<nothing, bool> # Exclude videos that are only available for editorial (non-commercial) use. Default value is false. (nullable)
   --exclude-keyword-ids: list # Return only videos not tagged with specific keyword(s). Specify using a comma-separated list of keyword Ids. If keyword Ids and phrase are both specified, only those videos matching the query phrase which also do not contain the requested keyword(s) are returned. (nullable)
-  --qp-fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes returned by 'download_sizes' field is an estimate. (nullable)
+  --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes returned by 'download_sizes' field is an estimate. (nullable)
   --format-available: string@format-available-completer # Filters according to the digital video format available on a film asset.
   --frame-rates: list # Provides filtering by video frame rate (frames/second). (nullable)
   --image-techniques: list # Filter based on image technique. (nullable)
@@ -1417,7 +1417,7 @@ export def "search-videos-creative get" [
 ]: nothing -> record<auto_corrections: record<phrase: string>, facets: record<artists: list<record>, entertainment: list<record>, events: list<record>, locations: list<record>, specific_people: list<record>>, related_searches: table<phrase: string, url: string>, result_count: int, videos: table<allowed_use: record, artist: string, asset_family: string, caption: string, clip_length: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_created: string, display_sizes: list, download_product: string, era: string, event_ids: list, id: string, istock_licenses: list, keywords: list, largest_downloads: list, license_model: string, mastered_to: string, originally_shot_on: string, product_types: list, referral_destinations: list, shot_speed: string, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "aspect_ratios" $aspect_ratios "csv") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "exclude_nudity" $exclude_nudity "scalar") (serialize-qp "exclude_editorial_use_only" $exclude_editorial_use_only "scalar") (serialize-qp "exclude_keyword_ids" $exclude_keyword_ids "csv") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "format_available" $format_available "scalar") (serialize-qp "frame_rates" $frame_rates "csv") (serialize-qp "image_techniques" $image_techniques "csv") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "license_models" $license_models "csv") (serialize-qp "orientations" $orientations "csv") (serialize-qp "min_clip_length" $min_clip_length "scalar") (serialize-qp "max_clip_length" $max_clip_length "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "safe_search" $safe_search "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "release_status" $release_status "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "facet_max_count" $facet_max_count "scalar") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "viewpoints" $viewpoints "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "aspect_ratios" $aspect_ratios "csv") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "exclude_nudity" $exclude_nudity "scalar") (serialize-qp "exclude_editorial_use_only" $exclude_editorial_use_only "scalar") (serialize-qp "exclude_keyword_ids" $exclude_keyword_ids "csv") (serialize-qp "fields" $fields "csv") (serialize-qp "format_available" $format_available "scalar") (serialize-qp "frame_rates" $frame_rates "csv") (serialize-qp "image_techniques" $image_techniques "csv") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "license_models" $license_models "csv") (serialize-qp "orientations" $orientations "csv") (serialize-qp "min_clip_length" $min_clip_length "scalar") (serialize-qp "max_clip_length" $max_clip_length "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "safe_search" $safe_search "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "release_status" $release_status "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "facet_max_count" $facet_max_count "scalar") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "viewpoints" $viewpoints "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/videos/creative" $qp)
   let extra_headers = {"Accept-Language": $Accept_Language, "GI-Country-Code": $GI_Country_Code} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1442,7 +1442,7 @@ export def "search-videos-creative-by-image get" [
   --exclude-editorial-use-only: oneof<nothing, bool> # Exclude videos that are only available for editorial (non-commercial) use. Default value is false. (nullable)
   --facet-fields: list # Specifies the facets to return in the response. Facets provide additional search parameters to refine your results.                     The include_facets parameter must be set to "true" for facets to be returned. (nullable)
   --facet-max-count: int # Specifies the maximum number of facets to return per type. Default is 300. (format: int32, default: 300)
-  --qp-fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes returned by 'download_sizes' field is an estimate. (nullable)
+  --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes returned by 'download_sizes' field is an estimate. (nullable)
   --image-url: string # Specifies the location of the image to use in the search. (nullable)
   --include-facets: oneof<nothing, bool> # Specifies whether or not to include facets in the result set. Default is "false". (nullable)
   --page: int # Request results starting at a page number (default is 1). (format: int32, default: 1)
@@ -1453,7 +1453,7 @@ export def "search-videos-creative-by-image get" [
 ]: nothing -> record<auto_corrections: record<phrase: string>, facets: record<artists: list<record>, entertainment: list<record>, events: list<record>, locations: list<record>, specific_people: list<record>>, related_searches: table<phrase: string, url: string>, result_count: int, videos: table<allowed_use: record, artist: string, asset_family: string, caption: string, clip_length: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_created: string, display_sizes: list, download_product: string, era: string, event_ids: list, id: string, istock_licenses: list, keywords: list, largest_downloads: list, license_model: string, mastered_to: string, originally_shot_on: string, product_types: list, referral_destinations: list, shot_speed: string, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "asset_id" $asset_id "scalar") (serialize-qp "exclude_editorial_use_only" $exclude_editorial_use_only "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "facet_max_count" $facet_max_count "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "image_url" $image_url "scalar") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "product_types" $product_types "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "asset_id" $asset_id "scalar") (serialize-qp "exclude_editorial_use_only" $exclude_editorial_use_only "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "facet_max_count" $facet_max_count "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "image_url" $image_url "scalar") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "product_types" $product_types "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/videos/creative/by-image" $qp)
   let extra_headers = {"Accept-Language": $Accept_Language, "GI-Country-Code": $GI_Country_Code} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1482,7 +1482,7 @@ export def "search-videos-editorial get" [
   --compositions: list # Filter based on video composition. (nullable)
   --download-product: string # Filters based on which product the asset will download against.                     Allowed values are easyaccess, editorialsubscription, imagepack, premiumaccess and royaltyfreesubscription.                     If you have more than one instance of a product, you may also include the ID of the product instance you wish to filter on.                      For example, some users may have more than one premiumaccess product, so the download_product value would be premiumaccess:1234.                      Product ID can be obtained from the GET /products response. (nullable)
   --editorial-video-types: list # Allows filtering by types of video. (nullable)
-  --qp-fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes returned by 'download_sizes' field is an estimate. (nullable)
+  --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes returned by 'download_sizes' field is an estimate. (nullable)
   --format-available: string@format-available-completer # Filters according to the digital video format available on a film asset.
   --frame-rates: list # Provides filtering by video frame rate (frames/second). (nullable)
   --image-techniques: list # Filter based on image technique. (nullable)
@@ -1506,7 +1506,7 @@ export def "search-videos-editorial get" [
 ]: nothing -> record<facets: record<artists: list<record>, entertainment: list<record>, events: list<record>, locations: list<record>, specific_people: list<record>>, related_searches: table<phrase: string, url: string>, result_count: int, videos: table<allowed_use: record, artist: string, asset_family: string, caption: string, clip_length: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_created: string, display_sizes: list, download_product: string, era: string, event_ids: list, id: string, istock_licenses: list, keywords: list, largest_downloads: list, license_model: string, mastered_to: string, originally_shot_on: string, product_types: list, referral_destinations: list, shot_speed: string, source: string, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "aspect_ratios" $aspect_ratios "csv") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "editorial_video_types" $editorial_video_types "csv") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "format_available" $format_available "scalar") (serialize-qp "frame_rates" $frame_rates "csv") (serialize-qp "image_techniques" $image_techniques "csv") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "min_clip_length" $min_clip_length "scalar") (serialize-qp "max_clip_length" $max_clip_length "scalar") (serialize-qp "orientations" $orientations "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "specific_people" $specific_people "csv") (serialize-qp "release_status" $release_status "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "facet_max_count" $facet_max_count "scalar") (serialize-qp "viewpoints" $viewpoints "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "aspect_ratios" $aspect_ratios "csv") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "editorial_video_types" $editorial_video_types "csv") (serialize-qp "fields" $fields "csv") (serialize-qp "format_available" $format_available "scalar") (serialize-qp "frame_rates" $frame_rates "csv") (serialize-qp "image_techniques" $image_techniques "csv") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "min_clip_length" $min_clip_length "scalar") (serialize-qp "max_clip_length" $max_clip_length "scalar") (serialize-qp "orientations" $orientations "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "specific_people" $specific_people "csv") (serialize-qp "release_status" $release_status "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "facet_max_count" $facet_max_count "scalar") (serialize-qp "viewpoints" $viewpoints "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/videos/editorial" $qp)
   let extra_headers = {"Accept-Language": $Accept_Language, "GI-Country-Code": $GI_Country_Code} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1555,12 +1555,12 @@ export def "videos list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Specifies one or more video ids to return. Use comma delimiter when requesting multiple ids.  Maximum of 100 ids. (nullable)
-  --qp-fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes returned by 'download_sizes' field is an estimate. (nullable)
+  --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes returned by 'download_sizes' field is an estimate. (nullable)
   --Accept-Language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/videos" $qp)
   let extra_headers = {"Accept-Language": $Accept_Language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1582,12 +1582,12 @@ export def "videos get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes returned by 'download_sizes' field is an estimate. (nullable)
+  --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes returned by 'download_sizes' field is an estimate. (nullable)
   --Accept-Language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/v3/videos/($id)" $qp)
   let extra_headers = {"Accept-Language": $Accept_Language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1636,14 +1636,14 @@ export def "videos-same-series get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes returned by 'download_sizes' field is an estimate. (nullable)
+  --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes returned by 'download_sizes' field is an estimate. (nullable)
   --page: int # Identifies page to return. Default is 1. (format: int32, default: 1)
   --page-size: int # Specifies page size. Default is 30, maximum page_size is 100. (format: int32, default: 30)
   --Accept-Language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v3/videos/($id)/same-series" $qp)
   let extra_headers = {"Accept-Language": $Accept_Language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1665,14 +1665,14 @@ export def "videos-similar get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes returned by 'download_sizes' field is an estimate. (nullable)
+  --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes returned by 'download_sizes' field is an estimate. (nullable)
   --page: int # Identifies page to return. Default is 1. (format: int32, default: 1)
   --page-size: int # Specifies page size. Default is 30, maximum page_size is 100. (format: int32, default: 30)
   --Accept-Language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v3/videos/($id)/similar" $qp)
   let extra_headers = {"Accept-Language": $Accept_Language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

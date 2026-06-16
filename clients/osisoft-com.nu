@@ -156,14 +156,14 @@ export def "analyses-search GetAnalysesQuery" [
   --accept: string@accept-completer # Response content type
   --databaseWebId: string # The ID of the asset database to use as the root of the query.
   --maxCount: int # The maximum number of objects to be returned per call (page size). The default is 1000.
-  --qp-query: string # The query string is a list of filters used to perform an AFSearch for the analyses in the asset database. An example would be: "query= Name:=MyAnalysis1* Template:=AnalysisTemplate".
+  --query: string # The query string is a list of filters used to perform an AFSearch for the analyses in the asset database. An example would be: "query= Name:=MyAnalysis1* Template:=AnalysisTemplate".
   --selectedFields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --startIndex: int # The starting index (zero based) of the items to be returned. The default is 0.
   --webIdType: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
 ]: nothing -> record<Items: table<AnalysisRulePlugInName: string, AutoCreated: bool, CategoryNames: list, Description: string, GroupId: int, HasNotification: bool, HasTarget: bool, HasTemplate: bool, Id: string, IsConfigured: bool, IsTimeRuleDefinedByTemplate: bool, Links: record, MaximumQueueSize: int, Name: string, OutputTime: string, Path: string, Priority: string, PublishResults: bool, Status: string, TargetWebId: string, TemplateName: string, TimeRulePlugInName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "databaseWebId" $databaseWebId "scalar") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "databaseWebId" $databaseWebId "scalar") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/analyses/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1118,14 +1118,14 @@ export def "analysistemplates-search GetAnalysisTemplatesQuery" [
   --accept: string@accept-completer # Response content type
   --databaseWebId: string # The ID of the asset database to use as the root of the query.
   --maxCount: int # The maximum number of objects to be returned per call (page size). The default is 1000.
-  --qp-query: string # The query string is a list of filters used to perform an AFSearch for the analyses in the asset database. An example would be: "query= Name:=MyAnalysisTemplate1*".
+  --query: string # The query string is a list of filters used to perform an AFSearch for the analyses in the asset database. An example would be: "query= Name:=MyAnalysisTemplate1*".
   --selectedFields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --startIndex: int # The starting index (zero based) of the items to be returned. The default is 0.
   --webIdType: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
 ]: nothing -> record<Items: table<AnalysisRulePlugInName: string, CategoryNames: list, CreateEnabled: bool, Description: string, GroupId: int, HasNotificationTemplate: bool, HasTarget: bool, Id: string, Links: record, Name: string, OutputTime: string, Path: string, TargetName: string, TimeRulePlugInName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "databaseWebId" $databaseWebId "scalar") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "databaseWebId" $databaseWebId "scalar") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/analysistemplates/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1575,7 +1575,7 @@ export def "assetdatabases-analyses FindAnalyses" [
   --accept: string@accept-completer # Response content type
   --field: list # Specifies which of the object's properties are searched. Multiple search fields may be specified with multiple instances of the parameter. The default is 'Name'.
   --maxCount: int # The maximum number of objects to be returned per call (page size). The default is 1000.
-  --qp-query: string # The query string used for finding analyses. The default is null.
+  --query: string # The query string used for finding analyses. The default is null.
   --selectedFields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --sortField: string # The field or property of the object used to sort the returned collection. The default is 'Name'.
   --sortOrder: string # The order that the returned collection is sorted. The default is 'Ascending'.
@@ -1584,7 +1584,7 @@ export def "assetdatabases-analyses FindAnalyses" [
 ]: nothing -> record<Items: table<AnalysisRulePlugInName: string, AutoCreated: bool, CategoryNames: list, Description: string, GroupId: int, HasNotification: bool, HasTarget: bool, HasTemplate: bool, Id: string, IsConfigured: bool, IsTimeRuleDefinedByTemplate: bool, Links: record, MaximumQueueSize: int, Name: string, OutputTime: string, Path: string, Priority: string, PublishResults: bool, Status: string, TargetWebId: string, TemplateName: string, TimeRulePlugInName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "field" $field "multi") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "sortField" $sortField "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "field" $field "multi") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "sortField" $sortField "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/assetdatabases/($webId)/analyses" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1673,7 +1673,7 @@ export def "assetdatabases-analysistemplates GetAnalysisTemplates" [
   --accept: string@accept-completer # Response content type
   --field: list # Specifies which of the object's properties are searched. Multiple search fields may be specified with multiple instances of the parameter. The default is 'Name'.
   --maxCount: int # The maximum number of objects to be returned per call (page size). The default is 1000.
-  --qp-query: string # The query string used for finding objects. The default is no query string.
+  --query: string # The query string used for finding objects. The default is no query string.
   --selectedFields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --sortField: string # The field or property of the object used to sort the returned collection. The default is 'Name'.
   --sortOrder: string # The order that the returned collection is sorted. The default is 'Ascending'.
@@ -1681,7 +1681,7 @@ export def "assetdatabases-analysistemplates GetAnalysisTemplates" [
 ]: nothing -> record<Items: table<AnalysisRulePlugInName: string, CategoryNames: list, CreateEnabled: bool, Description: string, GroupId: int, HasNotificationTemplate: bool, HasTarget: bool, Id: string, Links: record, Name: string, OutputTime: string, Path: string, TargetName: string, TimeRulePlugInName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "field" $field "multi") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "sortField" $sortField "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "field" $field "multi") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "sortField" $sortField "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/assetdatabases/($webId)/analysistemplates" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2007,7 +2007,7 @@ export def "assetdatabases-elementtemplates GetElementTemplates" [
   --accept: string@accept-completer # Response content type
   --field: list # Specifies which of the object's properties are searched. Multiple search fields may be specified with multiple instances of the parameter. The default is 'Name'.
   --maxCount: int # The maximum number of objects to be returned per call (page size). The default is 1000.
-  --qp-query: string # The query string used for finding objects. The default is no query string.
+  --query: string # The query string used for finding objects. The default is no query string.
   --selectedFields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --sortField: string # The field or property of the object used to sort the returned collection. The default is 'Name'.
   --sortOrder: string # The order that the returned collection is sorted. The default is 'Ascending'.
@@ -2015,7 +2015,7 @@ export def "assetdatabases-elementtemplates GetElementTemplates" [
 ]: nothing -> record<Items: table<AllowElementToExtend: bool, BaseTemplate: string, CanBeAcknowledged: bool, CategoryNames: list, Description: string, ExtendedProperties: record, Id: string, InstanceType: string, Links: record, Name: string, NamingPattern: string, Path: string, Severity: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "field" $field "multi") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "sortField" $sortField "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "field" $field "multi") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "sortField" $sortField "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/assetdatabases/($webId)/elementtemplates" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3261,7 +3261,7 @@ export def "assetservers-securityidentities GetSecurityIdentities" [
   --accept: string@accept-completer # Response content type
   --field: string # Specifies which of the object's properties are searched. The default is 'Name'.
   --maxCount: int # The maximum number of objects to be returned. The default is 1000.
-  --qp-query: string # The query string used for finding objects. The default is no query string.
+  --query: string # The query string used for finding objects. The default is no query string.
   --selectedFields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --sortField: string # The field or property of the object used to sort the returned collection. The default is 'Name'.
   --sortOrder: string # The order that the returned collection is sorted. The default is 'Ascending'.
@@ -3269,7 +3269,7 @@ export def "assetservers-securityidentities GetSecurityIdentities" [
 ]: nothing -> record<Items: table<Description: string, Id: string, IsEnabled: bool, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "field" $field "scalar") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "sortField" $sortField "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "field" $field "scalar") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "sortField" $sortField "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/assetservers/($webId)/securityidentities" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3360,7 +3360,7 @@ export def "assetservers-securitymappings GetSecurityMappings" [
   --accept: string@accept-completer # Response content type
   --field: string # Specifies which of the object's properties are searched. The default is 'Name'.
   --maxCount: int # The maximum number of objects to be returned. The default is 1000.
-  --qp-query: string # The query string used for finding objects. The default is no query string.
+  --query: string # The query string used for finding objects. The default is no query string.
   --selectedFields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --sortField: string # The field or property of the object used to sort the returned collection. The default is 'Name'.
   --sortOrder: string # The order that the returned collection is sorted. The default is 'Ascending'.
@@ -3368,7 +3368,7 @@ export def "assetservers-securitymappings GetSecurityMappings" [
 ]: nothing -> record<Items: table<Account: string, Description: string, Id: string, Links: record, Name: string, Path: string, SecurityIdentityWebId: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "field" $field "scalar") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "sortField" $sortField "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "field" $field "scalar") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "sortField" $sortField "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/assetservers/($webId)/securitymappings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3887,14 +3887,14 @@ export def "attributes-search GetAttributesQuery" [
   --associations: string # Associated values to return in the response, separated by semicolons (;). This call supports DataReference to return attributes with data references. If this parameter is not specified, DataReference values are not returned.
   --databaseWebId: string # The ID of the asset database to use as the root of the query.
   --maxCount: int # The maximum number of objects to be returned per call (page size). The default is 1000.
-  --qp-query: string # The query string is a list of filters used to perform an AFSearch for the attributes in the asset database. An example would be: "query=Element:{ Name:='MyElement' } Type:=Int32".
+  --query: string # The query string is a list of filters used to perform an AFSearch for the attributes in the asset database. An example would be: "query=Element:{ Name:='MyElement' } Type:=Int32".
   --selectedFields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --startIndex: int # The starting index (zero based) of the items to be returned. The default is 0.
   --webIdType: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
 ]: nothing -> record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "databaseWebId" $databaseWebId "scalar") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "databaseWebId" $databaseWebId "scalar") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attributes/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5339,7 +5339,7 @@ export def "elements-search GetElementsQuery" [
   --associations: string # Associated values to return in the response, separated by semicolons (;). This call supports Paths to return all paths to the element. If this parameter is not specified, paths are not returned.
   --databaseWebId: string # The ID of the asset database to use as the root of the query.
   --maxCount: int # The maximum number of objects to be returned per call (page size). The default is 1000.
-  --qp-query: string # The query string is a list of filters used to perform an AFSearch for the elements in the asset database. An example would be: "query=Name:=MyElement* Template:=ElementTemplate".
+  --query: string # The query string is a list of filters used to perform an AFSearch for the elements in the asset database. An example would be: "query=Name:=MyElement* Template:=ElementTemplate".
   --queryDate: string # Optional parameter. Used to retrieve the relative the version of an object. A value of null or AFTime.MaxValue initializes the query date so the latest versions of sub-objects are retrieved. The value may be an AFTime, DateTime, PITime, String, or numeric. An integer numeric represents the number of ticks (100-nanosecond intervals) since January 1, 0001. A floating point numeric represents the number of seconds since January 1, 1970 UTC. A String is interpreted as local time, unless it contains a time zone indicator such as a trailing "Z" or "GMT".
   --selectedFields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --startIndex: int # The starting index (zero based) of the items to be returned. The default is 0.
@@ -5347,7 +5347,7 @@ export def "elements-search GetElementsQuery" [
 ]: nothing -> record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "databaseWebId" $databaseWebId "scalar") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "queryDate" $queryDate "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "databaseWebId" $databaseWebId "scalar") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "queryDate" $queryDate "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/elements/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7444,14 +7444,14 @@ export def "eventframes-search GetEventFramesQuery" [
   --accept: string@accept-completer # Response content type
   --databaseWebId: string # The ID of the asset database to use as the root of the query.
   --maxCount: int # The maximum number of objects to be returned per call (page size). The default is 1000.
-  --qp-query: string # The query string is a list of filters used to perform an AFSearch for the eventframes in the asset database. An example would be: "query=Name:=MyEventFrame* Category:=MyCategory Template:=EFTemplate".
+  --query: string # The query string is a list of filters used to perform an AFSearch for the eventframes in the asset database. An example would be: "query=Name:=MyEventFrame* Category:=MyCategory Template:=EFTemplate".
   --selectedFields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --startIndex: int # The starting index (zero based) of the items to be returned. The default is 0.
   --webIdType: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
 ]: nothing -> record<Items: table<AcknowledgedBy: string, AcknowledgedDate: string, AreValuesCaptured: bool, CanBeAcknowledged: bool, CategoryNames: list, Description: string, EndTime: string, ExtendedProperties: record, HasChildren: bool, Id: string, IsAcknowledged: bool, IsAnnotated: bool, IsLocked: bool, Links: record, Name: string, Path: string, RefElementWebIds: list, Security: record, Severity: string, StartTime: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "databaseWebId" $databaseWebId "scalar") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "databaseWebId" $databaseWebId "scalar") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/eventframes/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8458,14 +8458,14 @@ export def "notificationcontacttemplates-search GetNotificationContactTemplatesQ
   --accept: string@accept-completer # Response content type
   --assetServerWebId: string # The ID of the asset server to use as the root of the query.
   --maxCount: int # The maximum number of objects to be returned per call (page size). The default is 1000.
-  --qp-query: string # The query string is a list of filters used to perform an AFSearch for the Notification Contact Templates in the asset database. An example would be: "query=Name:='MyNotificationContactTemplate'".
+  --query: string # The query string is a list of filters used to perform an AFSearch for the Notification Contact Templates in the asset database. An example would be: "query=Name:='MyNotificationContactTemplate'".
   --selectedFields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --startIndex: int # The starting index (zero based) of the items to be returned. The default is 0.
   --webIdType: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
 ]: nothing -> record<Items: table<Available: bool, ConfigString: string, ContactType: string, Description: string, EscalationTimeout: string, HasChildren: bool, Id: string, Links: record, MaximumRetries: int, MinimumAcknowledgements: int, Name: string, NotifyWhenInstanceEnded: bool, Path: string, PlugInName: string, RetryInterval: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "assetServerWebId" $assetServerWebId "scalar") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "assetServerWebId" $assetServerWebId "scalar") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notificationcontacttemplates/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8881,14 +8881,14 @@ export def "notificationrules-search GetNotificationRulesQuery" [
   --accept: string@accept-completer # Response content type
   --databaseWebId: string # The ID of the asset database to use as the root of the query.
   --maxCount: int # The maximum number of objects to be returned per call (page size). The default is 1000.
-  --qp-query: string # The query string is a list of filters used to perform an AFSearch for the Notification rules in the asset database. An example would be: "query=Name:=MyNotificationRule* Template:=NoteRuleTemplate".
+  --query: string # The query string is a list of filters used to perform an AFSearch for the Notification rules in the asset database. An example would be: "query=Name:=MyNotificationRule* Template:=NoteRuleTemplate".
   --selectedFields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --startIndex: int # The starting index (zero based) of the items to be returned. The default is 0.
   --webIdType: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
 ]: nothing -> record<Items: table<AutoCreated: bool, CategoryNames: list, Criteria: string, Description: string, Id: string, MultiTriggerEventOption: string, Name: string, NonrepetitionInterval: string, Path: string, ResendInterval: string, Status: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "databaseWebId" $databaseWebId "scalar") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "databaseWebId" $databaseWebId "scalar") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notificationrules/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9439,14 +9439,14 @@ export def "notificationruletemplates-search GetNotificationRuleTemplatesQuery" 
   --accept: string@accept-completer # Response content type
   --databaseWebId: string # The ID of the asset database to use as the root of the query.
   --maxCount: int # The maximum number of objects to be returned per call (page size). The default is 1000.
-  --qp-query: string # The query string is a list of filters used to perform an AFSearch for the Notification rule templates in the asset database. An example would be: "query=NotificationRuleTemplate:{ Name:='MyNotificationRuleTemplate' } Type:=Int32".
+  --query: string # The query string is a list of filters used to perform an AFSearch for the Notification rule templates in the asset database. An example would be: "query=NotificationRuleTemplate:{ Name:='MyNotificationRuleTemplate' } Type:=Int32".
   --selectedFields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --startIndex: int # The starting index (zero based) of the items to be returned. The default is 0.
   --webIdType: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
 ]: nothing -> record<Items: table<CategoryNames: list, Criteria: string, Description: string, Id: string, MultiTriggerEventOption: string, Name: string, NonrepetitionInterval: string, Path: string, ResendInterval: string, Status: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "databaseWebId" $databaseWebId "scalar") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "databaseWebId" $databaseWebId "scalar") (serialize-qp "maxCount" $maxCount "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "webIdType" $webIdType "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notificationruletemplates/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

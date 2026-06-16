@@ -3850,13 +3850,13 @@ export def "marketing-contacts-search mc-contacts-search" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-query: string
+  query: string
 ]: any -> record<_metadata: record<self: string>, contact_count: float, result: table<_metadata: record, address_line_1: string, address_line_2: string, alternate_emails: list, city: string, country: string, created_at: string, custom_fields: record, email: string, facebook: string, first_name: string, id: string, last_name: string, line: string, list_ids: list, phone_number: string, postal_code: string, segment_ids: list, state_province_region: string, unique_name: string, updated_at: string, whatsapp: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/marketing/contacts/search")
-  let body = {query: $body_query} | compact
+  let body = {query: $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5069,7 +5069,7 @@ export def "messages GET-messages" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Use the query syntax  to filter your email activity.
+  --query: string # Use the query syntax  to filter your email activity.
   --limit: float # The number of messages returned. This parameter must be greater than 0 and less than or equal to 1000 (default: 10)
   --X-Query-Id: string
   --X-Cursor: string
@@ -5077,7 +5077,7 @@ export def "messages GET-messages" [
 ]: nothing -> record<messages: table<clicks_count: int, from_email: string, last_event_time: string, msg_id: string, opens_count: int, status: string, subject: string, to_email: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/messages" $qp)
   let extra_headers = {"X-Query-Id": $X_Query_Id, "X-Cursor": $X_Cursor, "Authorization": $Authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -5099,12 +5099,12 @@ export def "messages-download v3-messages-download" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Uses a SQL like syntax to indicate which messages to include in the CSV
+  --query: string # Uses a SQL like syntax to indicate which messages to include in the CSV
   --Authorization: string
 ]: nothing -> record<message: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/messages/download" $qp)
   let extra_headers = {"Authorization": $Authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

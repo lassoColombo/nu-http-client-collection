@@ -110,7 +110,7 @@ export def "projects bigqueryprojectslist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -121,7 +121,7 @@ export def "projects bigqueryprojectslist" [
 ]: nothing -> record<etag: string, kind: string, nextPageToken: string, projects: table<friendlyName: string, id: string, kind: string, numericId: string, projectReference: record>, totalItems: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/projects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -143,7 +143,7 @@ export def "projects-datasets bigquerydatasetslist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -156,7 +156,7 @@ export def "projects-datasets bigquerydatasetslist" [
 ]: nothing -> record<datasets: table<datasetReference: record, friendlyName: string, id: string, kind: string, labels: record, location: string>, etag: string, kind: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "all" $all "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "all" $all "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -182,7 +182,7 @@ export def "projects-datasets bigquerydatasetsinsert" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -214,7 +214,7 @@ export def "projects-datasets bigquerydatasetsinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets" $qp)
   let body = {access: $access, creationTime: $creationTime, datasetReference: $datasetReference, defaultCollation: $defaultCollation, defaultEncryptionConfiguration: $defaultEncryptionConfiguration, defaultPartitionExpirationMs: $defaultPartitionExpirationMs, defaultRoundingMode: $defaultRoundingMode, defaultTableExpirationMs: $defaultTableExpirationMs, description: $description, etag: $etag, friendlyName: $friendlyName, id: $id, isCaseInsensitive: $isCaseInsensitive, kind: $kind, labels: $labels, lastModifiedTime: $lastModifiedTime, location: $location, maxTimeTravelHours: $maxTimeTravelHours, satisfiesPzs: $satisfiesPzs, selfLink: $selfLink, storageBillingModel: $storageBillingModel, tags: $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -239,7 +239,7 @@ export def "projects-datasets bigquerydatasetsdelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -249,7 +249,7 @@ export def "projects-datasets bigquerydatasetsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "deleteContents" $deleteContents "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "deleteContents" $deleteContents "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets/($datasetId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -272,7 +272,7 @@ export def "projects-datasets bigquerydatasetsget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -281,7 +281,7 @@ export def "projects-datasets bigquerydatasetsget" [
 ]: nothing -> record<access: table<dataset: record, domain: string, groupByEmail: string, iamMember: string, role: string, routine: record, specialGroup: string, userByEmail: string, view: record>, creationTime: string, datasetReference: record<datasetId: string, projectId: string>, defaultCollation: string, defaultEncryptionConfiguration: record<kmsKeyName: string>, defaultPartitionExpirationMs: string, defaultRoundingMode: string, defaultTableExpirationMs: string, description: string, etag: string, friendlyName: string, id: string, isCaseInsensitive: bool, kind: string, labels: record, lastModifiedTime: string, location: string, maxTimeTravelHours: string, satisfiesPzs: bool, selfLink: string, storageBillingModel: string, tags: table<tagKey: string, tagValue: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets/($datasetId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -308,7 +308,7 @@ export def "projects-datasets bigquerydatasetspatch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -340,7 +340,7 @@ export def "projects-datasets bigquerydatasetspatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets/($datasetId)" $qp)
   let body = {access: $access, creationTime: $creationTime, datasetReference: $datasetReference, defaultCollation: $defaultCollation, defaultEncryptionConfiguration: $defaultEncryptionConfiguration, defaultPartitionExpirationMs: $defaultPartitionExpirationMs, defaultRoundingMode: $defaultRoundingMode, defaultTableExpirationMs: $defaultTableExpirationMs, description: $description, etag: $etag, friendlyName: $friendlyName, id: $id, isCaseInsensitive: $isCaseInsensitive, kind: $kind, labels: $labels, lastModifiedTime: $lastModifiedTime, location: $location, maxTimeTravelHours: $maxTimeTravelHours, satisfiesPzs: $satisfiesPzs, selfLink: $selfLink, storageBillingModel: $storageBillingModel, tags: $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -369,7 +369,7 @@ export def "projects-datasets bigquerydatasetsupdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -401,7 +401,7 @@ export def "projects-datasets bigquerydatasetsupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets/($datasetId)" $qp)
   let body = {access: $access, creationTime: $creationTime, datasetReference: $datasetReference, defaultCollation: $defaultCollation, defaultEncryptionConfiguration: $defaultEncryptionConfiguration, defaultPartitionExpirationMs: $defaultPartitionExpirationMs, defaultRoundingMode: $defaultRoundingMode, defaultTableExpirationMs: $defaultTableExpirationMs, description: $description, etag: $etag, friendlyName: $friendlyName, id: $id, isCaseInsensitive: $isCaseInsensitive, kind: $kind, labels: $labels, lastModifiedTime: $lastModifiedTime, location: $location, maxTimeTravelHours: $maxTimeTravelHours, satisfiesPzs: $satisfiesPzs, selfLink: $selfLink, storageBillingModel: $storageBillingModel, tags: $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -426,7 +426,7 @@ export def "projects-datasets-models bigquerymodelslist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -437,7 +437,7 @@ export def "projects-datasets-models bigquerymodelslist" [
 ]: nothing -> record<models: table<bestTrialId: string, creationTime: string, defaultTrialId: string, description: string, encryptionConfiguration: record, etag: string, expirationTime: string, featureColumns: list, friendlyName: string, hparamSearchSpaces: record, hparamTrials: list, labelColumns: list, labels: record, lastModifiedTime: string, location: string, modelReference: record, modelType: string, optimalTrialIds: list, trainingRuns: list>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets/($datasetId)/models" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -461,7 +461,7 @@ export def "projects-datasets-models bigquerymodelsdelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -470,7 +470,7 @@ export def "projects-datasets-models bigquerymodelsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets/($datasetId)/models/($modelId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -494,7 +494,7 @@ export def "projects-datasets-models bigquerymodelsget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -503,7 +503,7 @@ export def "projects-datasets-models bigquerymodelsget" [
 ]: nothing -> record<bestTrialId: string, creationTime: string, defaultTrialId: string, description: string, encryptionConfiguration: record<kmsKeyName: string>, etag: string, expirationTime: string, featureColumns: table<name: string, type: record>, friendlyName: string, hparamSearchSpaces: record<activationFn: record<candidates: list>, batchSize: record<candidates: record, range: record>, boosterType: record<candidates: list>, colsampleBylevel: record<candidates: record, range: record>, colsampleBynode: record<candidates: record, range: record>, colsampleBytree: record<candidates: record, range: record>, dartNormalizeType: record<candidates: list>, dropout: record<candidates: record, range: record>, hiddenUnits: record<candidates: list>, l1Reg: record<candidates: record, range: record>, l2Reg: record<candidates: record, range: record>, learnRate: record<candidates: record, range: record>, maxTreeDepth: record<candidates: record, range: record>, minSplitLoss: record<candidates: record, range: record>, minTreeChildWeight: record<candidates: record, range: record>, numClusters: record<candidates: record, range: record>, numFactors: record<candidates: record, range: record>, numParallelTree: record<candidates: record, range: record>, optimizer: record<candidates: list>, subsample: record<candidates: record, range: record>, treeMethod: record<candidates: list>, walsAlpha: record<candidates: record, range: record>>, hparamTrials: table<endTimeMs: string, errorMessage: string, evalLoss: float, evaluationMetrics: record, hparamTuningEvaluationMetrics: record, hparams: record, startTimeMs: string, status: string, trainingLoss: float, trialId: string>, labelColumns: table<name: string, type: record>, labels: record, lastModifiedTime: string, location: string, modelReference: record<datasetId: string, modelId: string, projectId: string>, modelType: string, optimalTrialIds: list<string>, trainingRuns: table<classLevelGlobalExplanations: list, dataSplitResult: record, evaluationMetrics: record, modelLevelGlobalExplanation: record, results: list, startTime: string, trainingOptions: record, trainingStartTime: string, vertexAiModelId: string, vertexAiModelVersion: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets/($datasetId)/models/($modelId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -534,7 +534,7 @@ export def "projects-datasets-models bigquerymodelspatch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -553,7 +553,7 @@ export def "projects-datasets-models bigquerymodelspatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets/($datasetId)/models/($modelId)" $qp)
   let body = {bestTrialId: $bestTrialId, description: $description, encryptionConfiguration: $encryptionConfiguration, expirationTime: $expirationTime, friendlyName: $friendlyName, hparamSearchSpaces: $hparamSearchSpaces, labels: $labels, modelReference: $modelReference, trainingRuns: $trainingRuns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -578,7 +578,7 @@ export def "projects-datasets-routines bigqueryroutineslist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -591,7 +591,7 @@ export def "projects-datasets-routines bigqueryroutineslist" [
 ]: nothing -> record<nextPageToken: string, routines: table<arguments: list, creationTime: string, definitionBody: string, description: string, determinismLevel: string, etag: string, importedLibraries: list, language: string, lastModifiedTime: string, remoteFunctionOptions: record, returnTableType: record, returnType: record, routineReference: record, routineType: string, sparkOptions: record, strictMode: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "readMask" $readMask "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "readMask" $readMask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets/($datasetId)/routines" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -620,7 +620,7 @@ export def "projects-datasets-routines bigqueryroutinesinsert" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -643,7 +643,7 @@ export def "projects-datasets-routines bigqueryroutinesinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets/($datasetId)/routines" $qp)
   let body = {arguments: $arguments, definitionBody: $definitionBody, description: $description, determinismLevel: $determinismLevel, importedLibraries: $importedLibraries, language: $language, remoteFunctionOptions: $remoteFunctionOptions, returnTableType: $returnTableType, returnType: $returnType, routineReference: $routineReference, routineType: $routineType, sparkOptions: $sparkOptions, strictMode: $strictMode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -669,7 +669,7 @@ export def "projects-datasets-routines bigqueryroutinesdelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -678,7 +678,7 @@ export def "projects-datasets-routines bigqueryroutinesdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets/($datasetId)/routines/($routineId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -702,7 +702,7 @@ export def "projects-datasets-routines bigqueryroutinesget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -712,7 +712,7 @@ export def "projects-datasets-routines bigqueryroutinesget" [
 ]: nothing -> record<arguments: table<argumentKind: string, dataType: record, mode: string, name: string>, creationTime: string, definitionBody: string, description: string, determinismLevel: string, etag: string, importedLibraries: list<string>, language: string, lastModifiedTime: string, remoteFunctionOptions: record<connection: string, endpoint: string, maxBatchingRows: string, userDefinedContext: record>, returnTableType: record<columns: list<record>>, returnType: record<arrayElementType: any, structType: record<fields: list>, typeKind: string>, routineReference: record<datasetId: string, projectId: string, routineId: string>, routineType: string, sparkOptions: record<archiveUris: list<string>, connection: string, containerImage: string, fileUris: list<string>, jarUris: list<string>, mainClass: string, mainFileUri: string, properties: record, pyFileUris: list<string>, runtimeVersion: string>, strictMode: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "readMask" $readMask "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "readMask" $readMask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets/($datasetId)/routines/($routineId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -742,7 +742,7 @@ export def "projects-datasets-routines bigqueryroutinesupdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -765,7 +765,7 @@ export def "projects-datasets-routines bigqueryroutinesupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets/($datasetId)/routines/($routineId)" $qp)
   let body = {arguments: $arguments, definitionBody: $definitionBody, description: $description, determinismLevel: $determinismLevel, importedLibraries: $importedLibraries, language: $language, remoteFunctionOptions: $remoteFunctionOptions, returnTableType: $returnTableType, returnType: $returnType, routineReference: $routineReference, routineType: $routineType, sparkOptions: $sparkOptions, strictMode: $strictMode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -790,7 +790,7 @@ export def "projects-datasets-tables bigquerytableslist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -801,7 +801,7 @@ export def "projects-datasets-tables bigquerytableslist" [
 ]: nothing -> record<etag: string, kind: string, nextPageToken: string, tables: table<clustering: record, creationTime: string, expirationTime: string, friendlyName: string, id: string, kind: string, labels: record, rangePartitioning: record, tableReference: record, timePartitioning: record, type: string, view: record>, totalItems: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets/($datasetId)/tables" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -837,7 +837,7 @@ export def "projects-datasets-tables bigquerytablesinsert" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -888,7 +888,7 @@ export def "projects-datasets-tables bigquerytablesinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets/($datasetId)/tables" $qp)
   let body = {cloneDefinition: $cloneDefinition, clustering: $clustering, creationTime: $creationTime, defaultCollation: $defaultCollation, defaultRoundingMode: $defaultRoundingMode, description: $description, encryptionConfiguration: $encryptionConfiguration, etag: $etag, expirationTime: $expirationTime, externalDataConfiguration: $externalDataConfiguration, friendlyName: $friendlyName, id: $id, kind: $kind, labels: $labels, lastModifiedTime: $lastModifiedTime, location: $location, materializedView: $materializedView, maxStaleness: $maxStaleness, model: $model, numBytes: $numBytes, numLongTermBytes: $numLongTermBytes, numPhysicalBytes: $numPhysicalBytes, numRows: $numRows, num_active_logical_bytes: $num_active_logical_bytes, num_active_physical_bytes: $num_active_physical_bytes, num_long_term_logical_bytes: $num_long_term_logical_bytes, num_long_term_physical_bytes: $num_long_term_physical_bytes, num_partitions: $num_partitions, num_time_travel_physical_bytes: $num_time_travel_physical_bytes, num_total_logical_bytes: $num_total_logical_bytes, num_total_physical_bytes: $num_total_physical_bytes, rangePartitioning: $rangePartitioning, requirePartitionFilter: $requirePartitionFilter, schema: $schema, selfLink: $selfLink, snapshotDefinition: $snapshotDefinition, streamingBuffer: $streamingBuffer, tableReference: $tableReference, timePartitioning: $timePartitioning, type: $type, view: $view} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -914,7 +914,7 @@ export def "projects-datasets-tables bigquerytablesdelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -923,7 +923,7 @@ export def "projects-datasets-tables bigquerytablesdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets/($datasetId)/tables/($tableId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -947,7 +947,7 @@ export def "projects-datasets-tables bigquerytablesget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -958,7 +958,7 @@ export def "projects-datasets-tables bigquerytablesget" [
 ]: nothing -> record<cloneDefinition: record<baseTableReference: record<datasetId: string, projectId: string, tableId: string>, cloneTime: string>, clustering: record<fields: list<string>>, creationTime: string, defaultCollation: string, defaultRoundingMode: string, description: string, encryptionConfiguration: record<kmsKeyName: string>, etag: string, expirationTime: string, externalDataConfiguration: record<autodetect: bool, avroOptions: record<useAvroLogicalTypes: bool>, bigtableOptions: record<columnFamilies: list, ignoreUnspecifiedColumnFamilies: bool, readRowkeyAsString: bool>, compression: string, connectionId: string, csvOptions: record<allowJaggedRows: bool, allowQuotedNewlines: bool, encoding: string, fieldDelimiter: string, null_marker: string, preserveAsciiControlCharacters: bool, quote: string, skipLeadingRows: string>, decimalTargetTypes: list<string>, googleSheetsOptions: record<range: string, skipLeadingRows: string>, hivePartitioningOptions: record<mode: string, requirePartitionFilter: bool, sourceUriPrefix: string>, ignoreUnknownValues: bool, maxBadRecords: int, metadataCacheMode: string, objectMetadata: string, parquetOptions: record<enableListInference: bool, enumAsString: bool>, referenceFileSchemaUri: string, schema: record<fields: list>, sourceFormat: string, sourceUris: list<string>>, friendlyName: string, id: string, kind: string, labels: record, lastModifiedTime: string, location: string, materializedView: record<allow_non_incremental_definition: bool, enableRefresh: bool, lastRefreshTime: string, maxStaleness: string, query: string, refreshIntervalMs: string>, maxStaleness: string, model: record<modelOptions: record<labels: list, lossType: string, modelType: string>, trainingRuns: list<record>>, numBytes: string, numLongTermBytes: string, numPhysicalBytes: string, numRows: string, num_active_logical_bytes: string, num_active_physical_bytes: string, num_long_term_logical_bytes: string, num_long_term_physical_bytes: string, num_partitions: string, num_time_travel_physical_bytes: string, num_total_logical_bytes: string, num_total_physical_bytes: string, rangePartitioning: record<field: string, range: record<end: string, interval: string, start: string>>, requirePartitionFilter: bool, schema: record<fields: list<record>>, selfLink: string, snapshotDefinition: record<baseTableReference: record<datasetId: string, projectId: string, tableId: string>, snapshotTime: string>, streamingBuffer: record<estimatedBytes: string, estimatedRows: string, oldestEntryTime: string>, tableReference: record<datasetId: string, projectId: string, tableId: string>, timePartitioning: record<expirationMs: string, field: string, requirePartitionFilter: bool, type: string>, type: string, view: record<query: string, useExplicitColumnNames: bool, useLegacySql: bool, userDefinedFunctionResources: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets/($datasetId)/tables/($tableId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -995,7 +995,7 @@ export def "projects-datasets-tables bigquerytablespatch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1047,7 +1047,7 @@ export def "projects-datasets-tables bigquerytablespatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "autodetect_schema" $autodetect_schema "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "autodetect_schema" $autodetect_schema "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets/($datasetId)/tables/($tableId)" $qp)
   let body = {cloneDefinition: $cloneDefinition, clustering: $clustering, creationTime: $creationTime, defaultCollation: $defaultCollation, defaultRoundingMode: $defaultRoundingMode, description: $description, encryptionConfiguration: $encryptionConfiguration, etag: $etag, expirationTime: $expirationTime, externalDataConfiguration: $externalDataConfiguration, friendlyName: $friendlyName, id: $id, kind: $kind, labels: $labels, lastModifiedTime: $lastModifiedTime, location: $location, materializedView: $materializedView, maxStaleness: $maxStaleness, model: $model, numBytes: $numBytes, numLongTermBytes: $numLongTermBytes, numPhysicalBytes: $numPhysicalBytes, numRows: $numRows, num_active_logical_bytes: $num_active_logical_bytes, num_active_physical_bytes: $num_active_physical_bytes, num_long_term_logical_bytes: $num_long_term_logical_bytes, num_long_term_physical_bytes: $num_long_term_physical_bytes, num_partitions: $num_partitions, num_time_travel_physical_bytes: $num_time_travel_physical_bytes, num_total_logical_bytes: $num_total_logical_bytes, num_total_physical_bytes: $num_total_physical_bytes, rangePartitioning: $rangePartitioning, requirePartitionFilter: $requirePartitionFilter, schema: $schema, selfLink: $selfLink, snapshotDefinition: $snapshotDefinition, streamingBuffer: $streamingBuffer, tableReference: $tableReference, timePartitioning: $timePartitioning, type: $type, view: $view} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1086,7 +1086,7 @@ export def "projects-datasets-tables bigquerytablesupdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1138,7 +1138,7 @@ export def "projects-datasets-tables bigquerytablesupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "autodetect_schema" $autodetect_schema "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "autodetect_schema" $autodetect_schema "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets/($datasetId)/tables/($tableId)" $qp)
   let body = {cloneDefinition: $cloneDefinition, clustering: $clustering, creationTime: $creationTime, defaultCollation: $defaultCollation, defaultRoundingMode: $defaultRoundingMode, description: $description, encryptionConfiguration: $encryptionConfiguration, etag: $etag, expirationTime: $expirationTime, externalDataConfiguration: $externalDataConfiguration, friendlyName: $friendlyName, id: $id, kind: $kind, labels: $labels, lastModifiedTime: $lastModifiedTime, location: $location, materializedView: $materializedView, maxStaleness: $maxStaleness, model: $model, numBytes: $numBytes, numLongTermBytes: $numLongTermBytes, numPhysicalBytes: $numPhysicalBytes, numRows: $numRows, num_active_logical_bytes: $num_active_logical_bytes, num_active_physical_bytes: $num_active_physical_bytes, num_long_term_logical_bytes: $num_long_term_logical_bytes, num_long_term_physical_bytes: $num_long_term_physical_bytes, num_partitions: $num_partitions, num_time_travel_physical_bytes: $num_time_travel_physical_bytes, num_total_logical_bytes: $num_total_logical_bytes, num_total_physical_bytes: $num_total_physical_bytes, rangePartitioning: $rangePartitioning, requirePartitionFilter: $requirePartitionFilter, schema: $schema, selfLink: $selfLink, snapshotDefinition: $snapshotDefinition, streamingBuffer: $streamingBuffer, tableReference: $tableReference, timePartitioning: $timePartitioning, type: $type, view: $view} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1164,7 +1164,7 @@ export def "projects-datasets-tables-data bigquerytabledatalist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1177,7 +1177,7 @@ export def "projects-datasets-tables-data bigquerytabledatalist" [
 ]: nothing -> record<etag: string, kind: string, pageToken: string, rows: table<f: list>, totalRows: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "startIndex" $startIndex "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "selectedFields" $selectedFields "scalar") (serialize-qp "startIndex" $startIndex "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets/($datasetId)/tables/($tableId)/data" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1202,7 +1202,7 @@ export def "projects-datasets-tables-insert-all bigquerytabledatainsertAll" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1217,7 +1217,7 @@ export def "projects-datasets-tables-insert-all bigquerytabledatainsertAll" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets/($datasetId)/tables/($tableId)/insertAll" $qp)
   let body = {ignoreUnknownValues: $ignoreUnknownValues, kind: $kind, rows: $rows, skipInvalidRows: $skipInvalidRows, templateSuffix: $templateSuffix} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1243,7 +1243,7 @@ export def "projects-datasets-tables-row-access-policies bigqueryrowAccessPolici
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1254,7 +1254,7 @@ export def "projects-datasets-tables-row-access-policies bigqueryrowAccessPolici
 ]: nothing -> record<nextPageToken: string, rowAccessPolicies: table<creationTime: string, etag: string, filterPredicate: string, lastModifiedTime: string, rowAccessPolicyReference: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/datasets/($datasetId)/tables/($tableId)/rowAccessPolicies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1276,7 +1276,7 @@ export def "projects-jobs bigqueryjobslist" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1293,7 +1293,7 @@ export def "projects-jobs bigqueryjobslist" [
 ]: nothing -> record<etag: string, jobs: table<configuration: record, errorResult: record, id: string, jobReference: record, kind: string, state: string, statistics: record, status: record, user_email: string>, kind: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "allUsers" $allUsers "scalar") (serialize-qp "maxCreationTime" $maxCreationTime "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "minCreationTime" $minCreationTime "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "parentJobId" $parentJobId "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "stateFilter" $stateFilter "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "allUsers" $allUsers "scalar") (serialize-qp "maxCreationTime" $maxCreationTime "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "minCreationTime" $minCreationTime "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "parentJobId" $parentJobId "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "stateFilter" $stateFilter "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/jobs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1315,7 +1315,7 @@ export def "projects-jobs bigqueryjobsinsert" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1326,7 +1326,7 @@ export def "projects-jobs bigqueryjobsinsert" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/jobs" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -1350,7 +1350,7 @@ export def "projects-jobs bigqueryjobsget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1360,7 +1360,7 @@ export def "projects-jobs bigqueryjobsget" [
 ]: nothing -> record<configuration: record<copy: record<createDisposition: string, destinationEncryptionConfiguration: record, destinationExpirationTime: any, destinationTable: record, operationType: string, sourceTable: record, sourceTables: list, writeDisposition: string>, dryRun: bool, extract: record<compression: string, destinationFormat: string, destinationUri: string, destinationUris: list, fieldDelimiter: string, printHeader: bool, sourceModel: record, sourceTable: record, useAvroLogicalTypes: bool>, jobTimeoutMs: string, jobType: string, labels: record, load: record<allowJaggedRows: bool, allowQuotedNewlines: bool, autodetect: bool, clustering: record, connectionProperties: list, createDisposition: string, createSession: bool, decimalTargetTypes: list, destinationEncryptionConfiguration: record, destinationTable: record, destinationTableProperties: record, encoding: string, fieldDelimiter: string, hivePartitioningOptions: record, ignoreUnknownValues: bool, jsonExtension: string, maxBadRecords: int, nullMarker: string, parquetOptions: record, preserveAsciiControlCharacters: bool, projectionFields: list, quote: string, rangePartitioning: record, referenceFileSchemaUri: string, schema: record, schemaInline: string, schemaInlineFormat: string, schemaUpdateOptions: list, skipLeadingRows: int, sourceFormat: string, sourceUris: list, timePartitioning: record, useAvroLogicalTypes: bool, writeDisposition: string>, query: record<allowLargeResults: bool, clustering: record, connectionProperties: list, continuous: bool, createDisposition: string, createSession: bool, defaultDataset: record, destinationEncryptionConfiguration: record, destinationTable: record, flattenResults: bool, maximumBillingTier: int, maximumBytesBilled: string, parameterMode: string, preserveNulls: bool, priority: string, query: string, queryParameters: list, rangePartitioning: record, schemaUpdateOptions: list, tableDefinitions: record, timePartitioning: record, useLegacySql: bool, useQueryCache: bool, userDefinedFunctionResources: list, writeDisposition: string>>, etag: string, id: string, jobReference: record<jobId: string, location: string, projectId: string>, kind: string, selfLink: string, statistics: record<completionRatio: float, copy: record<copied_logical_bytes: string, copied_rows: string>, creationTime: string, dataMaskingStatistics: record<dataMaskingApplied: bool>, endTime: string, extract: record<destinationUriFileCounts: list, inputBytes: string>, load: record<badRecords: string, inputFileBytes: string, inputFiles: string, outputBytes: string, outputRows: string>, numChildJobs: string, parentJobId: string, query: record<biEngineStatistics: record, billingTier: int, cacheHit: bool, ddlAffectedRowAccessPolicyCount: string, ddlDestinationTable: record, ddlOperationPerformed: string, ddlTargetDataset: record, ddlTargetRoutine: record, ddlTargetRowAccessPolicy: record, ddlTargetTable: record, dmlStats: record, estimatedBytesProcessed: string, mlStatistics: record, modelTraining: record, modelTrainingCurrentIteration: int, modelTrainingExpectedTotalIteration: string, numDmlAffectedRows: string, queryPlan: list, referencedRoutines: list, referencedTables: list, reservationUsage: list, schema: record, searchStatistics: record, sparkStatistics: record, statementType: string, timeline: list, totalBytesBilled: string, totalBytesProcessed: string, totalBytesProcessedAccuracy: string, totalPartitionsProcessed: string, totalSlotMs: string, transferredBytes: string, undeclaredQueryParameters: list>, quotaDeferments: list<string>, reservationUsage: list<record>, reservation_id: string, rowLevelSecurityStatistics: record<rowLevelSecurityApplied: bool>, scriptStatistics: record<evaluationKind: string, stackFrames: list>, sessionInfo: record<sessionId: string>, startTime: string, totalBytesProcessed: string, totalSlotMs: string, transactionInfo: record<transactionId: string>>, status: record<errorResult: record<debugInfo: string, location: string, message: string, reason: string>, errors: list<record>, state: string>, user_email: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/jobs/($jobId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1383,7 +1383,7 @@ export def "projects-jobs-cancel bigqueryjobscancel" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1393,7 +1393,7 @@ export def "projects-jobs-cancel bigqueryjobscancel" [
 ]: nothing -> record<job: record<configuration: record<copy: record, dryRun: bool, extract: record, jobTimeoutMs: string, jobType: string, labels: record, load: record, query: record>, etag: string, id: string, jobReference: record<jobId: string, location: string, projectId: string>, kind: string, selfLink: string, statistics: record<completionRatio: float, copy: record, creationTime: string, dataMaskingStatistics: record, endTime: string, extract: record, load: record, numChildJobs: string, parentJobId: string, query: record, quotaDeferments: list, reservationUsage: list, reservation_id: string, rowLevelSecurityStatistics: record, scriptStatistics: record, sessionInfo: record, startTime: string, totalBytesProcessed: string, totalSlotMs: string, transactionInfo: record>, status: record<errorResult: record, errors: list, state: string>, user_email: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/jobs/($jobId)/cancel" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1416,7 +1416,7 @@ export def "projects-jobs-delete bigqueryjobsdelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1426,7 +1426,7 @@ export def "projects-jobs-delete bigqueryjobsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/jobs/($jobId)/delete" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1451,7 +1451,7 @@ export def "projects-queries bigqueryjobsquery" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1469,7 +1469,7 @@ export def "projects-queries bigqueryjobsquery" [
   --maximumBytesBilled: string # [Optional] Limits the bytes billed for this job. Queries that will have bytes billed beyond this limit will fail (without incurring a charge). If unspecified, this will be set to your project default. (format: int64)
   --parameterMode: string # Standard SQL only. Set to POSITIONAL to use positional (?) query parameters or to NAMED to use named (@myparam) query parameters in this query.
   --preserveNulls: oneof<nothing, bool> # [Deprecated] This property is deprecated.
-  --body-query: string # [Required] A query string, following the BigQuery query syntax, of the query to execute. Example: "SELECT count(f1) FROM [myProjectId:myDatasetId.myTableId]".
+  --query: string # [Required] A query string, following the BigQuery query syntax, of the query to execute. Example: "SELECT count(f1) FROM [myProjectId:myDatasetId.myTableId]".
   --queryParameters: list # Query parameters for Standard SQL queries. — item shape: {name?: string, parameterType?: record, parameterValue?: record}
   --requestId: string # A unique user provided identifier to ensure idempotent behavior for queries. Note that this is different from the job_id. It has the following properties: 1. It is case-sensitive, limited to up to 36 ASCII characters. A UUID is recommended. 2. Read only queries can ignore this token since they are nullipotent by definition. 3. For the purposes of idempotency ensured by the request_id, a request is considered duplicate of another only if they have the same request_id and are actually duplicates. When determining whether a request is a duplicate of the previous request, all parameters in the request that may affect the behavior are considered. For example, query, connection_properties, query_parameters, use_legacy_sql are parameters that affect the result and are considered when determining whether a request is a duplicate, but properties like timeout_ms don't affect the result and are thus not considered. Dry run query requests are never considered duplicate of another request. 4. When a duplicate mutating query request is detected, it returns: a. the results of the mutation if it completes successfully within the timeout. b. the running operation if it is still in progress at the end of the timeout. 5. Its lifetime is limited to 15 minutes. In other words, if two requests are sent with the same request_id, but more than 15 minutes apart, idempotency is not guaranteed.
   --timeoutMs: int # [Optional] How long to wait for the query to complete, in milliseconds, before the request times out and returns. Note that this is only a timeout for the request, not the query. If the query takes longer to run than the timeout value, the call returns without any results and with the 'jobComplete' flag set to false. You can call GetQueryResults() to wait for the query to complete and read the results. The default value is 10000 milliseconds (10 seconds). (format: uint32)
@@ -1479,9 +1479,9 @@ export def "projects-queries bigqueryjobsquery" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/queries" $qp)
-  let body = {connectionProperties: $connectionProperties, continuous: $continuous, createSession: $createSession, defaultDataset: $defaultDataset, dryRun: $dryRun, kind: $kind, labels: $labels, location: $location, maxResults: $maxResults, maximumBytesBilled: $maximumBytesBilled, parameterMode: $parameterMode, preserveNulls: $preserveNulls, query: $body_query, queryParameters: $queryParameters, requestId: $requestId, timeoutMs: $timeoutMs, useLegacySql: $useLegacySql, useQueryCache: $useQueryCache} | compact
+  let body = {connectionProperties: $connectionProperties, continuous: $continuous, createSession: $createSession, defaultDataset: $defaultDataset, dryRun: $dryRun, kind: $kind, labels: $labels, location: $location, maxResults: $maxResults, maximumBytesBilled: $maximumBytesBilled, parameterMode: $parameterMode, preserveNulls: $preserveNulls, query: $query, queryParameters: $queryParameters, requestId: $requestId, timeoutMs: $timeoutMs, useLegacySql: $useLegacySql, useQueryCache: $useQueryCache} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1504,7 +1504,7 @@ export def "projects-queries bigqueryjobsgetQueryResults" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1518,7 +1518,7 @@ export def "projects-queries bigqueryjobsgetQueryResults" [
 ]: nothing -> record<cacheHit: bool, errors: table<debugInfo: string, location: string, message: string, reason: string>, etag: string, jobComplete: bool, jobReference: record<jobId: string, location: string, projectId: string>, kind: string, numDmlAffectedRows: string, pageToken: string, rows: table<f: list>, schema: record<fields: list<record>>, totalBytesProcessed: string, totalRows: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "timeoutMs" $timeoutMs "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "timeoutMs" $timeoutMs "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/queries/($jobId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1540,7 +1540,7 @@ export def "projects-service-account bigqueryprojectsgetServiceAccount" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1549,7 +1549,7 @@ export def "projects-service-account bigqueryprojectsgetServiceAccount" [
 ]: nothing -> record<email: string, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($projectId)/serviceAccount" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1572,7 +1572,7 @@ export def "tables bigquerytablesgetIamPolicy" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1583,7 +1583,7 @@ export def "tables bigquerytablesgetIamPolicy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/($resource):getIamPolicy" $qp)
   let body = {options: $options} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1608,7 +1608,7 @@ export def "tables bigquerytablessetIamPolicy" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1620,7 +1620,7 @@ export def "tables bigquerytablessetIamPolicy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/($resource):setIamPolicy" $qp)
   let body = {policy: $policy, updateMask: $updateMask} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1644,7 +1644,7 @@ export def "tables bigquerytablestestIamPermissions" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alt: string@alt-completer # Data format for the response.
-  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
@@ -1655,7 +1655,7 @@ export def "tables bigquerytablestestIamPermissions" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/($resource):testIamPermissions" $qp)
   let body = {permissions: $permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }

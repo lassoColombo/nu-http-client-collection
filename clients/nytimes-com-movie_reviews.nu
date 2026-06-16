@@ -122,7 +122,7 @@ export def "reviews-searchjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search keywords; matches movie title and indexed terms  To limit your search to exact matches only, surround your search string with single quotation marks (e.g., query='28+days+later'). Otherwise, responses will include partial matches ("head words") as well as exact matches (e.g., president will match president, presidents and presidential).      If you specify multiple terms without quotation marks, they will be combined in an OR search.      If you omit the query parameter, your request will be equivalent to a reviews and NYT Critics' Picks request.
+  --query: string # Search keywords; matches movie title and indexed terms  To limit your search to exact matches only, surround your search string with single quotation marks (e.g., query='28+days+later'). Otherwise, responses will include partial matches ("head words") as well as exact matches (e.g., president will match president, presidents and presidential).      If you specify multiple terms without quotation marks, they will be combined in an OR search.      If you omit the query parameter, your request will be equivalent to a reviews and NYT Critics' Picks request.
   --critics-pick: string@critics-pick-completer # Set this parameter to Y to limit the results to NYT Critics' Picks. To get only those movies that have not been highlighted by Times critics, specify critics-pick=N. (To get all reviews regardless of critics-pick status, simply omit this parameter.)
   --reviewer: string # Include this parameter to limit your results to reviews by a specific critic. Reviewer names should be formatted like this: Manohla Dargis.
   --publication-date: string # Single date: YYYY-MM-DD  Start and end date: YYYY-MM-DD;YYYY-MM-DD  The publication-date is the date the review was first published in The Times.
@@ -132,7 +132,7 @@ export def "reviews-searchjson get" [
 ]: nothing -> record<copyright: string, num_results: int, results: table<byline: string, critics_pick: int, date_updated: string, display_title: string, headline: string, link: record, mpaa_rating: string, multimedia: record, opening_date: string, publication_date: string, summary_short: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "critics-pick" $critics_pick "scalar") (serialize-qp "reviewer" $reviewer "scalar") (serialize-qp "publication-date" $publication_date "scalar") (serialize-qp "opening-date" $opening_date "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "critics-pick" $critics_pick "scalar") (serialize-qp "reviewer" $reviewer "scalar") (serialize-qp "publication-date" $publication_date "scalar") (serialize-qp "opening-date" $opening_date "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reviews/search.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

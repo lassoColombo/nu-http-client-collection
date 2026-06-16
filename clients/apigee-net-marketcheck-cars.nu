@@ -794,14 +794,14 @@ export def "history-car get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
-  --qp-fields: string # List of fields to fetch, in case the default fields list in the response is to be trimmed down (format: string)
+  --fields: string # List of fields to fetch, in case the default fields list in the response is to be trimmed down (format: string)
   --page: float # Page number to fetch the results for the given criteria. Default is 1. (format: number)
   --include-duplicates: oneof<nothing, bool> # Flag to indicate whether to include duplicate historical records as well in the response
   --sort-order: string@sort-order-completer # Sort order - asc or desc. Default sort order is asc (format: string)
 ]: nothing -> table<carfax_1_owner: bool, carfax_clean_title: bool, city: string, data_source: string, dealer_id: int, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list<record>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, is_searchable: string, last_seen_at: int, last_seen_at_date: string, latitude: string, leasing_options: list<record>, longitude: string, miles: int, msrp: int, price: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: int, scraped_at_date: string, seller_name: string, seller_name_o: string, seller_type: string, source: string, state: string, status_date: int, stock_no: string, street: string, trim_r: string, vdp_url: string, vin: string, zip: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_duplicates" $include_duplicates "scalar") (serialize-qp "sort_order" $sort_order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_duplicates" $include_duplicates "scalar") (serialize-qp "sort_order" $sort_order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/history/car/($vin)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

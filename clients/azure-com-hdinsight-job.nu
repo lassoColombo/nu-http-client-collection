@@ -134,11 +134,11 @@ export def "templeton-jobs List" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --username: string # The user name used for running job.
   --showall: string@showall-completer # If showall is set to 'true', the request will return all jobs the user has permission to view, not only the jobs belonging to the user.
-  --qp-fields: string@fields-completer # If fields set to '*', the request will return full details of the job. Currently the value can only be '*'.
+  --fields: string@fields-completer # If fields set to '*', the request will return full details of the job. Currently the value can only be '*'.
 ]: nothing -> table<detail: record<callback: record, completed: string, exitValue: int, id: string, msg: record, parentId: string, percentComplete: string, profile: record, status: record, user: string, userargs: record>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.name" $username "scalar") (serialize-qp "showall" $showall "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "user.name" $username "scalar") (serialize-qp "showall" $showall "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/jobs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -185,11 +185,11 @@ export def "templeton-jobs Get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --username: string # The user name used for running job.
-  --qp-fields: string@fields-completer # If fields set to '*', the request will return full details of the job. Currently the value can only be '*'.
+  --fields: string@fields-completer # If fields set to '*', the request will return full details of the job. Currently the value can only be '*'.
 ]: nothing -> record<callback: record, completed: string, exitValue: int, id: string, msg: record, parentId: string, percentComplete: string, profile: record<jobFile: string, jobID: record<id: int, jtIdentifier: string>, jobId: string, jobName: string, queueName: string, url: string, user: string>, status: record<cleanupProgress: float, failureInfo: string, finishTime: int, historyFile: string, jobACLs: any, jobComplete: bool, jobFile: string, jobID: record<id: int, jtIdentifier: string>, jobId: string, jobName: string, jobPriority: string, mapProgress: float, neededMem: int, numReservedSlots: int, numUsedSlots: int, priority: string, queue: string, reduceProgress: float, reservedMem: int, retired: bool, runState: int, schedulingInfo: string, setupProgress: float, startTime: int, state: string, trackingUrl: string, uber: bool, usedMem: int, username: string>, user: string, userargs: record<arg: list<string>, callback: record, define: list<string>, enablelog: string, execute: string, file: record, files: record, jar: string, statusdir: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.name" $username "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "user.name" $username "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/templeton/v1/jobs/($jobId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -213,11 +213,11 @@ export def "templeton-jobs-op-listafterid ListAfterJobId" [
   --jobid: string # JobId from where to list jobs.
   --numrecords: int # Number of jobs to fetch. (format: int32)
   --showall: string@showall-completer # If showall is set to 'true', the request will return all jobs the user has permission to view, not only the jobs belonging to the user.
-  --qp-fields: string@fields-completer # If fields set to '*', the request will return full details of the job. Currently the value can only be '*'.
+  --fields: string@fields-completer # If fields set to '*', the request will return full details of the job. Currently the value can only be '*'.
 ]: nothing -> table<detail: record<callback: record, completed: string, exitValue: int, id: string, msg: record, parentId: string, percentComplete: string, profile: record, status: record, user: string, userargs: record>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.name" $username "scalar") (serialize-qp "jobid" $jobid "scalar") (serialize-qp "numrecords" $numrecords "scalar") (serialize-qp "showall" $showall "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "user.name" $username "scalar") (serialize-qp "jobid" $jobid "scalar") (serialize-qp "numrecords" $numrecords "scalar") (serialize-qp "showall" $showall "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/jobs?op=LISTAFTERID" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -384,13 +384,13 @@ export def "collaborations collaborations" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer # The status of the collaborations to retrieve (e.g. pending)
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --offset: int # The offset of the item at which to begin the response.  Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/collaborations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -412,7 +412,7 @@ export def "collaborations collaborations-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --notify: oneof<nothing, bool> # Determines if users should receive email notification for the action performed. (e.g. true)
   accessible_by: record # The user or group to give access to the item. — shape: {id?: string, login?: string, type: "user"|"group"}
   --can-view-path: oneof<nothing, bool> # Determines if the invited users can see the entire parent path to the associated folder. The user will not gain privileges in any parent folder and therefore can not see content the user is not collaborated on.  Be aware that this meaningfully increases the time required to load the invitee's **All Files** page. We recommend you limit the number of collaborations with `can_view_path` enabled to 1,000 per user.  Only owner or co-owners can invite collaborators with a `can_view_path` of `true`.  `can_view_path` can only be used for folder collaborations. (e.g. true)
@@ -423,7 +423,7 @@ export def "collaborations collaborations-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "notify" $notify "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "notify" $notify "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/collaborations" $qp)
   let body = {accessible_by: $accessible_by, can_view_path: $can_view_path, expires_at: $expires_at, item: $item, role: $role} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -469,11 +469,11 @@ export def "collaborations id-by-collaboration_id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record<acceptance_requirements_status: record<strong_password_requirement: record<enterprise_has_strong_password_required_for_external_users: bool, user_has_strong_password: bool>, terms_of_service_requirement: record<is_accepted: bool, terms_of_service: record>, two_factor_authentication_requirement: record<enterprise_has_two_factor_auth_enabled: bool, user_has_two_factor_authentication_enabled: bool>>, accessible_by: record, acknowledged_at: string, created_at: string, created_by: record, expires_at: string, id: string, invite_email: string, item: record, modified_at: string, role: string, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/collaborations/($collaboration_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -523,13 +523,13 @@ export def "collections collections" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --offset: int # The offset of the item at which to begin the response.  Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/collections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -550,13 +550,13 @@ export def "collections-items items" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --offset: int # The offset of the item at which to begin the response.  Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/collections/($collection_id)/items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -577,7 +577,7 @@ export def "comments comments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --item: record # The item to attach the comment to. — shape: {id: string, type: "file"|"comment"}
   message: string # The text of the comment.  To mention a user, use the `tagged_message` parameter instead. (e.g. Review completed!)
   --tagged-message: string # The text of the comment, including `@[user_id:name]` somewhere in the message to mention another user, which will send them an email notification, letting them know they have been mentioned.  The `user_id` is the target user's ID, where the `name` can be any custom phrase. In the Box UI this name will link to the user's profile.  If you are not mentioning another user, use `message` instead. (e.g. @[1234:John] Review completed!)
@@ -585,7 +585,7 @@ export def "comments comments" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/comments" $qp)
   let body = {item: $item, message: $message, tagged_message: $tagged_message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -631,11 +631,11 @@ export def "comments id-by-comment_id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/comments/($comment_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -656,13 +656,13 @@ export def "comments id-by-comment_id-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --message: string # The text of the comment to update (e.g. Review completed!)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/comments/($comment_id)" $qp)
   let body = {message: $message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1055,7 +1055,7 @@ export def "files-content content-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --content-md5: string # An optional header containing the SHA1 hash of the file to ensure that the file was not corrupted in transit. (e.g. 134b65991ed521fcfe4724b7d814ab8ded5185dc)
   attributes: record # The additional attributes of the file being uploaded. Mainly the name and the parent folder. These attributes are part of the multi part request body and are in JSON format.  <Message warning>    The `attributes` part of the body must come **before** the   `file` part. Requests that do not follow this format when   uploading the file will receive a HTTP `400` error with a   `metadata_after_file_contents` error code.  </Message> — shape: {content_created_at?: string, content_modified_at?: string, name: string, parent: record}
   file: string # The content of the file to upload to Box.  <Message warning>    The `attributes` part of the body must come **before** the   `file` part. Requests that do not follow this format when   uploading the file will receive a HTTP `400` error with a   `metadata_after_file_contents` error code.  </Message> (format: binary)
@@ -1063,7 +1063,7 @@ export def "files-content content-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://upload.box.com/api/2.0")
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/files/content" $qp)
   let body = {attributes: $attributes, file: $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1277,14 +1277,14 @@ export def "files id-by-file_id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested.  Additionally this field can be used to query any metadata applied to the file by specifying the `metadata` field as well as the scope and key of the template to retrieve, for example `?field=metadata.enterprise_12345.contractTemplate`. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested.  Additionally this field can be used to query any metadata applied to the file by specifying the `metadata` field as well as the scope and key of the template to retrieve, for example `?field=metadata.enterprise_12345.contractTemplate`. (e.g. [id, type, name])
   --if-none-match: string # Ensures an item is only returned if it has changed.  Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `304 Not Modified` if the item has not changed since. (e.g. 1)
   --boxapi: string # The URL, and optional password, for the shared link of this item.  This header can be used to access items that have not been explicitly shared with a user.  Use the format `shared_link=[link]` or if a password is required then use `shared_link=[link]&shared_link_password=[password]`.  This header can be used on the file or folder shared, as well as on any files or folders nested within the item. (e.g. shared_link=[link]&shared_link_password=[password])
   --x-rep-hints: string # A header required to request specific `representations` of a file. Use this in combination with the `fields` query parameter to request a specific file representation.  The general format for these representations is `X-Rep-Hints: [...]` where `[...]` is one or many hints in the format `[fileType?query]`.  For example, to request a `png` representation in `32x32` as well as `64x64` pixel dimensions provide the following hints.  `x-rep-hints: [jpg?dimensions=32x32][jpg?dimensions=64x64]`  Additionally, a `text` representation is available for all document file types in Box using the `[extracted_text]` representation.  `x-rep-hints: [extracted_text]` (e.g. [pdf])
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($file_id)" $qp)
   let extra_headers = {"if-none-match": $if_none_match, "boxapi": $boxapi, "x-rep-hints": $x_rep_hints} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1307,14 +1307,14 @@ export def "files id-by-file_id-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --name: string # An optional new name for the file. (e.g. Restored.docx)
   --parent: any
 ]: any -> record<content_created_at: string, content_modified_at: string, created_at: string, created_by: record, description: string, etag: string, file_version: record, id: string, item_status: string, modified_at: string, modified_by: record, name: string, owned_by: record, parent: record, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, sequence_id: record, sha1: string, shared_link: string, size: int, trashed_at: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($file_id)" $qp)
   let body = {name: $name, parent: $parent} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1339,7 +1339,7 @@ export def "files id-by-file_id-3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --if-match: string # Ensures this item hasn't recently changed before making changes.  Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `412 Precondition Failed` if it has changed since. (e.g. 1)
   --description: string # The description for a file. This can be seen in the right-hand sidebar panel when viewing a file in the Box web app. Additionally, this index is used in the search index of the file, allowing users to find the file by the content in the description. (e.g. The latest reports. Automatically updated)
   --disposition-at: string # The retention expiration timestamp for the given file. This date cannot be shortened once set on a file. (format: date-time, e.g. 2012-12-12T10:53:43-08:00)
@@ -1353,7 +1353,7 @@ export def "files id-by-file_id-3" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($file_id)" $qp)
   let body = {description: $description, disposition_at: $disposition_at, lock: $lock, name: $name, parent: $parent, permissions: $permissions, shared_link: $shared_link, tags: $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1379,13 +1379,13 @@ export def "files link-by-file_id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
   --shared-link: record # The settings for the shared link to create on the file. Use an empty object (`{}`) to use the default settings for shared links. — shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($file_id)#add_shared_link" $qp)
   let body = {shared_link: $shared_link} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1408,11 +1408,11 @@ export def "files link-by-file_id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($file_id)#get_shared_link" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1433,13 +1433,13 @@ export def "files link-by-file_id-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
   --shared-link: record # By setting this value to `null`, the shared link is removed from the file. (nullable)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($file_id)#remove_shared_link" $qp)
   let body = {shared_link: $shared_link} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1463,13 +1463,13 @@ export def "files link-by-file_id-3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
   --shared-link: record # The settings for the shared link to update. — shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($file_id)#update_shared_link" $qp)
   let body = {shared_link: $shared_link} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1492,13 +1492,13 @@ export def "files-collaborations collaborations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($file_id)/collaborations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1519,13 +1519,13 @@ export def "files-comments comments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --offset: int # The offset of the item at which to begin the response.  Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($file_id)/comments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1577,7 +1577,7 @@ export def "files-content content-by-file_id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --if-match: string # Ensures this item hasn't recently changed before making changes.  Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `412 Precondition Failed` if it has changed since. (e.g. 1)
   --content-md5: string # An optional header containing the SHA1 hash of the file to ensure that the file was not corrupted in transit. (e.g. 134b65991ed521fcfe4724b7d814ab8ded5185dc)
   attributes: record # The additional attributes of the file being uploaded. Mainly the name and the parent folder. These attributes are part of the multi part request body and are in JSON format.  <Message warning>    The `attributes` part of the body must come **before** the   `file` part. Requests that do not follow this format when   uploading the file will receive a HTTP `400` error with a   `metadata_after_file_contents` error code.  </Message> — shape: {content_modified_at?: string, name: string}
@@ -1586,7 +1586,7 @@ export def "files-content content-by-file_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://upload.box.com/api/2.0")
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($file_id)/content" $qp)
   let body = {attributes: $attributes, file: $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -1612,7 +1612,7 @@ export def "files-copy copy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --name: string # An optional new name for the copied file.  There are some restrictions to the file name. Names containing non-printable ASCII characters, forward and backward slashes (`/`, `\`), and protected names like `.` and `..` are automatically sanitized by removing the non-allowed characters. (e.g. FileCopy.txt)
   parent: record # The destination folder to copy the file to. — shape: {id: string}
   --version: string # An optional ID of the specific file version to copy. (e.g. 0)
@@ -1620,7 +1620,7 @@ export def "files-copy copy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($file_id)/copy" $qp)
   let body = {name: $name, parent: $parent, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2046,11 +2046,11 @@ export def "files-trash trash-by-file_id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record<content_created_at: string, content_modified_at: string, created_at: string, created_by: record, description: string, etag: string, file_version: record, id: string, item_status: string, modified_at: string, modified_by: record, name: string, owned_by: record, parent: record, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, sequence_id: record, sha1: string, shared_link: string, size: int, trashed_at: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($file_id)/trash" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2099,13 +2099,13 @@ export def "files-versions versions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --offset: int # The offset of the item at which to begin the response.  Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($file_id)/versions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2126,14 +2126,14 @@ export def "files-versions-current current" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --id: string # The file version ID (e.g. 11446498)
   --type: string@type-completer # The type to promote (e.g. file_version)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($file_id)/versions/current" $qp)
   let body = {id: $id, type: $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2184,11 +2184,11 @@ export def "files-versions id-by-file_id-file_version_id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/files/($file_id)/versions/($file_version_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2387,7 +2387,7 @@ export def "folders folders" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --folder-upload-email: any
   name: string # The name for the new folder.  There are some restrictions to the file name. Names containing non-printable ASCII characters, forward and backward slashes (`/`, `\`), as well as names with trailing spaces are prohibited.  Additionally, the names `.` and `..` are not allowed either. (e.g. New Folder)
   parent: record # The parent folder to create the new folder within. — shape: {id: string}
@@ -2396,7 +2396,7 @@ export def "folders folders" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/folders" $qp)
   let body = {folder_upload_email: $folder_upload_email, name: $name, parent: $parent, sync_state: $sync_state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2418,7 +2418,7 @@ export def "folders-trash-items items" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --offset: int # The offset of the item at which to begin the response.  Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
   --usemarker: oneof<nothing, bool> # Specifies whether to use marker-based pagination instead of offset-based pagination. Only one pagination method can be used at a time.  By setting this value to true, the API will return a `marker` field that can be passed as a parameter to this endpoint to get the next page of the response. (e.g. true)
@@ -2428,7 +2428,7 @@ export def "folders-trash-items items" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "usemarker" $usemarker "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "usemarker" $usemarker "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/folders/trash/items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2477,13 +2477,13 @@ export def "folders id-by-folder_id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested.  Additionally this field can be used to query any metadata applied to the file by specifying the `metadata` field as well as the scope and key of the template to retrieve, for example `?field=metadata.enterprise_12345.contractTemplate`. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested.  Additionally this field can be used to query any metadata applied to the file by specifying the `metadata` field as well as the scope and key of the template to retrieve, for example `?field=metadata.enterprise_12345.contractTemplate`. (e.g. [id, type, name])
   --if-none-match: string # Ensures an item is only returned if it has changed.  Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `304 Not Modified` if the item has not changed since. (e.g. 1)
   --boxapi: string # The URL, and optional password, for the shared link of this item.  This header can be used to access items that have not been explicitly shared with a user.  Use the format `shared_link=[link]` or if a password is required then use `shared_link=[link]&shared_link_password=[password]`.  This header can be used on the file or folder shared, as well as on any files or folders nested within the item. (e.g. shared_link=[link]&shared_link_password=[password])
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/folders/($folder_id)" $qp)
   let extra_headers = {"if-none-match": $if_none_match, "boxapi": $boxapi} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2506,14 +2506,14 @@ export def "folders id-by-folder_id-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --name: string # An optional new name for the folder. (e.g. Restored Photos)
   --parent: any
 ]: any -> record<content_created_at: string, content_modified_at: string, created_at: string, created_by: record, description: record, etag: string, folder_upload_email: string, id: string, item_status: string, modified_at: string, modified_by: record, name: string, owned_by: record, parent: record, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, sequence_id: record, shared_link: string, size: int, trashed_at: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/folders/($folder_id)" $qp)
   let body = {name: $name, parent: $parent} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2538,7 +2538,7 @@ export def "folders id-by-folder_id-3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --if-match: string # Ensures this item hasn't recently changed before making changes.  Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `412 Precondition Failed` if it has changed since. (e.g. 1)
   --can-non-owners-invite: oneof<nothing, bool> # Specifies if users who are not the owner of the folder can invite new collaborators to the folder. (e.g. true)
   --can-non-owners-view-collaborators: oneof<nothing, bool> # Restricts collaborators who are not the owner of this folder from viewing other collaborations on this folder.  It also restricts non-owners from inviting new collaborators.  When setting this field to `false`, it is required to also set `can_non_owners_invite_collaborators` to `false` if it has not already been set. (e.g. true)
@@ -2555,7 +2555,7 @@ export def "folders id-by-folder_id-3" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/folders/($folder_id)" $qp)
   let body = {can_non_owners_invite: $can_non_owners_invite, can_non_owners_view_collaborators: $can_non_owners_view_collaborators, collections: $collections, description: $description, folder_upload_email: $folder_upload_email, is_collaboration_restricted_to_enterprise: $is_collaboration_restricted_to_enterprise, name: $name, parent: $parent, shared_link: $shared_link, sync_state: $sync_state, tags: $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2581,13 +2581,13 @@ export def "folders link-by-folder_id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
   --shared-link: record # The settings for the shared link to create on the folder.  Use an empty object (`{}`) to use the default settings for shared links. — shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/folders/($folder_id)#add_shared_link" $qp)
   let body = {shared_link: $shared_link} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2610,11 +2610,11 @@ export def "folders link-by-folder_id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/folders/($folder_id)#get_shared_link" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2635,13 +2635,13 @@ export def "folders link-by-folder_id-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
   --shared-link: record # By setting this value to `null`, the shared link is removed from the folder. (nullable)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/folders/($folder_id)#remove_shared_link" $qp)
   let body = {shared_link: $shared_link} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2665,13 +2665,13 @@ export def "folders link-by-folder_id-3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
   --shared-link: record # The settings for the shared link to update. — shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/folders/($folder_id)#update_shared_link" $qp)
   let body = {shared_link: $shared_link} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2694,11 +2694,11 @@ export def "folders-collaborations collaborations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/folders/($folder_id)/collaborations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2720,14 +2720,14 @@ export def "folders-copy copy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --name: string # An optional new name for the copied folder.  There are some restrictions to the file name. Names containing non-printable ASCII characters, forward and backward slashes (`/`, `\`), as well as names with trailing spaces are prohibited.  Additionally, the names `.` and `..` are not allowed either. (e.g. New Folder)
   parent: record # The destination folder to copy the folder to. — shape: {id: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/folders/($folder_id)/copy" $qp)
   let body = {name: $name, parent: $parent} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -2750,7 +2750,7 @@ export def "folders-items items" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested.  Additionally this field can be used to query any metadata applied to the file by specifying the `metadata` field as well as the scope and key of the template to retrieve, for example `?field=metadata.enterprise_12345.contractTemplate`. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested.  Additionally this field can be used to query any metadata applied to the file by specifying the `metadata` field as well as the scope and key of the template to retrieve, for example `?field=metadata.enterprise_12345.contractTemplate`. (e.g. [id, type, name])
   --usemarker: oneof<nothing, bool> # Specifies whether to use marker-based pagination instead of offset-based pagination. Only one pagination method can be used at a time.  By setting this value to true, the API will return a `marker` field that can be passed as a parameter to this endpoint to get the next page of the response. (e.g. true)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --offset: int # The offset of the item at which to begin the response.  Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
@@ -2761,7 +2761,7 @@ export def "folders-items items" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "usemarker" $usemarker "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "usemarker" $usemarker "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/folders/($folder_id)/items" $qp)
   let extra_headers = {"boxapi": $boxapi} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3035,11 +3035,11 @@ export def "folders-trash trash-by-folder_id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record<content_created_at: string, content_modified_at: string, created_at: string, created_by: record, description: record, etag: string, folder_upload_email: string, id: string, item_status: string, modified_at: string, modified_by: record, name: string, owned_by: record, parent: record, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, sequence_id: record, shared_link: string, size: int, trashed_at: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/folders/($folder_id)/trash" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3135,7 +3135,7 @@ export def "group-memberships memberships" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --configurable-permissions: record # Custom configuration for the permissions an admin if a group will receive. This option has no effect on members with a role of `member`.  Setting these permissions overwrites the default access levels of an admin.  Specifying a value of "null" for this object will disable all configurable permissions. Specifying permissions will set them accordingly, omitted permissions will be enabled by default. (e.g. {can_run_reports: true})
   group: record # The group to add the user to. — shape: {id: string}
   --role: string@role-completer-2 # The role of the user in the group. (e.g. member)
@@ -3144,7 +3144,7 @@ export def "group-memberships memberships" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/group_memberships" $qp)
   let body = {configurable_permissions: $configurable_permissions, group: $group, role: $role, user: $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -3190,11 +3190,11 @@ export def "group-memberships id-by-group_membership_id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record<created_at: string, group: record, id: string, modified_at: string, role: string, type: string, user: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/group_memberships/($group_membership_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3215,14 +3215,14 @@ export def "group-memberships id-by-group_membership_id-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --configurable-permissions: record # Custom configuration for the permissions an admin if a group will receive. This option has no effect on members with a role of `member`.  Setting these permissions overwrites the default access levels of an admin.  Specifying a value of "null" for this object will disable all configurable permissions. Specifying permissions will set them accordingly, omitted permissions will be enabled by default. (e.g. {can_run_reports: true})
   --role: string@role-completer-2 # The role of the user in the group. (e.g. member)
 ]: any -> record<created_at: string, group: record, id: string, modified_at: string, role: string, type: string, user: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/group_memberships/($group_membership_id)" $qp)
   let body = {configurable_permissions: $configurable_permissions, role: $role} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -3245,13 +3245,13 @@ export def "groups groups" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter-term: string # Limits the results to only groups whose `name` starts with the search term. (e.g. Engineering)
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --offset: int # The offset of the item at which to begin the response.  Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter_term" $filter_term "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter_term" $filter_term "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3271,7 +3271,7 @@ export def "groups groups-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --description: string # A human readable description of the group. (e.g. "Customer Support Group - as imported from Active Directory")
   --external-sync-identifier: string # An arbitrary identifier that can be used by external group sync tools to link this Box Group to an external group.  Example values of this field could be an **Active Directory Object ID** or a **Google Group ID**.  We recommend you use of this field in order to avoid issues when group names are updated in either Box or external systems. (e.g. AD:123456)
   --invitability-level: string@invitability-level-completer # Specifies who can invite the group to collaborate on folders.  When set to `admins_only` the enterprise admin, co-admins, and the group's admin can invite the group.  When set to `admins_and_members` all the admins listed above and group members can invite the group.  When set to `all_managed_users` all managed users in the enterprise can invite the group. (e.g. admins_only)
@@ -3282,7 +3282,7 @@ export def "groups groups-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/groups" $qp)
   let body = {description: $description, external_sync_identifier: $external_sync_identifier, invitability_level: $invitability_level, member_viewability_level: $member_viewability_level, name: $name, provenance: $provenance} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -3354,11 +3354,11 @@ export def "groups id-by-group_id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/groups/($group_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3379,7 +3379,7 @@ export def "groups id-by-group_id-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --description: string # A human readable description of the group. (e.g. "Customer Support Group - as imported from Active Directory")
   --external-sync-identifier: string # An arbitrary identifier that can be used by external group sync tools to link this Box Group to an external group.  Example values of this field could be an **Active Directory Object ID** or a **Google Group ID**.  We recommend you use of this field in order to avoid issues when group names are updated in either Box or external systems. (e.g. AD:123456)
   --invitability-level: string@invitability-level-completer # Specifies who can invite the group to collaborate on folders.  When set to `admins_only` the enterprise admin, co-admins, and the group's admin can invite the group.  When set to `admins_and_members` all the admins listed above and group members can invite the group.  When set to `all_managed_users` all managed users in the enterprise can invite the group. (e.g. admins_only)
@@ -3390,7 +3390,7 @@ export def "groups id-by-group_id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/groups/($group_id)" $qp)
   let body = {description: $description, external_sync_identifier: $external_sync_identifier, invitability_level: $invitability_level, member_viewability_level: $member_viewability_level, name: $name, provenance: $provenance} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -3466,14 +3466,14 @@ export def "invites invites" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   actionable_by: record # The user to invite — shape: {login?: string}
   enterprise: record # The enterprise to invite the user to — shape: {id: string}
 ]: any -> record<actionable_by: record, created_at: string, id: string, invited_by: record, invited_to: record<id: string, name: string, type: string>, modified_at: string, status: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/invites" $qp)
   let body = {actionable_by: $actionable_by, enterprise: $enterprise} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -3496,11 +3496,11 @@ export def "invites id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record<actionable_by: record, created_at: string, id: string, invited_by: record, invited_to: record<id: string, name: string, type: string>, modified_at: string, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/invites/($invite_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3521,13 +3521,13 @@ export def "legal-hold-policies policies" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --policy-name: string # Limits results to policies for which the names start with this search term. This is a case-insensitive prefix. (e.g. Sales Policy)
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "policy_name" $policy_name "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "policy_name" $policy_name "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/legal_hold_policies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3657,11 +3657,11 @@ export def "legal-hold-policy-assignments assignments" [
   --assign-to-id: string # Filters the results by the ID of item the policy was applied to. (e.g. 1234323)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "policy_id" $policy_id "scalar") (serialize-qp "assign_to_type" $assign_to_type "scalar") (serialize-qp "assign_to_id" $assign_to_id "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "policy_id" $policy_id "scalar") (serialize-qp "assign_to_type" $assign_to_type "scalar") (serialize-qp "assign_to_id" $assign_to_id "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/legal_hold_policy_assignments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3758,11 +3758,11 @@ export def "legal-hold-policy-assignments-file-versions-on-hold hold" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/legal_hold_policy_assignments/($legal_hold_policy_assignment_id)/file_versions_on_hold" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3785,11 +3785,11 @@ export def "legal-hold-policy-assignments-files-on-hold hold" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/legal_hold_policy_assignments/($legal_hold_policy_assignment_id)/files_on_hold" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3939,19 +3939,19 @@ export def "metadata-queries-execute-read read" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   ancestor_folder_id: string # The ID of the folder that you are restricting the query to. A value of zero will return results from all folders you have access to. A non-zero value will only return results found in the folder corresponding to the ID or in any of its subfolders. (e.g. 0)
-  --body-fields: list # By default, this endpoint returns only the most basic info about the items for which the query matches. This attribute can be used to specify a list of additional attributes to return for any item, including its metadata.  This attribute takes a list of item fields, metadata template identifiers, or metadata template field identifiers.  For example:  * `created_by` will add the details of the user who created the item to the response. * `metadata.<scope>.<templateKey>` will return the mini-representation of the metadata instance identified by the `scope` and `templateKey`. * `metadata.<scope>.<templateKey>.<field>` will return all the mini-representation of the metadata instance identified by the `scope` and `templateKey` plus the field specified by the `field` name. Multiple fields for the same `scope` and `templateKey` can be defined. (e.g. [extension, created_at, item_status, metadata.enterprise_1234.contracts, metadata.enterprise_1234.regions.location])
+  --fields: list # By default, this endpoint returns only the most basic info about the items for which the query matches. This attribute can be used to specify a list of additional attributes to return for any item, including its metadata.  This attribute takes a list of item fields, metadata template identifiers, or metadata template field identifiers.  For example:  * `created_by` will add the details of the user who created the item to the response. * `metadata.<scope>.<templateKey>` will return the mini-representation of the metadata instance identified by the `scope` and `templateKey`. * `metadata.<scope>.<templateKey>.<field>` will return all the mini-representation of the metadata instance identified by the `scope` and `templateKey` plus the field specified by the `field` name. Multiple fields for the same `scope` and `templateKey` can be defined. (e.g. [extension, created_at, item_status, metadata.enterprise_1234.contracts, metadata.enterprise_1234.regions.location])
   --body-from: string # Specifies the template used in the query. Must be in the form `scope.templateKey`. Not all templates can be used in this field, most notably the built-in, Box-provided classification templates can not be used in a query. (e.g. enterprise_123456.someTemplate)
   --limit: int # A value between 0 and 100 that indicates the maximum number of results to return for a single request. This only specifies a maximum boundary and will not guarantee the minimum number of results returned. (default: 100, e.g. 50)
   --marker: string # Marker to use for requesting the next page. (e.g. AAAAAmVYB1FWec8GH6yWu2nwmanfMh07IyYInaa7DZDYjgO1H4KoLW29vPlLY173OKsci6h6xGh61gG73gnaxoS+o0BbI1/h6le6cikjlupVhASwJ2Cj0tOD9wlnrUMHHw3/ISf+uuACzrOMhN6d5fYrbidPzS6MdhJOejuYlvsg4tcBYzjauP3+VU51p77HFAIuObnJT0ff)
   --order-by: list # A list of template fields and directions to sort the metadata query results by.  The ordering `direction` must be the same for each item in the array. — item shape: {direction?: "ASC"|"DESC"|"asc"|"desc", field_key?: string}
-  --body-query: string # The query to perform. A query is a logical expression that is very similar to a SQL `SELECT` statement. Values in the search query can be turned into parameters specified in the `query_param` arguments list to prevent having to manually insert search values into the query string.  For example, a value of `:amount` would represent the `amount` value in `query_params` object. (e.g. value >= :amount)
+  --query: string # The query to perform. A query is a logical expression that is very similar to a SQL `SELECT` statement. Values in the search query can be turned into parameters specified in the `query_param` arguments list to prevent having to manually insert search values into the query string.  For example, a value of `:amount` would represent the `amount` value in `query_params` object. (e.g. value >= :amount)
   --query-params: record # Set of arguments corresponding to the parameters specified in the `query`. The type of each parameter used in the `query_params` must match the type of the corresponding metadata template field. (e.g. {amount: 100})
 ]: any -> record<entries: list<any>, limit: int, next_marker: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metadata_queries/execute_read")
-  let body = {ancestor_folder_id: $ancestor_folder_id, fields: $body_fields, from: $body_from, limit: $limit, marker: $marker, order_by: $order_by, query: $body_query, query_params: $query_params} | compact
+  let body = {ancestor_folder_id: $ancestor_folder_id, fields: $fields, from: $body_from, limit: $limit, marker: $marker, order_by: $order_by, query: $query, query_params: $query_params} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4192,7 +4192,7 @@ export def "metadata-templates-schema schema" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --copyInstanceOnItemCopy: oneof<nothing, bool> # Whether or not to copy any metadata attached to a file or folder when it is copied. By default, metadata is not copied along with a file or folder when it is copied. (default: false, e.g. true)
   displayName: string # The display name of the template. (e.g. Product Info)
-  --body-fields: list # An ordered list of template fields which are part of the template. Each field can be a regular text field, date field, number field, as well as a single or multi-select list. — item shape: {description?: string, displayName: string, hidden?: bool, key: string, options?: list, type: "string"|"float"|"date"|"enum"|"multiSelect"}
+  --fields: list # An ordered list of template fields which are part of the template. Each field can be a regular text field, date field, number field, as well as a single or multi-select list. — item shape: {description?: string, displayName: string, hidden?: bool, key: string, options?: list, type: "string"|"float"|"date"|"enum"|"multiSelect"}
   --hidden: oneof<nothing, bool> # Defines if this template is visible in the Box web app UI, or if it is purely intended for usage through the API. (default: false, e.g. true)
   scope: string # The scope of the metadata template to create. Applications can only create templates for use within the authenticated user's enterprise.  This value needs to be set to `enterprise`, as `global` scopes can not be created by applications. (e.g. enterprise)
   --templateKey: string # A unique identifier for the template. This identifier needs to be unique across the enterprise for which the metadata template is being created.  When not provided, the API will create a unique `templateKey` based on the value of the `displayName`. (e.g. productInfo)
@@ -4201,7 +4201,7 @@ export def "metadata-templates-schema schema" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metadata_templates/schema")
-  let body = {copyInstanceOnItemCopy: $copyInstanceOnItemCopy, displayName: $displayName, fields: $body_fields, hidden: $hidden, scope: $scope, templateKey: $templateKey} | compact
+  let body = {copyInstanceOnItemCopy: $copyInstanceOnItemCopy, displayName: $displayName, fields: $fields, hidden: $hidden, scope: $scope, templateKey: $templateKey} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4224,7 +4224,7 @@ export def "metadata-templates-schemaclassifications schemaclassifications" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --copyInstanceOnItemCopy: oneof<nothing, bool> # `false` (e.g. false)
   displayName: string@displayName-completer # `Classification` (e.g. Classification)
-  --body-fields: list # The classification template holds one field, which holds all the valid classification values. — item shape: {displayName?: "Classification", hidden?: bool, key?: "Box__Security__Classification__Key", options?: list, type?: "enum"}
+  --fields: list # The classification template holds one field, which holds all the valid classification values. — item shape: {displayName?: "Classification", hidden?: bool, key?: "Box__Security__Classification__Key", options?: list, type?: "enum"}
   --hidden: oneof<nothing, bool> # `false` (e.g. false)
   scope: string@scope-completer-1 # The scope in which to create the classifications. This should be `enterprise` or `enterprise_{id}` where `id` is the unique ID of the enterprise. (e.g. enterprise)
   --templateKey: string@templateKey-completer # `securityClassification-6VMVochwUWo` (e.g. securityClassification-6VMVochwUWo)
@@ -4233,7 +4233,7 @@ export def "metadata-templates-schemaclassifications schemaclassifications" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metadata_templates/schema#classifications")
-  let body = {copyInstanceOnItemCopy: $copyInstanceOnItemCopy, displayName: $displayName, fields: $body_fields, hidden: $hidden, scope: $scope, templateKey: $templateKey} | compact
+  let body = {copyInstanceOnItemCopy: $copyInstanceOnItemCopy, displayName: $displayName, fields: $fields, hidden: $hidden, scope: $scope, templateKey: $templateKey} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4448,13 +4448,13 @@ export def "recent-items items" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recent_items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4477,13 +4477,13 @@ export def "retention-policies policies" [
   --policy-name: string # Filters results by a case sensitive prefix of the name of retention policies. (e.g. Sales Policy)
   --policy-type: string@policy-type-completer # Filters results by the type of retention policy. (e.g. finite)
   --created-by-user-id: string # Filters results by the ID of the user who created policy. (e.g. 21312321)
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "policy_name" $policy_name "scalar") (serialize-qp "policy_type" $policy_type "scalar") (serialize-qp "created_by_user_id" $created_by_user_id "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "policy_name" $policy_name "scalar") (serialize-qp "policy_type" $policy_type "scalar") (serialize-qp "created_by_user_id" $created_by_user_id "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/retention_policies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4562,11 +4562,11 @@ export def "retention-policies id-by-retention_policy_id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/retention_policies/($retention_policy_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4624,13 +4624,13 @@ export def "retention-policies-assignments assignments" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-1 # The type of the retention policy assignment to retrieve. (e.g. metadata_template)
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/retention_policies/($retention_policy_id)/assignments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4705,11 +4705,11 @@ export def "retention-policy-assignments id-by-retention_policy_assignment_id-1"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record<assigned_at: string, assigned_by: record, assigned_to: record<id: string, type: string>, filter_fields: table<field: string, value: string>, id: string, retention_policy: record, start_date_field: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/retention_policy_assignments/($retention_policy_assignment_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4781,7 +4781,7 @@ export def "search search" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # The string to search for. This query is matched against item names, descriptions, text content of files, and various other fields of the different item types.  This parameter supports a variety of operators to further refine the results returns.  * `""` - by wrapping a query in double quotes only exact matches are   returned by the API. Exact searches do not return search matches   based on specific character sequences. Instead, they return   matches based on phrases, that is, word sequences. For example:   A search for `"Blue-Box"` may return search results including   the sequence `"blue.box"`, `"Blue Box"`, and `"Blue-Box"`;   any item containing the words `Blue` and `Box` consecutively, in   the order specified. * `AND` - returns items that contain both the search terms. For   example, a search for `marketing AND BoxWorks` returns items   that have both `marketing` and `BoxWorks` within its text in any order.   It does not return a result that only has `BoxWorks` in its text. * `OR` - returns items that contain either of the search terms. For   example, a search for `marketing OR BoxWorks` returns a result that   has either `marketing` or `BoxWorks` within its text. Using this   operator is not necessary as we implicitly interpret multi-word   queries as `OR` unless another supported boolean term is used. * `NOT` - returns items that do not contain the search term provided.   For example, a search for `marketing AND NOT BoxWorks` returns a result   that has only `marketing` within its text. Results containing   `BoxWorks` are omitted.  Please note that we do not support lower case (that is, `and`, `or`, and `not`) or mixed case (that is, `And`, `Or`, and `Not`) operators.  This field is required unless the `mdfilters` parameter is defined. (e.g. sales)
+  --query: string # The string to search for. This query is matched against item names, descriptions, text content of files, and various other fields of the different item types.  This parameter supports a variety of operators to further refine the results returns.  * `""` - by wrapping a query in double quotes only exact matches are   returned by the API. Exact searches do not return search matches   based on specific character sequences. Instead, they return   matches based on phrases, that is, word sequences. For example:   A search for `"Blue-Box"` may return search results including   the sequence `"blue.box"`, `"Blue Box"`, and `"Blue-Box"`;   any item containing the words `Blue` and `Box` consecutively, in   the order specified. * `AND` - returns items that contain both the search terms. For   example, a search for `marketing AND BoxWorks` returns items   that have both `marketing` and `BoxWorks` within its text in any order.   It does not return a result that only has `BoxWorks` in its text. * `OR` - returns items that contain either of the search terms. For   example, a search for `marketing OR BoxWorks` returns a result that   has either `marketing` or `BoxWorks` within its text. Using this   operator is not necessary as we implicitly interpret multi-word   queries as `OR` unless another supported boolean term is used. * `NOT` - returns items that do not contain the search term provided.   For example, a search for `marketing AND NOT BoxWorks` returns a result   that has only `marketing` within its text. Results containing   `BoxWorks` are omitted.  Please note that we do not support lower case (that is, `and`, `or`, and `not`) or mixed case (that is, `And`, `Or`, and `Not`) operators.  This field is required unless the `mdfilters` parameter is defined. (e.g. sales)
   --scope: string@scope-completer-2 # Limits the search results to either the files that the user has access to, or to files available to the entire enterprise.  The scope defaults to `user_content`, which limits the search results to content that is available to the currently authenticated user.  The `enterprise_content` can be requested by an admin through our support channels. Once this scope has been enabled for a user, it will allow that use to query for content across the entire enterprise and not only the content that they have access to. (default: user_content, e.g. user_content)
   --file-extensions: list # Limits the search results to any files that match any of the provided file extensions. This list is a comma-separated list of file extensions without the dots. (e.g. [pdf, png, gif])
   --created-at-range: list # Limits the search results to any items created within a given date range.  Date ranges are defined as comma separated RFC3339 timestamps.  If the the start date is omitted (`,2014-05-17T13:35:01-07:00`) anything created before the end date will be returned.  If the end date is omitted (`2014-05-15T13:35:01-07:00,`) the current date will be used as the end date instead. (e.g. [2014-05-15T13:35:01-07:00, 2014-05-17T13:35:01-07:00])
@@ -4798,12 +4798,12 @@ export def "search search" [
   --direction: string@direction-completer-1 # Defines the direction in which search results are ordered. This API defaults to returning items in descending (`DESC`) order unless this parameter is explicitly specified.  When results are sorted by `relevance` the ordering is locked to returning items in descending order of relevance, and this parameter is ignored. (default: DESC, e.g. ASC)
   --limit: int # Defines the maximum number of items to return as part of a page of results. (format: int64, default: 30, e.g. 100)
   --include-recent-shared-links: oneof<nothing, bool> # Defines whether the search results should include any items that the user recently accessed through a shared link.  Please note that when this parameter has been set to true, the format of the response of this API changes to return a list of [Search Results with Shared Links](r://search_results_with_shared_links) (default: false, e.g. true)
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --offset: int # The offset of the item at which to begin the response.  Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "file_extensions" $file_extensions "csv") (serialize-qp "created_at_range" $created_at_range "csv") (serialize-qp "updated_at_range" $updated_at_range "csv") (serialize-qp "size_range" $size_range "csv") (serialize-qp "owner_user_ids" $owner_user_ids "csv") (serialize-qp "recent_updater_user_ids" $recent_updater_user_ids "csv") (serialize-qp "ancestor_folder_ids" $ancestor_folder_ids "csv") (serialize-qp "content_types" $content_types "csv") (serialize-qp "type" $type "scalar") (serialize-qp "trash_content" $trash_content "scalar") (serialize-qp "mdfilters" $mdfilters "multi") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "include_recent_shared_links" $include_recent_shared_links "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "file_extensions" $file_extensions "csv") (serialize-qp "created_at_range" $created_at_range "csv") (serialize-qp "updated_at_range" $updated_at_range "csv") (serialize-qp "size_range" $size_range "csv") (serialize-qp "owner_user_ids" $owner_user_ids "csv") (serialize-qp "recent_updater_user_ids" $recent_updater_user_ids "csv") (serialize-qp "ancestor_folder_ids" $ancestor_folder_ids "csv") (serialize-qp "content_types" $content_types "csv") (serialize-qp "type" $type "scalar") (serialize-qp "trash_content" $trash_content "scalar") (serialize-qp "mdfilters" $mdfilters "multi") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "include_recent_shared_links" $include_recent_shared_links "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4823,13 +4823,13 @@ export def "shared-items items" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --if-none-match: string # Ensures an item is only returned if it has changed.  Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `304 Not Modified` if the item has not changed since. (e.g. 1)
   --boxapi: string # A header containing the shared link and optional password for the shared link.  The format for this header is as follows.  `shared_link=[link]&shared_link_password=[password]` (e.g. shared_link=[link]&shared_link_password=[password])
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/shared_items" $qp)
   let extra_headers = {"if-none-match": $if_none_match, "boxapi": $boxapi} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4851,13 +4851,13 @@ export def "shared-itemsfolders itemsfolders" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --if-none-match: string # Ensures an item is only returned if it has changed.  Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `304 Not Modified` if the item has not changed since. (e.g. 1)
   --boxapi: string # A header containing the shared link and optional password for the shared link.  The format for this header is as follows.  `shared_link=[link]&shared_link_password=[password]` (e.g. shared_link=[link]&shared_link_password=[password])
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/shared_items#folders" $qp)
   let extra_headers = {"if-none-match": $if_none_match, "boxapi": $boxapi} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4879,13 +4879,13 @@ export def "shared-itemsweb-links links" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --if-none-match: string # Ensures an item is only returned if it has changed.  Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `304 Not Modified` if the item has not changed since. (e.g. 1)
   --boxapi: string # A header containing the shared link and optional password for the shared link.  The format for this header is as follows.  `shared_link=[link]&shared_link_password=[password]` (e.g. shared_link=[link]&shared_link_password=[password])
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/shared_items#web_links" $qp)
   let extra_headers = {"if-none-match": $if_none_match, "boxapi": $boxapi} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -5602,13 +5602,13 @@ export def "storage-policies policies" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/storage_policies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6201,7 +6201,7 @@ export def "users users" [
   --filter-term: string # Limits the results to only users who's `name` or `login` start with the search term.  For externally managed users, the search term needs to completely match the in order to find the user, and it will only return one user at a time. (e.g. john)
   --user-type: string@user-type-completer # Limits the results to the kind of user specified.  * `all` returns every kind of user for whom the   `login` or `name` partially matches the   `filter_term`. It will only return an external user   if the login matches the `filter_term` completely,   and in that case it will only return that user. * `managed` returns all managed and app users for whom   the `login` or `name` partially matches the   `filter_term`. * `external` returns all external users for whom the   `login` matches the `filter_term` exactly. (e.g. managed)
   --external-app-user-id: string # Limits the results to app users with the given `external_app_user_id` value.  When creating an app user, an `external_app_user_id` value can be set. This value can then be used in this endpoint to find any users that match that `external_app_user_id` value. (e.g. my-user-1234)
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --offset: int # The offset of the item at which to begin the response.  Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --usemarker: oneof<nothing, bool> # Specifies whether to use marker-based pagination instead of offset-based pagination. Only one pagination method can be used at a time.  By setting this value to true, the API will return a `marker` field that can be passed as a parameter to this endpoint to get the next page of the response. (e.g. true)
@@ -6209,7 +6209,7 @@ export def "users users" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter_term" $filter_term "scalar") (serialize-qp "user_type" $user_type "scalar") (serialize-qp "external_app_user_id" $external_app_user_id "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "usemarker" $usemarker "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter_term" $filter_term "scalar") (serialize-qp "user_type" $user_type "scalar") (serialize-qp "external_app_user_id" $external_app_user_id "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "usemarker" $usemarker "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6230,7 +6230,7 @@ export def "users users-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --address: string # The user’s address (e.g. 900 Jefferson Ave, Redwood City, CA 94063)
   --can-see-managed-users: oneof<nothing, bool> # Whether the user can see other enterprise users in their contact list (e.g. true)
   --external-app-user-id: string # An external identifier for an app user, which can be used to look up the user. This can be used to tie user IDs from external identity providers to Box users. (e.g. my-user-1234)
@@ -6253,7 +6253,7 @@ export def "users users-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/users" $qp)
   let body = {address: $address, can_see_managed_users: $can_see_managed_users, external_app_user_id: $external_app_user_id, is_exempt_from_device_limits: $is_exempt_from_device_limits, is_exempt_from_login_verification: $is_exempt_from_login_verification, is_external_collab_restricted: $is_external_collab_restricted, is_platform_access_only: $is_platform_access_only, is_sync_enabled: $is_sync_enabled, job_title: $job_title, language: $language, login: $login, name: $name, phone: $phone, role: $role, space_amount: $space_amount, status: $status, timezone: $timezone, tracking_codes: $tracking_codes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -6275,11 +6275,11 @@ export def "users-me me" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/users/me" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6353,11 +6353,11 @@ export def "users id-by-user_id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/users/($user_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6380,7 +6380,7 @@ export def "users id-by-user_id-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --address: string # The user’s address (e.g. 900 Jefferson Ave, Redwood City, CA 94063)
   --can-see-managed-users: oneof<nothing, bool> # Whether the user can see other enterprise users in their contact list (e.g. true)
   --enterprise: string # Set this to `null` to roll the user out of the enterprise and make them a free user (nullable)
@@ -6406,7 +6406,7 @@ export def "users id-by-user_id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/users/($user_id)" $qp)
   let body = {address: $address, can_see_managed_users: $can_see_managed_users, enterprise: $enterprise, external_app_user_id: $external_app_user_id, is_exempt_from_device_limits: $is_exempt_from_device_limits, is_exempt_from_login_verification: $is_exempt_from_login_verification, is_external_collab_restricted: $is_external_collab_restricted, is_password_reset_required: $is_password_reset_required, is_sync_enabled: $is_sync_enabled, job_title: $job_title, language: $language, login: $login, name: $name, notification_email: $notification_email, notify: $notify, phone: $phone, role: $role, space_amount: $space_amount, status: $status, timezone: $timezone, tracking_codes: $tracking_codes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -6578,14 +6578,14 @@ export def "users-folders-0 folders-by-user_id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --notify: oneof<nothing, bool> # Determines if users should receive email notification for the action performed. (e.g. true)
   owned_by: record # The user who the folder will be transferred to — shape: {id: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "notify" $notify "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "notify" $notify "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/users/($user_id)/folders/0" $qp)
   let body = {owned_by: $owned_by} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -6715,14 +6715,14 @@ export def "web-links id-by-web_link_id-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --name: string # An optional new name for the web link. (e.g. Restored.docx)
   --parent: any
 ]: any -> record<created_at: string, created_by: record, description: string, etag: string, id: string, item_status: string, modified_at: string, modified_by: record, name: string, owned_by: record, parent: record, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, sequence_id: record, shared_link: string, trashed_at: string, type: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/web_links/($web_link_id)" $qp)
   let body = {name: $name, parent: $parent} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -6778,13 +6778,13 @@ export def "web-links link-by-web_link_id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
   --shared-link: record # The settings for the shared link to create on the web link.  Use an empty object (`{}`) to use the default settings for shared links. — shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/web_links/($web_link_id)#add_shared_link" $qp)
   let body = {shared_link: $shared_link} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -6807,11 +6807,11 @@ export def "web-links link-by-web_link_id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/web_links/($web_link_id)#get_shared_link" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6832,13 +6832,13 @@ export def "web-links link-by-web_link_id-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
   --shared-link: record # By setting this value to `null`, the shared link is removed from the web link. (nullable)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/web_links/($web_link_id)#remove_shared_link" $qp)
   let body = {shared_link: $shared_link} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -6862,13 +6862,13 @@ export def "web-links link-by-web_link_id-3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
   --shared-link: record # The settings for the shared link to update. — shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/web_links/($web_link_id)#update_shared_link" $qp)
   let body = {shared_link: $shared_link} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
@@ -6914,11 +6914,11 @@ export def "web-links-trash trash-by-web_link_id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
+  --fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record<created_at: string, created_by: record, description: string, etag: string, id: string, item_status: string, modified_at: string, modified_by: record, name: string, owned_by: record, parent: record, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, sequence_id: record, shared_link: string, trashed_at: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/web_links/($web_link_id)/trash" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

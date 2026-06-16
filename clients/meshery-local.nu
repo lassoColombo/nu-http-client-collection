@@ -754,14 +754,14 @@ export def "system-adapter-operation idPostAdapterOperation" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --adapter: string
-  --qp-query: string
+  --query: string
   --customBody: string
   --namespace: string
   --deleteOp: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "adapter" $adapter "scalar") (serialize-qp "query" $qp_query "scalar") (serialize-qp "customBody" $customBody "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "deleteOp" $deleteOp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "adapter" $adapter "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "customBody" $customBody "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "deleteOp" $deleteOp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/system/adapter/operation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

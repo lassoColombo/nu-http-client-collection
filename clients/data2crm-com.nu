@@ -432,7 +432,7 @@ export def "application-entity-account-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -449,7 +449,7 @@ export def "application-entity-account-list get" [
 ]: nothing -> table<address: list<record>, annual_revenue: string, category: string, created_at: string, description: string, email: list<record>, employees: string, id: string, industry: list<string>, messenger: list<record>, name: string, ownership: string, phone: list<record>, rating: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, sic_code: string, ticker_symbol: string, type: string, updated_at: string, website: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/account/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -500,7 +500,7 @@ export def "application-entity-account get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -515,7 +515,7 @@ export def "application-entity-account get" [
 ]: nothing -> record<address: table<city: string, country: string, state: string, street: string, type: string, zip: string>, annual_revenue: string, category: string, created_at: string, description: string, email: table<address: string, type: string>, employees: string, id: string, industry: list<string>, messenger: table<location: string, type: string>, name: string, ownership: string, phone: table<number: string, type: string>, rating: string, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, sic_code: string, ticker_symbol: string, type: string, updated_at: string, website: table<address: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/account/($account_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -841,7 +841,7 @@ export def "application-entity-attachment-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -858,7 +858,7 @@ export def "application-entity-attachment-list get" [
 ]: nothing -> table<created_at: string, description: string, id: string, link: string, mime_type: string, name: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, size: int, title: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/attachment/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -909,7 +909,7 @@ export def "application-entity-attachment get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -924,7 +924,7 @@ export def "application-entity-attachment get" [
 ]: nothing -> record<created_at: string, description: string, id: string, link: string, mime_type: string, name: string, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, size: int, title: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/attachment/($attachment_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1000,7 +1000,7 @@ export def "application-entity-call createCallEntity" [
   --id: string # Call Identifier (e.g. 21312411)
   --purpose: string # Purpose (e.g. Negotiation)
   --relation: record # shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-  --body-result: string # Result (e.g. Confirmed)
+  --result: string # Result (e.g. Confirmed)
   --started-at: string # Started At (format: date-time, e.g. 2015-01-01T05:18:23-0700)
   --status: string # Status (e.g. Planned)
   --subject: string # Subject (e.g. Subject of the call)
@@ -1010,7 +1010,7 @@ export def "application-entity-call createCallEntity" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/application/entity/call")
-  let body = {created_at: $created_at, description: $description, direction: $direction, ended_at: $ended_at, id: $id, purpose: $purpose, relation: $relation, result: $body_result, started_at: $started_at, status: $status, subject: $subject, updated_at: $updated_at} | compact
+  let body = {created_at: $created_at, description: $description, direction: $direction, ended_at: $ended_at, id: $id, purpose: $purpose, relation: $relation, result: $result, started_at: $started_at, status: $status, subject: $subject, updated_at: $updated_at} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1237,7 +1237,7 @@ export def "application-entity-call-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -1254,7 +1254,7 @@ export def "application-entity-call-list get" [
 ]: nothing -> table<created_at: string, description: string, direction: string, ended_at: string, id: string, purpose: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, result: string, started_at: string, status: string, subject: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/call/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1305,7 +1305,7 @@ export def "application-entity-call get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -1320,7 +1320,7 @@ export def "application-entity-call get" [
 ]: nothing -> record<created_at: string, description: string, direction: string, ended_at: string, id: string, purpose: string, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, result: string, started_at: string, status: string, subject: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/call/($call_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1355,7 +1355,7 @@ export def "application-entity-call updateCallEntity" [
   --id: string # Call Identifier (e.g. 21312411)
   --purpose: string # Purpose (e.g. Negotiation)
   --relation: record # shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-  --body-result: string # Result (e.g. Confirmed)
+  --result: string # Result (e.g. Confirmed)
   --started-at: string # Started At (format: date-time, e.g. 2015-01-01T05:18:23-0700)
   --status: string # Status (e.g. Planned)
   --subject: string # Subject (e.g. Subject of the call)
@@ -1365,7 +1365,7 @@ export def "application-entity-call updateCallEntity" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/application/entity/call/($call_id)")
-  let body = {created_at: $created_at, description: $description, direction: $direction, ended_at: $ended_at, id: $id, purpose: $purpose, relation: $relation, result: $body_result, started_at: $started_at, status: $status, subject: $subject, updated_at: $updated_at} | compact
+  let body = {created_at: $created_at, description: $description, direction: $direction, ended_at: $ended_at, id: $id, purpose: $purpose, relation: $relation, result: $result, started_at: $started_at, status: $status, subject: $subject, updated_at: $updated_at} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1645,7 +1645,7 @@ export def "application-entity-campaign-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -1662,7 +1662,7 @@ export def "application-entity-campaign-list get" [
 ]: nothing -> table<actual_cost: float, budgeted_cost: float, created_at: string, currency: record<code: string>, description: string, ended_at: string, expected_end_at: string, expected_response: float, expected_revenue: float, expected_start_at: string, id: string, is_active: bool, name: string, numbers_sent: int, objective: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, started_at: string, status: string, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/campaign/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1713,7 +1713,7 @@ export def "application-entity-campaign get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -1728,7 +1728,7 @@ export def "application-entity-campaign get" [
 ]: nothing -> record<actual_cost: float, budgeted_cost: float, created_at: string, currency: record<code: string>, description: string, ended_at: string, expected_end_at: string, expected_response: float, expected_revenue: float, expected_start_at: string, id: string, is_active: bool, name: string, numbers_sent: int, objective: string, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, started_at: string, status: string, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/campaign/($campaign_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2062,7 +2062,7 @@ export def "application-entity-case-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -2079,7 +2079,7 @@ export def "application-entity-case-list get" [
 ]: nothing -> table<created_at: string, description: string, ended_at: string, expected_end_at: string, id: string, internal_comments: string, is_closed: bool, is_escalated: bool, number: string, origin: string, pipeline_with_stage: string, priority: string, reason: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, resolution: string, resolution_comments: string, satisfaction: string, status: string, subject: string, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/case/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2130,7 +2130,7 @@ export def "application-entity-case get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -2145,7 +2145,7 @@ export def "application-entity-case get" [
 ]: nothing -> record<created_at: string, description: string, ended_at: string, expected_end_at: string, id: string, internal_comments: string, is_closed: bool, is_escalated: bool, number: string, origin: string, pipeline_with_stage: string, priority: string, reason: string, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, resolution: string, resolution_comments: string, satisfaction: string, status: string, subject: string, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/case/($case_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2463,7 +2463,7 @@ export def "application-entity-comment-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -2480,7 +2480,7 @@ export def "application-entity-comment-list get" [
 ]: nothing -> table<body: string, created_at: string, id: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/comment/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2531,7 +2531,7 @@ export def "application-entity-comment get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -2546,7 +2546,7 @@ export def "application-entity-comment get" [
 ]: nothing -> record<body: string, created_at: string, id: string, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/comment/($comment_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2870,7 +2870,7 @@ export def "application-entity-contact-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -2887,7 +2887,7 @@ export def "application-entity-contact-list get" [
 ]: nothing -> table<address: list<record>, birth_date: string, created_at: string, department: string, description: string, do_not_call: bool, email: list<record>, first_name: string, id: string, last_name: string, lead_source: string, messenger: list<record>, middle_name: string, name_suffix: string, phone: list<record>, position: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, salutation: string, sync_to_outlook: bool, type: string, updated_at: string, website: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/contact/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2938,7 +2938,7 @@ export def "application-entity-contact get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -2953,7 +2953,7 @@ export def "application-entity-contact get" [
 ]: nothing -> record<address: table<city: string, country: string, state: string, street: string, type: string, zip: string>, birth_date: string, created_at: string, department: string, description: string, do_not_call: bool, email: table<address: string, type: string>, first_name: string, id: string, last_name: string, lead_source: string, messenger: table<location: string, type: string>, middle_name: string, name_suffix: string, phone: table<number: string, type: string>, position: string, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, salutation: string, sync_to_outlook: bool, type: string, updated_at: string, website: table<address: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/contact/($contact_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3311,7 +3311,7 @@ export def "application-entity-email-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -3328,7 +3328,7 @@ export def "application-entity-email-list get" [
 ]: nothing -> table<bcc: list<string>, body: string, cc: list<string>, created_at: string, direction: string, from: string, id: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, sent_at: string, status: string, subject: string, to: list<string>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/email/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3379,7 +3379,7 @@ export def "application-entity-email get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -3394,7 +3394,7 @@ export def "application-entity-email get" [
 ]: nothing -> record<bcc: list<string>, body: string, cc: list<string>, created_at: string, direction: string, from: string, id: string, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, sent_at: string, status: string, subject: string, to: list<string>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/email/($email_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3710,7 +3710,7 @@ export def "application-entity-event-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -3727,7 +3727,7 @@ export def "application-entity-event-list get" [
 ]: nothing -> table<created_at: string, description: string, ended_at: string, id: string, is_all_day: bool, location: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, started_at: string, status: string, subject: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/event/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3778,7 +3778,7 @@ export def "application-entity-event get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -3793,7 +3793,7 @@ export def "application-entity-event get" [
 ]: nothing -> record<created_at: string, description: string, ended_at: string, id: string, is_all_day: bool, location: string, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, started_at: string, status: string, subject: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/event/($event_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4125,7 +4125,7 @@ export def "application-entity-invoice-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -4142,7 +4142,7 @@ export def "application-entity-invoice-list get" [
 ]: nothing -> table<address: list<record>, adjustment: float, balance: float, created_at: string, currency: record<code: string>, description: string, discount: list<record>, due_date: string, excise_duty: float, grand_total: float, id: string, invoice_date: string, number: string, purchase_order: string, received: float, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, sales_commission: float, shipping_and_handling: float, status: string, subject: string, subtotal: float, tax: list<record>, terms_and_conditions: string, total_price: float, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/invoice/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4193,7 +4193,7 @@ export def "application-entity-invoice get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -4208,7 +4208,7 @@ export def "application-entity-invoice get" [
 ]: nothing -> record<address: table<city: string, country: string, state: string, street: string, type: string, zip: string>, adjustment: float, balance: float, created_at: string, currency: record<code: string>, description: string, discount: table<percent_value: float, type: string, value: float>, due_date: string, excise_duty: float, grand_total: float, id: string, invoice_date: string, number: string, purchase_order: string, received: float, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, sales_commission: float, shipping_and_handling: float, status: string, subject: string, subtotal: float, tax: table<percent_value: float, type: string, value: float>, terms_and_conditions: string, total_price: float, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/invoice/($invoice_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4545,7 +4545,7 @@ export def "application-entity-invoice-item-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -4562,7 +4562,7 @@ export def "application-entity-invoice-item-list get" [
 ]: nothing -> table<created_at: string, description: string, discount: list<record>, id: string, list_price: float, number: string, quantity: float, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, sales_price: float, subtotal: float, tax: list<record>, total_price: float, unit: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/invoiceItem/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4613,7 +4613,7 @@ export def "application-entity-invoice-item get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -4628,7 +4628,7 @@ export def "application-entity-invoice-item get" [
 ]: nothing -> record<created_at: string, description: string, discount: table<percent_value: float, type: string, value: float>, id: string, list_price: float, number: string, quantity: float, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, sales_price: float, subtotal: float, tax: table<percent_value: float, type: string, value: float>, total_price: float, unit: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/invoiceItem/($invoiceItem_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4969,7 +4969,7 @@ export def "application-entity-lead-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -4986,7 +4986,7 @@ export def "application-entity-lead-list get" [
 ]: nothing -> table<address: list<record>, annual_revenue: string, birth_date: string, company: string, created_at: string, department: string, description: string, do_not_call: bool, email: list<record>, first_name: string, id: string, industry: list<string>, last_name: string, messenger: list<record>, middle_name: string, name_suffix: string, phone: list<record>, position: string, rating: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, salutation: string, source: string, source_description: string, status: string, status_description: string, type: string, updated_at: string, website: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/lead/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -5037,7 +5037,7 @@ export def "application-entity-lead get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -5052,7 +5052,7 @@ export def "application-entity-lead get" [
 ]: nothing -> record<address: table<city: string, country: string, state: string, street: string, type: string, zip: string>, annual_revenue: string, birth_date: string, company: string, created_at: string, department: string, description: string, do_not_call: bool, email: table<address: string, type: string>, first_name: string, id: string, industry: list<string>, last_name: string, messenger: table<location: string, type: string>, middle_name: string, name_suffix: string, phone: table<number: string, type: string>, position: string, rating: string, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, salutation: string, source: string, source_description: string, status: string, status_description: string, type: string, updated_at: string, website: table<address: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/lead/($lead_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -5143,7 +5143,7 @@ export def "application-entity-list list" [
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -5151,7 +5151,7 @@ export def "application-entity-list list" [
 ]: nothing -> table<category: string, collection: string, customField: record, dataCache: record, entity: string, id: string, internalType: string, limit: int, methods: record, name: string, similarTo: list<string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -5184,7 +5184,7 @@ export def "application-entity-meeting createMeetingEntity" [
   --id: string # Meeting Identifier (e.g. 21312411)
   --location: string # Location (e.g. Location)
   --relation: record # shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-  --body-result: string # Result (e.g. Confirmed)
+  --result: string # Result (e.g. Confirmed)
   --started-at: string # Started At (format: date-time, e.g. 2015-01-01T05:18:23-0700)
   --status: string # Status (e.g. Held)
   --subject: string # Subject (e.g. My first note)
@@ -5194,7 +5194,7 @@ export def "application-entity-meeting createMeetingEntity" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/application/entity/meeting")
-  let body = {created_at: $created_at, description: $description, ended_at: $ended_at, id: $id, location: $location, relation: $relation, result: $body_result, started_at: $started_at, status: $status, subject: $subject, updated_at: $updated_at} | compact
+  let body = {created_at: $created_at, description: $description, ended_at: $ended_at, id: $id, location: $location, relation: $relation, result: $result, started_at: $started_at, status: $status, subject: $subject, updated_at: $updated_at} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -5421,7 +5421,7 @@ export def "application-entity-meeting-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -5438,7 +5438,7 @@ export def "application-entity-meeting-list get" [
 ]: nothing -> table<created_at: string, description: string, ended_at: string, id: string, location: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, result: string, started_at: string, status: string, subject: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/meeting/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -5489,7 +5489,7 @@ export def "application-entity-meeting get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -5504,7 +5504,7 @@ export def "application-entity-meeting get" [
 ]: nothing -> record<created_at: string, description: string, ended_at: string, id: string, location: string, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, result: string, started_at: string, status: string, subject: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/meeting/($meeting_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -5538,7 +5538,7 @@ export def "application-entity-meeting updateMeetingEntity" [
   --id: string # Meeting Identifier (e.g. 21312411)
   --location: string # Location (e.g. Location)
   --relation: record # shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-  --body-result: string # Result (e.g. Confirmed)
+  --result: string # Result (e.g. Confirmed)
   --started-at: string # Started At (format: date-time, e.g. 2015-01-01T05:18:23-0700)
   --status: string # Status (e.g. Held)
   --subject: string # Subject (e.g. My first note)
@@ -5548,7 +5548,7 @@ export def "application-entity-meeting updateMeetingEntity" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/application/entity/meeting/($meeting_id)")
-  let body = {created_at: $created_at, description: $description, ended_at: $ended_at, id: $id, location: $location, relation: $relation, result: $body_result, started_at: $started_at, status: $status, subject: $subject, updated_at: $updated_at} | compact
+  let body = {created_at: $created_at, description: $description, ended_at: $ended_at, id: $id, location: $location, relation: $relation, result: $result, started_at: $started_at, status: $status, subject: $subject, updated_at: $updated_at} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -5813,7 +5813,7 @@ export def "application-entity-note-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -5830,7 +5830,7 @@ export def "application-entity-note-list get" [
 ]: nothing -> table<body: string, created_at: string, id: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, subject: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/note/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -5881,7 +5881,7 @@ export def "application-entity-note get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -5896,7 +5896,7 @@ export def "application-entity-note get" [
 ]: nothing -> record<body: string, created_at: string, id: string, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, subject: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/note/($note_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -6212,7 +6212,7 @@ export def "application-entity-opportunity-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -6229,7 +6229,7 @@ export def "application-entity-opportunity-list get" [
 ]: nothing -> table<amount: float, created_at: string, currency: record<code: string>, description: string, ended_at: string, expected_amount: float, expected_end_at: string, id: string, lead_source: string, name: string, next_step: string, pipeline_with_stage: string, probability: int, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, state: string, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/opportunity/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -6280,7 +6280,7 @@ export def "application-entity-opportunity get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -6295,7 +6295,7 @@ export def "application-entity-opportunity get" [
 ]: nothing -> record<amount: float, created_at: string, currency: record<code: string>, description: string, ended_at: string, expected_amount: float, expected_end_at: string, id: string, lead_source: string, name: string, next_step: string, pipeline_with_stage: string, probability: int, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, state: string, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/opportunity/($opportunity_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -6624,7 +6624,7 @@ export def "application-entity-opportunity-product-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -6641,7 +6641,7 @@ export def "application-entity-opportunity-product-list get" [
 ]: nothing -> table<created_at: string, currency: record<code: string>, description: string, discount: list<record>, id: string, list_price: float, name: string, number: string, quantity: float, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, sales_price: float, subtotal: float, tax: list<record>, total_price: float, unit: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/opportunityProduct/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -6692,7 +6692,7 @@ export def "application-entity-opportunity-product get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -6707,7 +6707,7 @@ export def "application-entity-opportunity-product get" [
 ]: nothing -> record<created_at: string, currency: record<code: string>, description: string, discount: table<percent_value: float, type: string, value: float>, id: string, list_price: float, name: string, number: string, quantity: float, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, sales_price: float, subtotal: float, tax: table<percent_value: float, type: string, value: float>, total_price: float, unit: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/opportunityProduct/($opportunityProduct_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -7023,7 +7023,7 @@ export def "application-entity-post-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -7040,7 +7040,7 @@ export def "application-entity-post-list get" [
 ]: nothing -> table<body: string, created_at: string, id: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/post/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -7091,7 +7091,7 @@ export def "application-entity-post get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -7106,7 +7106,7 @@ export def "application-entity-post get" [
 ]: nothing -> record<body: string, created_at: string, id: string, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/post/($post_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -7414,7 +7414,7 @@ export def "application-entity-price-book-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -7431,7 +7431,7 @@ export def "application-entity-price-book-list get" [
 ]: nothing -> table<created_at: string, currency: record<code: string>, description: string, id: string, is_active: bool, is_standard: bool, name: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/priceBook/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -7482,7 +7482,7 @@ export def "application-entity-price-book get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -7497,7 +7497,7 @@ export def "application-entity-price-book get" [
 ]: nothing -> record<created_at: string, currency: record<code: string>, description: string, id: string, is_active: bool, is_standard: bool, name: string, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/priceBook/($priceBook_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -7810,7 +7810,7 @@ export def "application-entity-price-book-item-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -7827,7 +7827,7 @@ export def "application-entity-price-book-item-list get" [
 ]: nothing -> table<code: string, created_at: string, id: string, is_active: bool, name: string, price: list<record>, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, updated_at: string, use_standard_price: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/priceBookItem/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -7878,7 +7878,7 @@ export def "application-entity-price-book-item get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -7893,7 +7893,7 @@ export def "application-entity-price-book-item get" [
 ]: nothing -> record<code: string, created_at: string, id: string, is_active: bool, name: string, price: table<currency: string, value: float>, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, updated_at: string, use_standard_price: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/priceBookItem/($priceBookItem_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -8223,7 +8223,7 @@ export def "application-entity-product-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -8240,7 +8240,7 @@ export def "application-entity-product-list get" [
 ]: nothing -> table<category: list<string>, code: string, cost: list<record>, created_at: string, description: string, id: string, image: list<record>, is_active: bool, is_taxable: bool, manufacturer: string, name: string, price: list<record>, quantity_in_demand: float, quantity_in_stock: float, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, reorder_level: float, sales_ended_at: string, sales_started_at: string, support_ended_at: string, support_started_at: string, type: string, unit: string, updated_at: string, url: string, vendor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/product/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -8291,7 +8291,7 @@ export def "application-entity-product get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -8306,7 +8306,7 @@ export def "application-entity-product get" [
 ]: nothing -> record<category: list<string>, code: string, cost: table<currency: string, value: float>, created_at: string, description: string, id: string, image: table<type: string, url: string>, is_active: bool, is_taxable: bool, manufacturer: string, name: string, price: table<currency: string, value: float>, quantity_in_demand: float, quantity_in_stock: float, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, reorder_level: float, sales_ended_at: string, sales_started_at: string, support_ended_at: string, support_started_at: string, type: string, unit: string, updated_at: string, url: string, vendor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/product/($product_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -8638,7 +8638,7 @@ export def "application-entity-project-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -8655,7 +8655,7 @@ export def "application-entity-project-list get" [
 ]: nothing -> table<category: string, created_at: string, description: string, ended_at: string, id: string, name: string, pipeline_with_stage: string, priority: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, started_at: string, status: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/project/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -8706,7 +8706,7 @@ export def "application-entity-project get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -8721,7 +8721,7 @@ export def "application-entity-project get" [
 ]: nothing -> record<category: string, created_at: string, description: string, ended_at: string, id: string, name: string, pipeline_with_stage: string, priority: string, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, started_at: string, status: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/project/($project_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -9050,7 +9050,7 @@ export def "application-entity-quote-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -9067,7 +9067,7 @@ export def "application-entity-quote-list get" [
 ]: nothing -> table<address: list<record>, adjustment: float, carrier: string, created_at: string, currency: record<code: string>, description: string, discount: list<record>, expiration_date: string, grand_total: float, id: string, number: string, payment_terms: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, shipping_and_handling: float, status: string, subject: string, subtotal: float, tax: list<record>, terms_and_conditions: string, total_price: float, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/quote/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -9118,7 +9118,7 @@ export def "application-entity-quote get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -9133,7 +9133,7 @@ export def "application-entity-quote get" [
 ]: nothing -> record<address: table<city: string, country: string, state: string, street: string, type: string, zip: string>, adjustment: float, carrier: string, created_at: string, currency: record<code: string>, description: string, discount: table<percent_value: float, type: string, value: float>, expiration_date: string, grand_total: float, id: string, number: string, payment_terms: string, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, shipping_and_handling: float, status: string, subject: string, subtotal: float, tax: table<percent_value: float, type: string, value: float>, terms_and_conditions: string, total_price: float, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/quote/($quote_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -9466,7 +9466,7 @@ export def "application-entity-quote-item-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -9483,7 +9483,7 @@ export def "application-entity-quote-item-list get" [
 ]: nothing -> table<created_at: string, description: string, discount: list<record>, id: string, list_price: float, number: string, quantity: float, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, sales_price: float, subtotal: float, tax: list<record>, total_price: float, unit: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/quoteItem/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -9534,7 +9534,7 @@ export def "application-entity-quote-item get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -9549,7 +9549,7 @@ export def "application-entity-quote-item get" [
 ]: nothing -> record<created_at: string, description: string, discount: table<percent_value: float, type: string, value: float>, id: string, list_price: float, number: string, quantity: float, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, sales_price: float, subtotal: float, tax: table<percent_value: float, type: string, value: float>, total_price: float, unit: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/quoteItem/($quoteItem_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -9864,7 +9864,7 @@ export def "application-entity-tag-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -9881,7 +9881,7 @@ export def "application-entity-tag-list get" [
 ]: nothing -> table<created_at: string, description: string, entity: string, id: string, name: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/tag/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -9932,7 +9932,7 @@ export def "application-entity-tag get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -9947,7 +9947,7 @@ export def "application-entity-tag get" [
 ]: nothing -> record<created_at: string, description: string, entity: string, id: string, name: string, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/tag/($tag_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -10258,7 +10258,7 @@ export def "application-entity-task-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -10275,7 +10275,7 @@ export def "application-entity-task-list get" [
 ]: nothing -> table<created_at: string, description: string, due_at: string, ended_at: string, id: string, priority: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, reminder_at: string, started_at: string, status: string, subject: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/task/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -10326,7 +10326,7 @@ export def "application-entity-task get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -10341,7 +10341,7 @@ export def "application-entity-task get" [
 ]: nothing -> record<created_at: string, description: string, due_at: string, ended_at: string, id: string, priority: string, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, reminder_at: string, started_at: string, status: string, subject: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/task/($task_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -10661,7 +10661,7 @@ export def "application-entity-ticket-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -10678,7 +10678,7 @@ export def "application-entity-ticket-list get" [
 ]: nothing -> table<category: list<string>, closed_at: string, created_at: string, description: string, due_at: string, email: list<record>, id: string, number: string, pipeline_with_stage: string, priority: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, resolution: string, source: string, subject: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/ticket/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -10729,7 +10729,7 @@ export def "application-entity-ticket get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -10744,7 +10744,7 @@ export def "application-entity-ticket get" [
 ]: nothing -> record<category: list<string>, closed_at: string, created_at: string, description: string, due_at: string, email: table<address: string, type: string>, id: string, number: string, pipeline_with_stage: string, priority: string, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, resolution: string, source: string, subject: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/ticket/($ticket_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -11078,7 +11078,7 @@ export def "application-entity-user-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -11095,7 +11095,7 @@ export def "application-entity-user-list get" [
 ]: nothing -> table<address: list<record>, created_at: string, department: string, description: string, email: list<record>, first_name: string, id: string, is_admin: bool, is_associable: bool, last_name: string, messenger: list<record>, middle_name: string, name_suffix: string, phone: list<record>, position: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, salutation: string, status: string, updated_at: string, username: string, website: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/entity/user/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -11146,7 +11146,7 @@ export def "application-entity-user get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -11161,7 +11161,7 @@ export def "application-entity-user get" [
 ]: nothing -> record<address: table<city: string, country: string, state: string, street: string, type: string, zip: string>, created_at: string, department: string, description: string, email: table<address: string, type: string>, first_name: string, id: string, is_admin: bool, is_associable: bool, last_name: string, messenger: table<location: string, type: string>, middle_name: string, name_suffix: string, phone: table<number: string, type: string>, position: string, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, salutation: string, status: string, updated_at: string, username: string, website: table<address: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/user/($user_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -11243,7 +11243,7 @@ export def "application-entity list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -11251,7 +11251,7 @@ export def "application-entity list" [
 ]: nothing -> record<category: string, collection: string, customField: record, dataCache: record, entity: string, id: string, internalType: string, limit: int, methods: record, name: string, similarTo: list<string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/($entity_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -11522,7 +11522,7 @@ export def "application-entity-list get" [
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --unique: string@unique-completer # Find all unique values for selected field
   --X-API2CRM-USER-KEY: string # User Key
@@ -11539,7 +11539,7 @@ export def "application-entity-list get" [
 ]: nothing -> table<created_at: string, id: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/($entity_id)/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -11592,7 +11592,7 @@ export def "application-entity get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -11607,7 +11607,7 @@ export def "application-entity get" [
 ]: nothing -> record<created_at: string, id: string, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/entity/($entity_id)/($entity_item_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-NATIVE-ENABLE": $X_API2CRM_NATIVE_ENABLE, "X-API2CRM-DATA-ENABLE": $X_API2CRM_DATA_ENABLE, "X-API2CRM-DATA-BUILD": $X_API2CRM_DATA_BUILD, "X-API2CRM-DATA-IS-FINAL": $X_API2CRM_DATA_IS_FINAL, "X-API2CRM-DATA-STRATEGY": $X_API2CRM_DATA_STRATEGY, "X-API2CRM-DATA-COHERENT-ENTITIES": $X_API2CRM_DATA_COHERENT_ENTITIES, "X-API2CRM-DATA-ALWAYS-ACTUAL": $X_API2CRM_DATA_ALWAYS_ACTUAL, "X-API2CRM-DATA-ACTUAL-AT": $X_API2CRM_DATA_ACTUAL_AT, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -11696,14 +11696,14 @@ export def "application-field-list list" [
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DESCRIBE-LIFETIME: string # Describe lifetime
 ]: nothing -> table<arrayItem: string, entity: list<string>, format: string, id: string, isEnum: bool, label: string, limit: int, methods: record, name: string, relation: list<string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/field/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -11726,14 +11726,14 @@ export def "application-field list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DESCRIBE-LIFETIME: string # Describe lifetime
 ]: nothing -> record<arrayItem: string, entity: list<string>, format: string, id: string, isEnum: bool, label: string, limit: int, methods: record, name: string, relation: list<string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/field/($field_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -11853,14 +11853,14 @@ export def "application-field-list get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DESCRIBE-LIFETIME: string # Describe lifetime
 ]: nothing -> table<created_at: string, description: string, entity: string, id: string, label: string, name: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/field/($field_id)/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -11912,14 +11912,14 @@ export def "application-field get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DESCRIBE-LIFETIME: string # Describe lifetime
 ]: nothing -> record<created_at: string, description: string, entity: string, id: string, label: string, name: string, relation: record<account: list<record>, attachment: list<record>, call: list<record>, campaign: list<record>, case: list<record>, comment: list<record>, contact: list<record>, email: list<record>, event: list<record>, invoice: list<record>, invoiceItem: list<record>, lead: list<record>, meeting: list<record>, note: list<record>, opportunity: list<record>, opportunityProduct: list<record>, post: list<record>, priceBook: list<record>, priceBookItem: list<record>, product: list<record>, project: list<record>, quote: list<record>, quoteItem: list<record>, tag: list<record>, task: list<record>, ticket: list<record>, user: list<record>>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/field/($field_id)/($field_item_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY, "X-API2CRM-APPLICATION-KEY": $X_API2CRM_APPLICATION_KEY, "X-API2CRM-DESCRIBE-LIFETIME": $X_API2CRM_DESCRIBE_LIFETIME} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -11985,13 +11985,13 @@ export def "application-list get" [
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --X-API2CRM-USER-KEY: string # API2CRM user key
 ]: nothing -> table<authorization: string, company: record<id: string>, created_at: string, description: string, key: string, last_used_at: string, type: string, updated_at: string, url: string, user_id: int, user_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/application/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -12074,12 +12074,12 @@ export def "application get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # API2CRM user key
 ]: nothing -> record<authorization: string, company: record<id: string>, created_at: string, description: string, is_authorized: bool, key: string, last_used_at: string, me: record<address: list<record>, created_at: string, department: string, description: string, email: list<record>, first_name: string, id: string, is_admin: bool, is_associable: bool, last_name: string, messenger: list<record>, middle_name: string, name_suffix: string, phone: list<record>, position: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, salutation: string, status: string, updated_at: string, username: string, website: list<record>>, plan: string, requests_limit: record<is_exceeded: bool, retry_after: string, type: list<record>>, type: string, updated_at: string, url: string, user_id: int, user_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/application/($key)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -12136,13 +12136,13 @@ export def "platform-list get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --X-API2CRM-USER-KEY: string # API2CRM user key
 ]: nothing -> table<authorization: list<record>, name: string, resource: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/platform/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -12165,12 +12165,12 @@ export def "platform get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # API2CRM user key
 ]: nothing -> record<authorization: table<description: string, platform_credential: list, type: string>, name: string, resource: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/platform/($type)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -12262,7 +12262,7 @@ export def "user-list get" [
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --qp-sort: string # Specifies ascending or descending sort on existing fields
   --application-request-start: string # All Application Requests from this date (format: date)
   --application-request-end: string # All Application Requests until this date (format: date)
@@ -12270,7 +12270,7 @@ export def "user-list get" [
 ]: nothing -> table<created_at: string, email: string, internal_request_count: int, key: string, last_used_at: string, name: string, organization: string, phone: string, request_count: int, roles: list<string>, status: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "application_request_start" $application_request_start "scalar") (serialize-qp "application_request_end" $application_request_end "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "application_request_start" $application_request_start "scalar") (serialize-qp "application_request_end" $application_request_end "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/list" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -12319,14 +12319,14 @@ export def "user get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-fields: string # Comma-separated list of fields to include in the response
+  --fields: string # Comma-separated list of fields to include in the response
   --application-request-start: string # All Application Requests from this date (format: date)
   --application-request-end: string # All Application Requests until this date (format: date)
   --X-API2CRM-USER-KEY: string # User Key
 ]: nothing -> record<created_at: string, email: string, internal_request_count: int, key: string, last_used_at: string, name: string, organization: string, phone: string, request_count: int, roles: list<string>, status: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "application_request_start" $application_request_start "scalar") (serialize-qp "application_request_end" $application_request_end "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "application_request_start" $application_request_start "scalar") (serialize-qp "application_request_end" $application_request_end "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/user/($internal_user_id)" $qp)
   let extra_headers = {"X-API2CRM-USER-KEY": $X_API2CRM_USER_KEY} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

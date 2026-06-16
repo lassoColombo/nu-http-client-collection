@@ -191,11 +191,11 @@ export def "audits get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string # Fields to return separate by comas: name,id
+  --fields: string # Fields to return separate by comas: name,id
 ]: nothing -> record<id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/audits/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -221,14 +221,14 @@ export def "extensions get" [
   --ext-prefix: string # Do a 'LIKE' search, you can also use '%'. technical name of the extension com_xxxx
   --version: string # Do a 'LIKE' search, you can also use '%'
   --vUpdate: int@vUpdate-completer # update available for this extension
-  --qp-fields: string # Fields to return separate by comas: name,id
+  --fields: string # Fields to return separate by comas: name,id
   --limit: int # Number of object to return (max 100, default 25) (format: int64)
   --limitstart: int # Start of the return (default 0) (format: int64)
   --order: string # ORDER by this field separete by comas. Add + / - after field for set ASC / DESC: type+,name-
 ]: nothing -> record<date: string, ext_name: string, idx_site: int, newVersion: string, type: string, url: string, vUpdate: int, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ext_name" $ext_name "scalar") (serialize-qp "siteids" $siteids "scalar") (serialize-qp "ext_prefix" $ext_prefix "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "vUpdate" $vUpdate "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ext_name" $ext_name "scalar") (serialize-qp "siteids" $siteids "scalar") (serialize-qp "ext_prefix" $ext_prefix "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "vUpdate" $vUpdate "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/extensions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -344,11 +344,11 @@ export def "feedbacks get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string # Fields to return separate by comas (es. name,id)
+  --fields: string # Fields to return separate by comas (es. name,id)
 ]: nothing -> record<id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/feedbacks" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -422,14 +422,14 @@ export def "logs get" [
   --log-entry: string # Do a 'LIKE' search, you can also use '%'
   --qp-from: string # Logs after this date, format YYYY-MM-DD HH:MM:SS
   --qp-to: string # Logs before this date, format YYYY-MM-DD HH:MM:SS
-  --qp-fields: string # Fields to return separate by comas: name,id
+  --fields: string # Fields to return separate by comas: name,id
   --limit: int # Number of object to return (max 100, default 25) (format: int64)
   --limitstart: int # Start of the return (default 0) (format: int64)
   --order: string # ORDER by this field separete by comas. Add + / - after field for set ASC / DESC: type+,name-
 ]: nothing -> record<Site_name: string, id_log: int, idx_site: int, log_date: string, log_entry: string, log_level: int, log_type: string, userid: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "log_type" $log_type "scalar") (serialize-qp "log_entry" $log_entry "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "log_type" $log_type "scalar") (serialize-qp "log_entry" $log_entry "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/logs" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -638,14 +638,14 @@ export def "sites list" [
   --qp-error: string # Has errors
   --nbUpdates: string
   --up: int@up-completer # Is online
-  --qp-fields: string # Fields to return separated by commas (e.g. name,id)
+  --fields: string # Fields to return separated by commas (e.g. name,id)
   --limit: int # Number of objects to return (max 100, default 25) (format: int64)
   --limitstart: int # Start of the return (default 0) (format: int64)
   --order: string # ORDER by this field separete by comas. Add + / - after field for set ASC / DESC: type+,name-
 ]: nothing -> record<access_url: string, admin_url: string, akeebaProfile: string, backupSchedule: string, canBackup: bool, canUpdate: bool, dateBackup: string, date_last_check: string, error: bool, ip: string, jUpdate: bool, j_version: string, monitorid: bool, name: string, nbUpdates: string, new_j_version: string, notes: string, published: bool, secret_word: string, siteid: int, tags: list<any>, up: bool, word_akeeba: string, word_check: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "siteids" $siteids "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "access_url" $access_url "scalar") (serialize-qp "j_version" $j_version "scalar") (serialize-qp "ip" $ip "scalar") (serialize-qp "jUpdate" $jUpdate "scalar") (serialize-qp "canUpdate" $canUpdate "scalar") (serialize-qp "published" $published "scalar") (serialize-qp "error" $qp_error "scalar") (serialize-qp "nbUpdates" $nbUpdates "scalar") (serialize-qp "up" $up "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "siteids" $siteids "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "access_url" $access_url "scalar") (serialize-qp "j_version" $j_version "scalar") (serialize-qp "ip" $ip "scalar") (serialize-qp "jUpdate" $jUpdate "scalar") (serialize-qp "canUpdate" $canUpdate "scalar") (serialize-qp "published" $published "scalar") (serialize-qp "error" $qp_error "scalar") (serialize-qp "nbUpdates" $nbUpdates "scalar") (serialize-qp "up" $up "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sites" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -750,11 +750,11 @@ export def "sites get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string # Fields to return separate by comas: name,id
+  --fields: string # Fields to return separate by comas: name,id
 ]: nothing -> record<access_url: string, admin_url: string, akeebaProfile: string, backupSchedule: string, canBackup: bool, canUpdate: bool, dateBackup: string, date_last_check: string, error: bool, ip: string, jUpdate: bool, j_version: string, monitorid: bool, name: string, nbUpdates: string, new_j_version: string, notes: string, published: bool, secret_word: string, siteid: int, tags: list<any>, up: bool, word_akeeba: string, word_check: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/sites/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -814,14 +814,14 @@ export def "sites-audits get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string # Fields to return separate by comas: name,id
+  --fields: string # Fields to return separate by comas: name,id
   --limit: int # Number of object to return (max 100, default 25) (format: int64)
   --limitstart: int # Start of the return (default 0) (format: int64)
   --order: string # ORDER by this field
 ]: nothing -> table<id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/sites/($id)/audits" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -986,14 +986,14 @@ export def "sites-extensions get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string # Fields to return separate by comas: name,id
+  --fields: string # Fields to return separate by comas: name,id
   --limit: int # Number of object to return (max 100, default 25) (format: int64)
   --limitstart: int # Start of the return (default 0) (format: int64)
   --order: string # ORDER by this field
 ]: nothing -> record<date: string, ext_name: string, idx_site: int, newVersion: string, type: string, url: string, vUpdate: int, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/sites/($id)/extensions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1044,14 +1044,14 @@ export def "sites-logs get" [
   --log-type: string@log-type-completer-1 # Type of the log
   --qp-from: string # Logs after this date, format YYYY-MM-DD HH:MM:SS
   --qp-to: string # Logs before this date, format YYYY-MM-DD HH:MM:SS
-  --qp-fields: string # Fields to return separate by comas: name,id
+  --fields: string # Fields to return separate by comas: name,id
   --limit: int # Number of object to return (max 100, default 25) (format: int64)
   --limitstart: int # Start of the return (default 0) (format: int64)
   --order: string # ORDER by this field separete by comas. Add + / - after field for set ASC / DESC: type+,name-
 ]: nothing -> record<Site_name: string, id_log: int, idx_site: int, log_date: string, log_entry: string, log_level: int, log_type: string, userid: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "log_entry" $log_entry "scalar") (serialize-qp "log_type" $log_type "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "log_entry" $log_entry "scalar") (serialize-qp "log_type" $log_type "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/sites/($id)/logs" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1200,14 +1200,14 @@ export def "sites-tags get" [
   --accept: string@accept-completer # Response content type
   --name: string # Do a 'LIKE' search, you can also use '%'
   --type: string@type-completer # Bootstrap color of the tag
-  --qp-fields: string # Fields to return separate by comas: name,id
+  --fields: string # Fields to return separate by comas: name,id
   --limit: int # Number of object to return (max 100, default 25) (format: int64)
   --limitstart: int # Start of the return (default 0) (format: int64)
   --order: string # ORDER by this field
 ]: nothing -> record<id: int, name: string, nbSites: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/sites/($id)/tags" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1438,11 +1438,11 @@ export def "ssousers get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string # Fields to return separate by comas: name,id
+  --fields: string # Fields to return separate by comas: name,id
 ]: nothing -> record<email: string, groupid: int, id: int, lastLoginDate: string, lastLoginSite: int, name: string, password: string, userid: int, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/ssousers/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1500,14 +1500,14 @@ export def "tags list" [
   --accept: string@accept-completer # Response content type
   --name: string # Do a 'LIKE' search, you can also use '%'
   --type: string@type-completer # Bootstrap color of the tag
-  --qp-fields: string # Fields to return separate by comas: name,id
+  --fields: string # Fields to return separate by comas: name,id
   --limit: int # Number of object to return (max 100, default 25) (format: int64)
   --limitstart: int # Start of the return (default 0) (format: int64)
   --order: string # ORDER by this field separete by comas. Add + / - after field for set ASC / DESC: type+,name-
 ]: nothing -> record<id: int, name: string, nbSites: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tags" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1604,11 +1604,11 @@ export def "tags get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-fields: string # Fields to return separate by comas: name,id
+  --fields: string # Fields to return separate by comas: name,id
 ]: nothing -> record<id: int, name: string, nbSites: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/tags/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1670,14 +1670,14 @@ export def "tags-sites get" [
   --qp-error: string # have errors
   --nbUpdates: string
   --up: int@up-completer # is the website online
-  --qp-fields: string # Fields to return separate by comas: name,id
+  --fields: string # Fields to return separate by comas: name,id
   --limit: int # Number of object to return (max 100, default 25) (format: int64)
   --limitstart: int # Start of the return (default 0) (format: int64)
   --order: string # ORDER by this field separete by comas. Add + / - after field for set ASC / DESC: type+,name-
 ]: nothing -> record<access_url: string, admin_url: string, akeebaProfile: string, backupSchedule: string, canBackup: bool, canUpdate: bool, dateBackup: string, date_last_check: string, error: bool, ip: string, jUpdate: bool, j_version: string, monitorid: bool, name: string, nbUpdates: string, new_j_version: string, notes: string, published: bool, secret_word: string, siteid: int, tags: list<any>, up: bool, word_akeeba: string, word_check: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "access_url" $access_url "scalar") (serialize-qp "j_version" $j_version "scalar") (serialize-qp "ip" $ip "scalar") (serialize-qp "jUpdate" $jUpdate "scalar") (serialize-qp "published" $published "scalar") (serialize-qp "error" $qp_error "scalar") (serialize-qp "nbUpdates" $nbUpdates "scalar") (serialize-qp "up" $up "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "access_url" $access_url "scalar") (serialize-qp "j_version" $j_version "scalar") (serialize-qp "ip" $ip "scalar") (serialize-qp "jUpdate" $jUpdate "scalar") (serialize-qp "published" $published "scalar") (serialize-qp "error" $qp_error "scalar") (serialize-qp "nbUpdates" $nbUpdates "scalar") (serialize-qp "up" $up "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/tags/($id)/sites" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

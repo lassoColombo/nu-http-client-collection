@@ -244,14 +244,14 @@ export def "v-custom-prices-session-schema post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Describes the type of the content being sent
   --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
-  --body-fields: list # Order Configuration criteria (default: [{name: orderType, type: string}, {name: state, type: string}]) — item shape: {name: string, type: string}
+  fields: list # Order Configuration criteria (default: [{name: orderType, type: string}, {name: state, type: string}]) — item shape: {name: string, type: string}
   --useEmail: oneof<nothing, bool> # If the custom price should use the user's e-mail to validate it (default: true)
 ]: any -> record<fields: table<name: string, type: string>, useEmail: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/_v/custom-prices/session/schema")
-  let body = {fields: $body_fields, useEmail: $useEmail} | compact
+  let body = {fields: $fields, useEmail: $useEmail} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

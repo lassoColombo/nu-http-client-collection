@@ -106,14 +106,14 @@ export def "graphql post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --operationName: string # If the Query contains several named operations, the operationName controls which one should be executed (default: )
-  --body-query: string # The GraphQL query (default: {})
-  --body-variables: record # Optional Query variables (nullable)
+  query: string # The GraphQL query (default: {})
+  --variables: record # Optional Query variables (nullable)
 ]: any -> record<data: record, errors: list<record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/graphql")
-  let body = {operationName: $operationName, query: $body_query, variables: $body_variables} | compact
+  let body = {operationName: $operationName, query: $query, variables: $variables} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

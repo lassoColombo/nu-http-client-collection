@@ -239,7 +239,7 @@ export def "parse parse" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --commonParent: string # Specifies common ancestor block for a set of fields used to extract data from a web page. _(CSS Selector)_ (e.g. .common-block)
-  --body-fields: list # Define a  set of fields used to extract data from a web page. A Field represents a given chunk of extracted data from every block on each page. — item shape: {attrs: list, details?: any, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
+  fields: list # Define a  set of fields used to extract data from a web page. A Field represents a given chunk of extracted data from every block on each page. — item shape: {attrs: list, details?: any, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
   format: string@format-completer-1 # Extracted data is returned either in CSV, MS Excel, JSON, JSON(Lines) or XML format.
   name: string # Collection name.
   --paginator: record # Specify _Next link_ paginator on pages containing a link pointing to the next page. The next page link is extracted from a document by querying href attribute of a given element's CSS selector. — shape: {nextPageSelector?: string, pageNum?: int}
@@ -250,7 +250,7 @@ export def "parse parse" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/parse")
-  let body = {commonParent: $commonParent, fields: $body_fields, format: $format, name: $name, paginator: $paginator, path: $path, request: $request} | compact
+  let body = {commonParent: $commonParent, fields: $fields, format: $format, name: $name, paginator: $paginator, path: $path, request: $request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -272,7 +272,7 @@ export def "serp serp" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-3 # Response content type
-  --body-fields: list # Specify CSS selectors (patterns) used to gather data from Search Engine Result Pages.  Ready-to-use payloads for collecting search results from the most popular Search Engines are available. These payloads are customizable, though. — item shape: {attrs: list, details?: any, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
+  --fields: list # Specify CSS selectors (patterns) used to gather data from Search Engine Result Pages.  Ready-to-use payloads for collecting search results from the most popular Search Engines are available. These payloads are customizable, though. — item shape: {attrs: list, details?: any, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
   format: string@format-completer-1 # Extracted data is returned either in CSV, MS Excel, JSON, JSON(Lines) or XML format.
   name: string # Collection name.
   --pageNum: int # Specify number of pages to crawl. (default: 1)
@@ -284,7 +284,7 @@ export def "serp serp" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/serp")
-  let body = {fields: $body_fields, format: $format, name: $name, pageNum: $pageNum, proxy: $proxy, type: $type, url: $body_url} | compact
+  let body = {fields: $fields, format: $format, name: $name, pageNum: $pageNum, proxy: $proxy, type: $type, url: $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
