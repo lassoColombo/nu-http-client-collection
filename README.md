@@ -20,6 +20,8 @@ Your collection of Nushell HTTP clients, automatically generated from API specif
       3. [The bundled GitHub action](#the-bundled-github-action)
    4. [Contributing](#contributing)
 
+> [The full list of clients](CLIENTS.md)
+
 ---
 
 ## Purpose(s)
@@ -30,7 +32,6 @@ This repository acts as a public registry of HTTP clients for the community to u
 
 The only supported registry, as of now, is [apis.guru](https://apis.guru/).
 
-Skim [CLIENTS.md](CLIENTS.md) for the full list of available clients.
 
 #### Your personal collection
 
